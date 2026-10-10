@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "product-completion",
   "wave": "W7",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -161,7 +161,7 @@
     "docs/P5-V4-TOTAL-PRESENTATION-REBUILD.md"
   ],
   "createdAt": "2026-09-25T18:00:00+08:00",
-  "updatedAt": "2026-10-11T00:00:00+08:00",
+  "updatedAt": "2026-10-11T05:09:07+08:00",
   "verificationGates": [
     "P2 Payroll exact-source PostgreSQL runtime: execute GROSS, GROSS_UP and NET in one effective-dated payroll period, prove actual split component/rule allocation, balanced posting, salary settlement, post-payment differential adjustment, employee-receivable recovery and recovery settlement.",
     "P2 full aggregate gate requires both handoff/quality/github-p2a-multi-uom-runtime-probe-latest.json and handoff/quality/github-p2-payroll-runtime-probe-latest.json PASS on matching source fingerprints with productionTouched=false.",
@@ -217,5 +217,10 @@
     "P5 V4.10 runtime evidence: Employee raw-script console error and POS/Storefront cross-theme leakage were root architectural defects in V4.9. Root repair uses product-scoped keys plus Next Script bootstrap. Server evidence: focused 66/66 PASS, dependency-free 1035/1035 PASS, all source/audit gates PASS; Ubuntu real build + Human Visual Acceptance pending.",
     "Pre-GitHub 2026-10-03 reconciliation: idempotency and payroll-pagination source gaps are closed; F10 is source-implemented / IMPLEMENTED_RUNTIME_PENDING with deterministic permission-scoped assistant and explainable forecast/reorder, while F9 remains PARTIAL pending live external provider readiness. Exact-source PostgreSQL/multi-role/browser/Human Stage-20 evidence remains mandatory before product readiness.",
     "GitHub UAT 2026-10-03 regression evidence reached 1640 tests with 1639 PASS / 1 FAIL. Root fix keeps the gate fail-closed: Admin hr-payroll removed its catch-all optional read helper and now uses canonical readOptional, which degrades authorization only while propagating transport/server failures; shared read permission mapping now matches HR leave/overtime, payroll tax-rule, and accounting-core controller contracts. No UAT/test assertion was weakened or changed. Exact failing test is 5/5 PASS; focused regression 50/50 PASS; fresh GitHub exact-source runtime remains required."
-  ]
+  ],
+  "releaseEvidence": "handoff/release-evidence/T360-20260925-180000.md",
+  "releasedAt": "2026-10-11T05:08:57+08:00",
+  "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
+  "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",
+  "closedAt": "2026-10-11T05:09:07+08:00"
 }

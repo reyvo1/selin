@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "payments",
   "wave": "W2",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -66,8 +66,13 @@
     "tests/p6a-retail-transaction-completion.test.mjs"
   ],
   "createdAt": "2026-10-05T15:40:00+08:00",
-  "updatedAt": "2026-10-11T00:00:00+08:00",
+  "updatedAt": "2026-10-11T05:09:07+08:00",
   "notes": [
     "Governance record for the P6A engineering wave that began from exact automated-green baseline eb320e931f898acdcce4b705ca4dd6e51059d156. It intentionally does not advance canonical currentPhase while P5/Human Stage-20 acceptance remains pending."
-  ]
+  ],
+  "releaseEvidence": "handoff/release-evidence/T360-20261005-154000.md",
+  "releasedAt": "2026-10-11T05:08:57+08:00",
+  "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
+  "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",
+  "closedAt": "2026-10-11T05:09:07+08:00"
 }

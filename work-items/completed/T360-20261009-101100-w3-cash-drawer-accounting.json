@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "accounting-core",
   "wave": "W3",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "Finance ACTIVE AccountingPostingRule per event; default fail-closed without mapping",
@@ -79,5 +79,10 @@
     "docs/W3-SECURITY-NATIVE-GRAPH-CLOSURE-20261009.md"
   ],
   "createdAt": "2026-10-09T10:11:00+08:00",
-  "updatedAt": "2026-10-11T00:00:00+08:00"
+  "updatedAt": "2026-10-11T05:09:07+08:00",
+  "releaseEvidence": "handoff/release-evidence/T360-20261009-101100.md",
+  "releasedAt": "2026-10-11T05:08:57+08:00",
+  "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
+  "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",
+  "closedAt": "2026-10-11T05:09:07+08:00"
 }

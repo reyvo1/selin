@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "admin-ui",
   "wave": "W7",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -70,5 +70,10 @@
     ".github/workflows/toko360-full-uat.yml"
   ],
   "createdAt": "2026-09-23T14:10:11.719Z",
-  "updatedAt": "2026-10-11T00:00:00+08:00"
+  "updatedAt": "2026-10-11T05:09:07+08:00",
+  "releaseEvidence": "handoff/release-evidence/T360-20260923-221011.md",
+  "releasedAt": "2026-10-11T05:08:57+08:00",
+  "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
+  "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",
+  "closedAt": "2026-10-11T05:09:07+08:00"
 }

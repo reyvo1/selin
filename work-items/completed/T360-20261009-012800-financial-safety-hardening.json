@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "payments",
   "wave": "W2",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -62,10 +62,15 @@
     "tests/cash-ppob-financial-safety.test.mjs"
   ],
   "createdAt": "2026-10-09T01:28:00+08:00",
-  "updatedAt": "2026-10-11T00:00:00+08:00",
+  "updatedAt": "2026-10-11T05:09:07+08:00",
   "notes": [
     "Patch based on full ZIP testoko-main (2).zip, not a live Git checkout. Existing P6A work item and canonical P5/Human Stage-20 product gates stay unchanged.",
     "No live UAT or exact-commit GitHub status is claimed. This work item remains IMPLEMENTATION pending dependency-complete HTTP/DB/browser verification.",
     "2026-10-09 continuation: scoped supervisor grants to company+branch+operator+action with UUID nonce; cash movement now rejects fractional-cent amounts before receipt hashing. Source/control regressions 44/44 PASS; official workflow/repository/product/navigation audits PASS before this work-item note was appended. Runtime supervisor appointment suite and PostgreSQL/SQLite browser gates still unverified in ZIP workspace."
-  ]
+  ],
+  "releaseEvidence": "handoff/release-evidence/T360-20261009-012800.md",
+  "releasedAt": "2026-10-11T05:08:57+08:00",
+  "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
+  "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",
+  "closedAt": "2026-10-11T05:09:07+08:00"
 }
