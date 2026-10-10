@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "admin-ui",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -70,5 +70,5 @@
     ".github/workflows/toko360-full-uat.yml"
   ],
   "createdAt": "2026-09-23T14:10:11.719Z",
-  "updatedAt": "2026-09-25T02:30:00+08:00"
+  "updatedAt": "2026-10-11T00:00:00+08:00"
 }

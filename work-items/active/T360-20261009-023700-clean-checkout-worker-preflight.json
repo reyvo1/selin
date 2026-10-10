@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "quality-gates",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",

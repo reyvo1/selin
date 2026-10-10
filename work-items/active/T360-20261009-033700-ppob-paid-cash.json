@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "payments",
   "wave": "W2",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "integration.config.ppobCashEnabled",

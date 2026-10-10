@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "product-completion",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -161,7 +161,7 @@
     "docs/P5-V4-TOTAL-PRESENTATION-REBUILD.md"
   ],
   "createdAt": "2026-09-25T18:00:00+08:00",
-  "updatedAt": "2026-10-03T20:00:00+08:00",
+  "updatedAt": "2026-10-11T00:00:00+08:00",
   "verificationGates": [
     "P2 Payroll exact-source PostgreSQL runtime: execute GROSS, GROSS_UP and NET in one effective-dated payroll period, prove actual split component/rule allocation, balanced posting, salary settlement, post-payment differential adjustment, employee-receivable recovery and recovery settlement.",
     "P2 full aggregate gate requires both handoff/quality/github-p2a-multi-uom-runtime-probe-latest.json and handoff/quality/github-p2-payroll-runtime-probe-latest.json PASS on matching source fingerprints with productionTouched=false.",
@@ -204,7 +204,7 @@
     "P5 V4.10 supersedes the V4.9 shared-theme-key decision: theme persistence is product-scoped to prevent cross-product visual leakage; this remains presentation-only and cannot change business/API/permission logic."
   ],
   "decisions": [
-    "P5 V4.5 generated-type authority follows official Next configuration boundaries: development uses tsconfig.json, and non-development Next phases use tsconfig.build.json selected from next.config.mjs by phase. Corrected 2026-09-29: isolatedDevBuild is no longer carried — Next.js removed the key, so it only emitted an unrecognized-config warning while isolating nothing; the isolation is carried by tsconfig.build.json excluding the dev tree.",
+    "P5 V4.5 generated-type authority follows official Next configuration boundaries: development uses tsconfig.json, and non-development Next phases use tsconfig.build.json selected from next.config.mjs by phase. Corrected 2026-09-29: isolatedDevBuild is no longer carried \u2014 Next.js removed the key, so it only emitted an unrecognized-config warning while isolating nothing; the isolation is carried by tsconfig.build.json excluding the dev tree.",
     "P5 V4.5 keeps one compiler-options authority: tsconfig.build.json MUST extend ./tsconfig.json and MUST NOT override compilerOptions; it only narrows generated type inputs to production .next/types and excludes .next/dev. ignoreBuildErrors remains forbidden.",
     "Pre-GitHub 2026-10-03 source hardening requires retriable order/finance create mutations to fail closed without a stable operation key; Storefront/POS must preserve the same key for same-payload retry, and payroll component/assignment reads must be cursor-paginated with bounded branch-safe lookup."
   ],

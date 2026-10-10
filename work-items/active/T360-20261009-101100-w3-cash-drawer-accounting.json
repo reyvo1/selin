@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "accounting-core",
   "wave": "W3",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "Finance ACTIVE AccountingPostingRule per event; default fail-closed without mapping",

@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "product-completion",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "HIGH",
   "owner": "hermes",
   "featureFlag": "",
@@ -80,7 +80,7 @@
     "tests/dynamic-uom-staff-memo.test.mjs"
   ],
   "createdAt": "2026-10-04T18:45:00+08:00",
-  "updatedAt": "2026-10-05T01:26:00+08:00",
+  "updatedAt": "2026-10-11T00:00:00+08:00",
   "notes": [
     "One large enhancement wave requested by operator; no intermediate push.",
     "Video is a refinement benchmark, not architecture authority. Existing Toko360 canonical domain rules remain authoritative.",
