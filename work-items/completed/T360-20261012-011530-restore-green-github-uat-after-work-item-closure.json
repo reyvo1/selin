@@ -4,7 +4,7 @@
   "type": "hotfix",
   "module": "release-uat",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -61,7 +61,10 @@
     "npm run test:dependency-free: 1821/1821 PASS",
     "npm run workflow:validate: PASS, 45 work items, 8 delivery waves",
     "npm run validate:repo: PASS, 1191 files, 202 Prisma models",
-    "npm run lint: PASS, all workspaces"
+    "npm run lint: PASS, all workspaces",
+    "GitHub Full Automated UAT 38158942702: success",
+    "GitHub Full System Simulation 38158942550: success",
+    "GitHub Workflow Governance 38158942509: success"
   ],
   "notes": [
     "Root cause: commit 6715f1c moved nine work items to STAGING and commit 0230b58 moved them from work-items/active/ to work-items/completed/ with phase CLOSED, but three test files still read those JSON files from work-items/active/ and still asserted phase === 'VERIFICATION'. On GitHub that failed npm test inside the build gate, which then cascaded into 30 downstream UAT step failures.",
@@ -69,5 +72,11 @@
     "Third defect, visible only in downstream Stage-20: apply-stage20-critical-indexes.mjs uses the generated Prisma Client directly, and the build gate leaves the PostgreSQL client in place. This was correct for the previous green run and is only revisited if Stage-20 fails again."
   ],
   "createdAt": "2026-10-11T17:15:30.158Z",
-  "updatedAt": "2026-10-12T01:20:00+08:00"
+  "updatedAt": "2026-10-11T17:29:07.119Z",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261012-011530-restore-green-github-uat-after-work-item-closure.md"
+  ],
+  "releasedAt": "2026-10-12T01:32:00+08:00",
+  "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/38158942702",
+  "releaseNotes": "Local 1821/1821 PASS; GitHub Full Automated UAT 38158942702 success, Full System Simulation 38158942550 success, Workflow Governance 38158942509 success on exact commit 56cbd9c. STAGE20_MODE=AUTOMATED_PASS_HUMAN_UAT_PENDING. Human Stage-20 remains PENDING."
 }
