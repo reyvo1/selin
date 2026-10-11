@@ -106,7 +106,9 @@
     "Latest exact GitHub source b5f7c360e763a5e39bf603f366d2e5ff6f4b8877 / fingerprint 8488c31c7f6605eef0819dd9b07239a26271e424d7c1c0d21ff9f1356ee2df99 passed deterministic build/lint/regression and the prior R6 timezone fix, then exposed a real R5 backend bug: VehicleDriverAssignment effectiveFrom=today was parsed as UTC midnight, so at 2026-10-05 01:22 Asia/Makassar (2026-10-04 17:22 UTC) it was persisted in the future and could not project defaultDriverEmployeeId. Root fix moves FleetService and same-domain AssetsService date-only parsing to canonical parseBusinessDateBoundary + Company.timezone, preserves instant timestamps, treats date-only effectiveTo/periodEnd as company-local end-of-day, and strengthens ci:r5:probe to require activation plus clear-on-end. R8 failure is downstream only because R5 evidence was absent; no R8 fallback/evidence synthesis is added.",
     "R5 verification hardening: the artifact full-suite attempt found two stale asset/fleet integrity assertions that still required the pre-fix UTC parser call shape. Tests now require Company.timezone + canonical parseBusinessDateBoundary semantics instead of reverting production code. Combined affected regression passes 75/75; UAT/release gates remain unchanged and fail-closed."
   ],
-  "releaseEvidence": "handoff/release-evidence/T360-20261004-184500.md",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261004-184500-video-parity-expansion.md"
+  ],
   "releasedAt": "2026-10-11T05:08:57+08:00",
   "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
   "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",

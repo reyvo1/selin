@@ -292,3 +292,52 @@ F10 is no longer a legitimate PARTIAL capability at source level: explainable fo
 
 P5 remains `IMPLEMENTED_RUNTIME_PENDING`, `humanStage20=PENDING`, and `productReady=false`. The next authority is exact-source GitHub UAT: dependency install/build, PostgreSQL authenticated multi-role mutation/replay/concurrency, four-Next production/browser matrix, then explicit Human Stage-20. No source-only result may promote product readiness.
 
+
+## 2026-10-12 — GitHub UAT red after work item closure: root cause and repair
+
+`main` was red on both PostgreSQL GitHub workflows (runs `38086561199` Full Automated UAT and
+`38086561205` Full System Simulation, commit `0230b58`). The reported failures were ~30 downstream
+UAT steps; the single first blocker was `STEP_BUILD`:
+`Build gate FAIL — REGRESSION_TESTS gagal dengan exit code 1` with `# pass 1802 / # fail 3`.
+
+**Root cause.** Commit `6715f1c` moved nine work items to `STAGING` and `0230b58` moved the same
+nine from `work-items/active/` to `work-items/completed/` with `phase: CLOSED`. Three test files were
+never updated for either transition:
+
+- `tests/p6a-retail-transaction-completion.test.mjs` — `ENOENT` on
+  `work-items/active/T360-20261005-154000-p6a-retail-transaction-completion.json`
+- `tests/recovery-r0-48-finding-coverage.test.mjs` — `ENOENT` on
+  `work-items/active/T360-20260923-221011-full-ui-tailwind-and-github-uat-expansion.json`
+- `tests/video-parity-expansion.test.mjs` — `ENOENT` on
+  `work-items/active/T360-20261004-184500-video-parity-expansion.json`
+
+and all three also asserted `phase === 'VERIFICATION'`, which stopped matching as soon as the items
+advanced. Because the build gate runs `npm test`, three test-file errors took out the six-app build,
+which took out every artifact-dependent UAT step, Stage-18/19/20, and the UAT candidate
+fail-closed assertion.
+
+**Repair (work item `T360-20261012-011530`, phase VERIFICATION).**
+
+- New `tests/helpers/work-item.mjs` resolves a work item from `work-items/active/` or
+  `work-items/completed/`, fails closed when it is in neither, and fails closed when the same file
+  exists in both. The phase assertion is replaced by `assertDeliveredWorkItem`, which requires a
+  delivered phase (`RELEASE_READY|RELEASED|CLOSED`), `releasedAt`, `closedAt`, and a release evidence
+  entry under `handoff/release-evidence/` that exists on disk — strictly stronger than the old
+  hardcoded `VERIFICATION` equality.
+- Second, independent defect: the nine work items closed in `0230b58` stored `releaseEvidence` as a
+  single string pointing at `handoff/release-evidence/<id>.md`, but the committed evidence files are
+  named `<id>-<slug>.md`, and every other work item in the repository stores `releaseEvidence` as an
+  array. All nine now store the array form naming the file that actually exists.
+- New `tests/work-item-path-resolution.test.mjs` scans every `tests/*.test.mjs` for
+  `work-items/{active,completed}/<file>.json` literals and fails if any resolves to no real work
+  item, so a future closure cannot silently break the suite before it reaches GitHub CI.
+
+**Not claimed.** The Stage-20 `PrismaClientInitializationError` seen in run `38086561199`
+(`apply-stage20-critical-indexes.mjs` seeing a SQLite-generated client) was a *consequence* of the
+build gate aborting before `PRISMA_GENERATE_POSTGRES_FINAL`; it is not an independent defect and was
+not "fixed" separately. Local evidence: `test:dependency-free` 1821/1821 PASS, `workflow:validate`
+PASS (46 work items), `validate:repo` PASS (1191 files / 202 Prisma models), `lint` PASS. GitHub
+green on both workflows is still pending until the runs finish.
+
+P5 remains `IMPLEMENTED_RUNTIME_PENDING`, `humanStage20=PENDING`, `productReady=false`, and R8
+(`T360-20260925-143000`) remains BLOCKED. Nothing here advances canonical product readiness.

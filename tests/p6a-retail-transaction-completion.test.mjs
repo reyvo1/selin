@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { assertDeliveredWorkItem, readWorkItem } from './helpers/work-item.mjs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const salesDto = read('apps/api/src/sales/dto/create-sale.dto.ts');
@@ -18,7 +19,7 @@ const sqliteSchema = read('apps/api/prisma/schema.sqlite.prisma');
 const pgSchema = read('apps/api/prisma/schema.postgresql.prisma');
 const migrationOrder = JSON.parse(read('config/expand-migration-order.json'));
 const productCompleteness = JSON.parse(read('config/product-completeness.json'));
-const p6aWorkItem = JSON.parse(read('work-items/active/T360-20261005-154000-p6a-retail-transaction-completion.json'));
+const p6aWorkItem = readWorkItem('T360-20261005-154000-p6a-retail-transaction-completion.json');
 const featureCatalog = read('docs/FEATURE-CATALOG.md');
 
 function paymentModel(schema) {
@@ -178,6 +179,6 @@ test('P6A governance truth is recorded without advancing P5 or Human Stage-20', 
   assert.equal(feature.status, 'IMPLEMENTED_RUNTIME_PENDING');
   assert.equal(p6aWorkItem.module, 'payments');
   assert.equal(p6aWorkItem.wave, 'W2');
-  assert.equal(p6aWorkItem.phase, 'VERIFICATION');
+  assertDeliveredWorkItem(p6aWorkItem);
   assert.match(featureCatalog, /\| retail_transaction_completion \| on \| implemented-runtime-pending \|/);
 });

@@ -55,7 +55,9 @@
     "The new remote is https://github.com/reyvo1/tokofinal (public web view showed empty repo). No push/commit was performed and no CI/UAT readiness is claimed.",
     "Fix preserves compiled-worker HTTP UAT, starts worker build before full preflight tests, isolates no-dist TypeScript check, and leaves financial patch, database and governance statuses untouched."
   ],
-  "releaseEvidence": "handoff/release-evidence/T360-20261009-023700.md",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261009-023700-clean-checkout-worker-preflight.md"
+  ],
   "releasedAt": "2026-10-11T05:08:57+08:00",
   "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
   "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",

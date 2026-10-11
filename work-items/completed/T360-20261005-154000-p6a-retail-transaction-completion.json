@@ -70,7 +70,9 @@
   "notes": [
     "Governance record for the P6A engineering wave that began from exact automated-green baseline eb320e931f898acdcce4b705ca4dd6e51059d156. It intentionally does not advance canonical currentPhase while P5/Human Stage-20 acceptance remains pending."
   ],
-  "releaseEvidence": "handoff/release-evidence/T360-20261005-154000.md",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261005-154000-p6a-retail-transaction-completion.md"
+  ],
   "releasedAt": "2026-10-11T05:08:57+08:00",
   "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
   "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",

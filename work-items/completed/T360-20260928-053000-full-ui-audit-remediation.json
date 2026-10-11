@@ -134,7 +134,9 @@
     "2026-09-29 continuation: fixed role-only nav fallthrough, Admin cross-role all-or-nothing bootstrap, stale branch responses/drafts, contextual root/header mismatch, root procurement permissions, readability/mobile accessibility, POS/Employee/Storefront dark contrast, and JSX control-audit parsing. Final dependency-free 1085/1085 PASS; quality:fast PASS; full source audit PASS; six-app build PASS before final Storefront/Employee visual corrections, with final rebuild evidence recorded separately. See docs/UI-BUSINESS-AUDIT-20260929.md for exact limits and open idempotency/pagination/staging findings. No migration, seed, commit or push.",
     "2026-10-04 backend/frontend contract parity repair: exact GitHub commit c1f232da583b61d822f756143d73e966cb0cbf9c failed API TypeScript first in MobileOps, cascading into missing artifact/browser/runtime stages. Fixed nullable discrepancy row typing; replaced non-canonical inventory.manage with canonical inventory.opname for MobileOps; aligned Branch Transfer UI to integration.manage and documentation to inventory.transfer; repaired literal JSX permission ternaries; mirrored backend role+permission guards for extensions/commerce actions; routed order mutations through authFetch; and added integration.manage to platform integration mutations. Hardened gates now reject non-canonical controller permissions and literal permission ternaries. Focused regression 111/111 PASS; UI source audit PASS (464 controls); full repository/product/contextual/canonical/P5 audits PASS (1085 files, 509 API handlers, 464 controls). Local npm ci did not complete in assistant container, so build/runtime PASS is intentionally not claimed; GitHub exact-artifact UAT remains authority."
   ],
-  "releaseEvidence": "handoff/release-evidence/T360-20260928-053000.md",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20260928-053000-full-ui-audit-remediation.md"
+  ],
   "releasedAt": "2026-10-11T05:08:57+08:00",
   "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
   "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",

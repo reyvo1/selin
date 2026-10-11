@@ -69,7 +69,9 @@
     "Work begun against latest locally PASS tokofinal source fingerprint 7934d881a52065da2e5628a75ba4923eafd9a93fb906fc46a29c0a140273f55a. ZIP candidate has no npm node_modules; source gate PASS is not full UAT.",
     "Unfinished accounting for manual CASH_IN/CASH_OUT and shift variance is a separate high-priority W3 gate, not silently marked solved."
   ],
-  "releaseEvidence": "handoff/release-evidence/T360-20261009-033700.md",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261009-033700-ppob-paid-cash.md"
+  ],
   "releasedAt": "2026-10-11T05:08:57+08:00",
   "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
   "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",

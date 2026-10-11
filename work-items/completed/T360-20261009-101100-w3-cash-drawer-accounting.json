@@ -80,7 +80,9 @@
   ],
   "createdAt": "2026-10-09T10:11:00+08:00",
   "updatedAt": "2026-10-11T05:09:07+08:00",
-  "releaseEvidence": "handoff/release-evidence/T360-20261009-101100.md",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261009-101100-w3-cash-drawer-accounting.md"
+  ],
   "releasedAt": "2026-10-11T05:08:57+08:00",
   "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/{RUN_ID}",
   "releaseNotes": "All quality gates PASS, GitHub UAT PASS, release evidence documented",

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { assertDeliveredWorkItem, readWorkItem } from './helpers/work-item.mjs';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 const schemas = ['apps/api/prisma/schema.prisma','apps/api/prisma/schema.sqlite.prisma','apps/api/prisma/schema.postgresql.prisma'].map(read);
@@ -149,9 +150,9 @@ test('admin navigation exposes manufacturing, PPOB, bulk labels and setup readin
 });
 
 test('wave explicitly keeps canonical costing and does not weaken release gates', () => {
-  const item = JSON.parse(read('work-items/active/T360-20261004-184500-video-parity-expansion.json'));
+  const item = readWorkItem('T360-20261004-184500-video-parity-expansion.json');
   const docs = read('docs/VIDEO-PARITY-ENHANCEMENT-20261004.md');
-  assert.equal(item.phase, 'VERIFICATION');
+  assertDeliveredWorkItem(item);
   assert.ok(item.businessRules.some((rule) => rule.includes('FIFO cost-layer valuation is not claimed')));
   assert.match(docs, /MOVING_AVERAGE/);
   assert.match(docs, /No gate is removed or weakened/);

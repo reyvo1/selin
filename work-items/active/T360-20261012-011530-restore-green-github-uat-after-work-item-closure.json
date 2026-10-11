@@ -1,0 +1,73 @@
+{
+  "id": "T360-20261012-011530",
+  "title": "Restore green GitHub UAT after work item closure",
+  "type": "hotfix",
+  "module": "release-uat",
+  "wave": "W7",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20260925-143000"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "LOW"
+  },
+  "businessRules": [
+    "A work item moving from active/ to completed/ is a legitimate lifecycle transition, not a deletion; repository tests must resolve work item files from either location instead of pinning one directory.",
+    "Closing a work item must not silently weaken its assertions: a phase assertion pinned to an in-flight phase is replaced by a delivered-phase assertion that additionally requires release timestamps and a release evidence file that exists on disk.",
+    "releaseEvidence must follow the repository convention of a non-empty array, and every evidence path it names must exist; a dangling pointer is a data defect and is corrected, not asserted away.",
+    "A test may not be edited to pass by deleting or relaxing an invariant; the invariant is restated against the current, true source of truth.",
+    "Work item evidence drift is a fail-closed defect: the repository gate must reject a dangling work-item reference before it reaches GitHub CI, where it costs a full 5-9 minute PostgreSQL simulation cycle."
+  ],
+  "acceptanceCriteria": [
+    "npm run test:dependency-free reports zero failures, including tests/p6a-retail-transaction-completion.test.mjs, tests/recovery-r0-48-finding-coverage.test.mjs and tests/video-parity-expansion.test.mjs.",
+    "tests/helpers/work-item.mjs resolves a work item from work-items/active or work-items/completed, fails closed when it is in neither, and fails closed when it exists in both.",
+    "The three previously failing tests assert delivered phase plus existing release evidence instead of the stale hardcoded VERIFICATION phase.",
+    "All nine work items closed in 0230b58 record releaseEvidence as an array pointing at the release evidence file that actually exists in handoff/release-evidence/.",
+    "tests/work-item-path-resolution.test.mjs fails if any test file holds a work-items/active or work-items/completed literal that resolves to no real work item.",
+    "npm run workflow:validate, npm run validate:repo and npm run lint all pass locally on the exact commit.",
+    "GitHub Toko360 Full System Simulation and Toko360 Full Automated UAT both return to green on main for this commit."
+  ],
+  "testPlan": [
+    "node --test tests/p6a-retail-transaction-completion.test.mjs tests/recovery-r0-48-finding-coverage.test.mjs tests/video-parity-expansion.test.mjs tests/work-item-path-resolution.test.mjs",
+    "npm run test:dependency-free",
+    "npm run workflow:validate",
+    "npm run validate:repo",
+    "npm run lint",
+    "GitHub Actions Toko360 Full System Simulation (build gate REGRESSION_TESTS must reach 0 failures)",
+    "GitHub Actions Toko360 Full Automated UAT (build gate, Stage-20 automated readiness and UAT candidate fail-closed assertion)"
+  ],
+  "migrationPlan": "No database, schema or migration change. Only repository test governance files and work item metadata.",
+  "rollbackPlan": "Revert the single hotfix commit. The previous state is red CI, so rollback is not a production rollback: no runtime, schema, seed or evidence state is touched, and Human Stage-20 remains PENDING throughout.",
+  "monitoringPlan": "Watch the GitHub Actions run list for both PostgreSQL workflows on main until green, then re-run them on the next merge to confirm the gate does not regress back to red.",
+  "securityNotes": "Test-only and governance-only change. No credential, token, tenant identifier, biometric payload or card data is introduced. Work item metadata contains no personal data.",
+  "documentation": [
+    "docs/DEVELOPMENT-WORKFLOW.md",
+    "docs/CI-TESTING.md",
+    "docs/PROJECT-STATE.md"
+  ],
+  "testResults": [
+    "node --test (4 work item files): 29/29 PASS",
+    "npm run test:dependency-free: 1821/1821 PASS",
+    "npm run workflow:validate: PASS, 45 work items, 8 delivery waves",
+    "npm run validate:repo: PASS, 1191 files, 202 Prisma models",
+    "npm run lint: PASS, all workspaces"
+  ],
+  "notes": [
+    "Root cause: commit 6715f1c moved nine work items to STAGING and commit 0230b58 moved them from work-items/active/ to work-items/completed/ with phase CLOSED, but three test files still read those JSON files from work-items/active/ and still asserted phase === 'VERIFICATION'. On GitHub that failed npm test inside the build gate, which then cascaded into 30 downstream UAT step failures.",
+    "Second defect found while fixing the first: the nine closed work items recorded releaseEvidence as a single string pointing at handoff/release-evidence/<id>.md, but the committed evidence files are named <id>-<slug>.md and every other work item in the repository stores releaseEvidence as an array.",
+    "Third defect, visible only in downstream Stage-20: apply-stage20-critical-indexes.mjs uses the generated Prisma Client directly, and the build gate leaves the PostgreSQL client in place. This was correct for the previous green run and is only revisited if Stage-20 fails again."
+  ],
+  "createdAt": "2026-10-11T17:15:30.158Z",
+  "updatedAt": "2026-10-12T01:20:00+08:00"
+}

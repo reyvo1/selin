@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { assertDeliveredWorkItem, readWorkItem } from './helpers/work-item.mjs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const matrix = JSON.parse(read('config/recovery-finding-matrix.json'));
 const r0 = JSON.parse(read('work-items/completed/T360-20260924-020700-recovery-r0-truth-reset.json'));
 const r1 = JSON.parse(read('work-items/completed/T360-20260924-022400-recovery-r1-tenant-access-control-plane.json'));
 const r2 = JSON.parse(read('work-items/completed/T360-20260924-180000-recovery-r2-hr-attendance-payroll.json'));
-const f12 = JSON.parse(read('work-items/active/T360-20260923-221011-full-ui-tailwind-and-github-uat-expansion.json'));
+const f12 = readWorkItem('T360-20260923-221011-full-ui-tailwind-and-github-uat-expansion.json');
 const pkg = JSON.parse(read('package.json'));
 const projectState = read('docs/PROJECT-STATE.md');
 const workflow = read('docs/TOKO360-MASTER-RECOVERY-WORKFLOW.md');
@@ -34,7 +35,7 @@ test('critical and high findings cannot silently lose runtime evidence requireme
   }
 });
 
-test('R0-R6 prerequisites are closed and R7 UI verification is active', () => {
+test('R0-R6 prerequisites are closed and R7 UI wave is delivered with release evidence', () => {
   assert.equal(r0.phase, 'CLOSED');
   assert.equal(r0.wave, 'W0');
   assert.equal(r1.phase, 'CLOSED');
@@ -43,7 +44,7 @@ test('R0-R6 prerequisites are closed and R7 UI verification is active', () => {
   assert.equal(r2.phase, 'CLOSED');
   assert.equal(r2.wave, 'W4');
   assert.ok(r2.dependencies.includes(r1.id));
-  assert.equal(f12.phase, 'VERIFICATION');
+  assertDeliveredWorkItem(f12);
   assert.ok(f12.dependencies.includes(r1.id));
   assert.match(projectState, /Recovery R0/);
   assert.match(projectState, /Recovery R1/);
