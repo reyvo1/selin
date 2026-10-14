@@ -1,5 +1,14 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-14 — A-02 vacuous-green hardening (IMPLEMENTATION)
+
+- Active work item `T360-20261014-183210` (bug, W0/audit, CRITICAL). A-02 stays `IMPLEMENTED_RUNTIME_PENDING`; this item closes two demonstrated instances only.
+- Instance 1: `scripts/ci-r8-release-evidence-probe.mjs` stamped twelve critical scenarios `PASS` from a static table, compared `scenarios.length === 12` against itself, emitted `exactSource`/`r8ReportingSecurity`/`humanStage20Pending` as literals, and `if (s && s !== source.value)` skipped stale-source checking for any artifact without `sourceIdentity`.
+- Instance 2: `scripts/audit-product-completeness.mjs` accepted any non-empty evidence array, so `feature:pos_offline` was `RUNTIME_VERIFIED` on the free text `historical automated evidence only` and `audit:A-01` on one prose sentence.
+- Fix: `scripts/lib/r8-evidence-binding.mjs` (fail-closed binding, exemption needs >=20-char rationale, derived coverage) and `scripts/lib/evidence-resolver.mjs` (evidence must be an existing repo file, a registry CI artifact actually produced by a script, `logs_<run>.zip`, or `source-commit:<sha>`; prose fails; registry must be untracked but script-backed). `pos_offline` now points at the real `github-r3-residual-probe-latest.json`; A-01 prose moved to `evidenceNotes`.
+- New `tests/vacuous-green-gate.test.mjs` (11 tests) pins all of it. `tests/recovery-r8-runtime-uat.test.mjs` had to be updated because it demanded the literal `r8ReportingSecurity:true` — that expectation was the defect, so it was replaced by the derived contract, not weakened.
+- Local: `test:dependency-free` 1838/1838, lint, `workflow:validate` (48), `validate:repo` (1204 files / 202 models), `audit:full:repo` (7), `audit:recovery`, `audit:product:completeness`, `audit:canonical:ownership`, `ci:ui:audit` — all PASS.
+- Pending: exact-source GitHub runs proving the hardened probe executes on both heavy workflows (acceptance criterion 6), then release evidence and closure. **No A-02 status promotion.**
 ## 2026-10-14 — R8 automated layer CLOSED; next blocker is human P5 visual acceptance (RELEASED)
 
 - Active work item `T360-20260925-143000` (R8) moved BLOCKED → VERIFICATION → STAGING → RELEASE_READY → RELEASED → CLOSED. The BLOCKED state dated from 2026-09-25, before its only documented blocker (exact-source R7 PASS) could be satisfied; R7 `T360-20260923-221011` closed 2026-10-11. Because `phaseOrder.BLOCKED = 99`, `scripts/workflow.mjs` forbids advancing out of BLOCKED, so the engine-prescribed **manual phase rollback was documented inside the work item's `businessRules`** rather than by weakening the guard.

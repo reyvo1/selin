@@ -50,7 +50,12 @@ test('R8 requires two safe browser mutation journeys and restoration evidence',(
 
 test('R8 final evidence consumes reporting security runtime probe',()=>{
  assert.match(probe,/github-r8-reporting-security-probe-latest/);
- assert.match(probe,/r8ReportingSecurity:true/);
+ // Ekspektasi lama menuntut literal `r8ReportingSecurity:true`. Itu adalah defek A-02:
+ // check dipancarkan sebagai konstanta, bukan diturunkan dari checks yang benar dibaca.
+ // Kontrak baru: nilai harus diturunkan dari r8ReportingCheckValues yang diambil dari artifact.
+ assert.match(probe,/r8ReportingSecurity:/);
+ assert.match(probe,/r8ReportingCheckValues/);
+ assert.ok(!/r8ReportingSecurity:\s*true\b/.test(probe),'r8ReportingSecurity tidak boleh lagi berupa konstanta true');
 });
 
 

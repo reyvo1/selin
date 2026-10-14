@@ -456,3 +456,76 @@ been **rejected twice** (V1, V2) and is currently `PENDING`.
 records nor implies human visual acceptance, and no automated probe may mutate it. Canonical matrix is
 unchanged at 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED,
 with 8/15 post-audit findings RUNTIME_VERIFIED.
+
+## 2026-10-14 — A-02: two demonstrated vacuous-green instances closed, finding kept open
+
+Work item `T360-20261014-183210` (A-02 hardening, `bug`, W0 `audit`, CRITICAL), currently
+IMPLEMENTATION. This entry records what changed and, more importantly, what deliberately did **not**
+change.
+
+**Why A-02 at all.** Closing R8 forced me to read the gate that produced its evidence. It did not
+read like what its output claimed:
+
+- `scripts/ci-r8-release-evidence-probe.mjs` built the twelve critical UAT scenarios from a **static**
+  `id → evidence-ref` table whose rows were stamped `PASS`, and emitted
+  `executedCriticalScenarios: scenarios.length === 12` — a comparison of a table against its own
+  length. `exactSource`, `r8ReportingSecurity` and `humanStage20Pending` were boolean literals.
+- `if (s && s !== source.value)` **skipped the stale-source check entirely** for any artifact that
+  arrived without a `sourceIdentity` field, so an artifact carrying no identity at all was accepted
+  as long as it said `status: 'PASS'`.
+- Independently, `scripts/audit-product-completeness.mjs` closed the evidence question with
+  `!(item.evidence?.length)` — array length. `feature:pos_offline` was `RUNTIME_VERIFIED` on
+  `evidence: ["historical automated evidence only"]`, and `audit:A-01` on a single prose sentence,
+  while `docs/PRODUCT-COMPLETENESS-STATUS.md` states that `RUNTIME_VERIFIED` requires exact-source
+  runtime evidence.
+
+Those are three ways for a gate to be green without saying anything. That is A-02, verbatim.
+
+**What changed.**
+
+- New `scripts/lib/r8-evidence-binding.mjs`: `assertSourceBinding` fails closed when an artifact has
+  no `sourceIdentity` unless it is listed in `SOURCE_BINDING_EXEMPTIONS` **with a rationale of at
+  least 20 characters**; `evaluateScenarioCoverage` derives scenario coverage from artifacts that are
+  actually `PASS` *and* fingerprint-matched; `declaredProductionTouched` collects any artifact that
+  reports `productionTouched: true`.
+- `scripts/ci-r8-release-evidence-probe.mjs` now derives `exactSource`, `exactBuildArtifact`,
+  `executedCriticalScenarios`, `r8ReportingSecurity` and `humanStage20Pending` from evidence it read,
+  and **throws** if any of the twelve scenarios loses an artifact or points at an unbound one. The
+  output schema is unchanged, so `ci-write-full-system-summary.mjs` and `github-uat-report.mjs` keep
+  working.
+- New `scripts/lib/evidence-resolver.mjs` plus the audit: evidence must classify as a repository file
+  that exists, a **registered** CI artifact that a script under `scripts/` really produces,
+  `logs_<run>.zip`, or `source-commit:<sha>`; prose fails. `RUNTIME_VERIFIED`/`HUMAN_ACCEPTED` must
+  also carry a concrete anchor. The new `runtimeEvidenceArtifacts` registry is validated in both
+  directions — every entry must be produced by a script, and must **not** be tracked in the repo.
+- `feature:pos_offline` is now bound to `handoff/quality/github-r3-residual-probe-latest.json`, the
+  artifact whose probe really executes sync receipt, offline transaction, device diagnostics, ack and
+  requeue on PostgreSQL and that `ci:r8:probe` re-binds to the current fingerprint as
+  `UAT-08-OFFLINE-SYNC`. `audit:A-01`'s prose was split into `source-commit:` + three log archives,
+  with the narrative moved to `evidenceNotes` where it belongs.
+- New `tests/vacuous-green-gate.test.mjs` (11 tests): prose is rejected, a declared-but-unproduced
+  artifact is rejected, logs without a source commit are rejected, missing/stale/short-exemption
+  bindings all throw, coverage is derived rather than counted, and the real audit still passes.
+
+**One test expectation was changed, deliberately.**
+`tests/recovery-r8-runtime-uat.test.mjs` asserted `/r8ReportingSecurity:true/` — it demanded the
+constant. That expectation is the defect, so per the master workflow's root-cause rule it was
+replaced with the new contract: the check must be derived from `r8ReportingCheckValues` and must not
+be a literal. No assertion was weakened; the bar moved up.
+
+**Why A-02 is not closed.** The canonical status stays `IMPLEMENTED_RUNTIME_PENDING` and I will not
+touch the string. A scan of every `checks` literal under `scripts/` found **zero** remaining
+all-literal checks objects, and the probes that emit `status: 'PASS'` (`ci-r1`, `ci-r2`, `ci-r4`,
+`ci-r6`, `ci-p2`, `ci-p3`) are fail-fast — they throw on the first failed expectation — or are
+downstream-enforced by `Object.values(checks).every(Boolean)` in the summary gate. So no third
+instance was demonstrated, but "no third instance found" is not proof that none exists across every
+audit in the repository. A-02 closes when a full sweep can say that with evidence, not because two
+instances were fixed.
+
+**Not claimed.** `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`. No business logic,
+API, permission, schema or runtime path changed; this is verification-layer only. Local:
+`test:dependency-free` **1838/1838** (was 1827, +11 new), lint PASS, `workflow:validate` PASS (48),
+`validate:repo` PASS (1204 files / 202 Prisma models), `audit:full:repo` PASS (7), `audit:recovery`
+48/48, `audit:product:completeness` PASS, `audit:canonical:ownership` PASS, `ci:ui:audit` PASS (514).
+GitHub evidence for the hardened probe executing on both heavy workflows is the pending acceptance
+criterion.

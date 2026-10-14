@@ -1,0 +1,64 @@
+{
+  "id": "T360-20261014-183210",
+  "title": "A-02 harden audit and test gates against vacuous green",
+  "type": "bug",
+  "module": "audit",
+  "wave": "W0",
+  "phase": "IMPLEMENTATION",
+  "risk": "CRITICAL",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20260925-143000"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "MEDIUM",
+    "performance": "LOW"
+  },
+  "businessRules": [
+    "Post-audit finding A-02 (CRITICAL, P0, targetPhase P0) is canonical in config/product-completeness.json and this work item does NOT close it. It closes two demonstrated instances - the ci:r8:probe constant checks and the marker-only evidence length check - plus a regression gate that pins both. A-02 stays IMPLEMENTED_RUNTIME_PENDING until a full sweep proves no remaining audit or test can report green without substance; editing the status string is forbidden.",
+    "A gate may not report PASS from a constant. Every PASS a gate emits must be derived from an artifact that gate actually read during this run; a boolean literal used as a result is a defect.",
+    "Missing evidence is a failure, never an omission. An expected artifact that is absent, unparsable, or lacking the identity the gate claims to verify must fail the gate closed.",
+    "A status of RUNTIME_VERIFIED or HUMAN_ACCEPTED requires at least one resolvable exact-source evidence reference. Free text in the evidence array is not evidence; prefer binding the real runtime artifact over downgrading the status, and downgrade only when no exact-source artifact exists.",
+    "This work item is verification-layer only. No business logic, API contract, permission, tenant/branch authority, schema, or runtime mutation path may change, and no existing assertion may be weakened to keep a gate green.",
+    "productReady remains false, currentPhase remains P5, humanStage20 remains PENDING; hardening a gate cannot promote any product status.",
+    "Scope was chosen by evidence, not by convenience: a scan of every scripts/*.mjs checks literal found zero remaining all-literal checks objects, and the probes that emit status PASS (ci-r1, ci-r2, ci-r4, ci-r6, ci-p2, ci-p3) are fail-fast or downstream-enforced, so those were not rewritten."
+  ],
+  "acceptanceCriteria": [
+    "scripts/ci-r8-release-evidence-probe.mjs fails closed when a referenced evidence artifact carries no sourceIdentity, instead of silently skipping the staleness comparison; any artifact exempted from fingerprint binding is listed explicitly with documented rationale.",
+    "The probe's executedCriticalScenarios check is derived, not vacuous: each of the twelve critical scenario ids must map to at least one artifact that is PASS and bound to the current fingerprint, and the check fails when a mapping row loses its artifact rather than passing because a table length equals twelve.",
+    "exactSource, r8ReportingSecurity and humanStage20Pending in the probe output are computed from the evidence read, not emitted as constants.",
+    "Every feature in config/product-completeness.json with status RUNTIME_VERIFIED or HUMAN_ACCEPTED has an evidence entry that resolves to a real file in the repository or a named GitHub run artifact; feature pos_offline is bound to its actual offline-sync runtime artifact or downgraded to IMPLEMENTED_RUNTIME_PENDING with documented rationale.",
+    "A dependency-free regression test fails the build when any such feature carries unresolvable evidence, so the invariant survives future edits.",
+    "Both GitHub heavy workflows stay green with the hardened probes, and no gate, test, or assertion is removed, narrowed, or bypassed to achieve that."
+  ],
+  "testPlan": [
+    "node --test tests/vacuous-green-gate.test.mjs — negative controls: an artifact without sourceIdentity, an artifact whose fingerprint differs, a scenario mapping row whose artifact is missing or not PASS, and a RUNTIME_VERIFIED feature with unresolvable evidence must each make the gate fail; the twelve existing scenario ids must still resolve",
+    "node --test tests/recovery-r8-runtime-uat.test.mjs — the R8 evidence chain still passes on real artifacts",
+    "node --test tests/work-item-path-resolution.test.mjs — work-item resolver guard stays green",
+    "npm run test:dependency-free — full suite",
+    "npm run audit:product:completeness and npm run audit:full:repo — canonical matrix still passes with no marker-only closure introduced",
+    "npm run lint, npm run workflow:validate, npm run validate:repo",
+    "GitHub exact-source Full Automated UAT and Full System Simulation: hardened ci:r8:probe and ci:r8:reporting-security-probe execute and the aggregate summary/assert stay PASS with productionTouched=false"
+  ],
+  "migrationPlan": "No schema migration. Only verification scripts, one dependency-free regression test, and canonical status evidence references change; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the A-02 commit. The probes return to their previous (weaker) behaviour, no data is written, no status is promoted, and no production runtime path is affected. Because the change is verification-layer only there is no compensating operation to unwind and no feature flag is required; the prior commit remains a valid green checkpoint.",
+  "monitoringPlan": "Observe both GitHub heavy workflows plus Workflow Governance on the exact commit: ci:r8:probe, ci:r8:reporting-security-probe, the full-system summary gates and ci:summary:github:assert must remain PASS, and ci:uat:coverage must continue to report evidenceClass SOURCE_CONTRACT with runtimeClosure false. If the hardened probe fails, the aggregate fails visibly and the run must be read as a real defect rather than re-tuned.",
+  "securityNotes": "A false-green verification layer can silently mask a security regression, which is why A-02 is rated CRITICAL. This change must only add fail-closed checks; it must not introduce an allow-list, skip, or exemption that lets an artifact be accepted without identity binding, must not weaken the restricted-operator denial or digest recipient verification asserted by the reporting/security probe, and must not print, persist or diff credential material while inspecting artifacts. Evidence files stay in handoff/quality and CI artifacts; no secret, token, or database URL is read into a test assertion or log line.",
+  "documentation": [
+    "docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md",
+    "docs/PRODUCT-COMPLETENESS-STATUS.md",
+    "docs/PROJECT-STATE.md",
+    "docs/R8-GITHUB-FULL-RUNTIME-UAT.md",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-14T18:32:10+08:00",
+  "updatedAt": "2026-10-14T10:58:02.554Z"
+}

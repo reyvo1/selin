@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { collectScriptSource, loadDeclaredArtifacts, validateEvidenceArray, validateRegistry } from './lib/evidence-resolver.mjs';
 
 const root = process.cwd();
 const matrixPath = path.join(root, 'config/product-completeness.json');
@@ -14,13 +15,17 @@ if (new Set(ids).size !== ids.length) failures.push('Canonical capability IDs mu
 if (!matrix.authoritative) failures.push('Canonical product completeness matrix must be authoritative.');
 if (matrix.productReady !== false) failures.push('PRODUCT_READY must remain false until P7 + Human Stage-20 are accepted.');
 if (matrix.humanStage20 !== 'PENDING') failures.push('Human Stage-20 must remain PENDING during P0.');
+
+// A-02: evidence bukan lagi "panjang array". Setiap entry harus dapat diverifikasi, dan
+// registry CI artifact harus benar-benar diproduksi oleh script yang ada.
+const scriptSource = collectScriptSource(root);
+const declaredArtifacts = loadDeclaredArtifacts(matrix);
+failures.push(...validateRegistry({ root, matrix, scriptSource }));
+
 for (const item of all) {
   if (!allowed.has(item.status)) failures.push(`${item.id} has invalid status ${item.status}`);
-  if (['RUNTIME_VERIFIED','HUMAN_ACCEPTED'].includes(item.status) && !(item.evidence?.length)) {
-    failures.push(`${item.id} cannot be ${item.status} without explicit evidence.`);
-  }
-  if (item.status === 'HUMAN_ACCEPTED' && !item.evidence.some((e) => /human|operator|stage-20/i.test(e))) {
-    failures.push(`${item.id} HUMAN_ACCEPTED requires explicit human/operator evidence.`);
+  if (['RUNTIME_VERIFIED','HUMAN_ACCEPTED'].includes(item.status)) {
+    failures.push(...validateEvidenceArray(item, { root, declaredArtifacts, scriptSource }));
   }
 }
 
@@ -53,10 +58,6 @@ const forbiddenTracked = tracked.filter((file) =>
 );
 for (const file of forbiddenTracked) failures.push(`Generated/credential artifact must not be tracked: ${file}`);
 
-const criticalHigh = (matrix.postAuditFindings ?? []).filter((x) => ['CRITICAL','HIGH'].includes(x.severity));
-for (const item of criticalHigh) {
-  if (['RUNTIME_VERIFIED','HUMAN_ACCEPTED'].includes(item.status) && !item.evidence?.length) failures.push(`${item.key} closed without runtime/human evidence.`);
-}
 
 const summary = {
   status: failures.length ? 'FAIL' : 'PASS',

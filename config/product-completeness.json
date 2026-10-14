@@ -271,9 +271,9 @@
       "status": "RUNTIME_VERIFIED",
       "operatorSurfaceRequired": true,
       "evidence": [
-        "historical automated evidence only"
+        "handoff/quality/github-r3-residual-probe-latest.json"
       ],
-      "notes": "Canonical post-audit status; source maturity alone cannot close this capability."
+      "notes": "Canonical post-audit status; source maturity alone cannot close this capability. Runtime proof is the exact-source R3 residual probe, which executes sync receipt, offline transaction, device diagnostics, ack and requeue on PostgreSQL and is re-bound to the current fingerprint by ci:r8:probe (UAT-08-OFFLINE-SYNC)."
     },
     {
       "id": "feature:accounting_full",
@@ -737,8 +737,12 @@
       "status": "RUNTIME_VERIFIED",
       "notes": "P1 62/62 contextual routing and Master Data category/customer isolation passed exact-source Browser UAT, Built Browser UAT, R7/R8, Stage-18/19/20 automated and aggregate gates on commit abac92662cab4cc7352de4f9f9d2e2419aad9c29. Human IA/Stage-20 acceptance remains separate and pending.",
       "evidence": [
-        "Exact-source GitHub commit abac92662cab4cc7352de4f9f9d2e2419aad9c29: Browser UAT PASS, Built Browser UAT PASS, R7 PASS, R8 PASS, Stage-18 PASS, Stage-19 11/11 PASS, automated Stage-20 PASS, aggregate PASS; source logs logs_97860254545.zip, logs_97860254568.zip, logs_97860254901.zip."
-      ]
+        "source-commit:abac92662cab4cc7352de4f9f9d2e2419aad9c29",
+        "logs_97860254545.zip",
+        "logs_97860254568.zip",
+        "logs_97860254901.zip"
+      ],
+      "evidenceNotes": "Exact-source GitHub commit abac92662cab4cc7352de4f9f9d2e2419aad9c29: Browser UAT PASS, Built Browser UAT PASS, R7 PASS, R8 PASS, Stage-18 PASS, Stage-19 11/11 PASS, automated Stage-20 PASS, aggregate PASS; source logs logs_97860254545.zip, logs_97860254568.zip, logs_97860254901.zip."
     },
     {
       "id": "audit:A-02",
@@ -748,7 +752,7 @@
       "severity": "CRITICAL",
       "targetPhase": "P0",
       "status": "IMPLEMENTED_RUNTIME_PENDING",
-      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence."
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. 2026-10-14 progress, work item T360-20261014-183210: ci:r8:probe no longer emits constant checks and no longer skips the stale-source comparison for artifacts without sourceIdentity; RUNTIME_VERIFIED/HUMAN_ACCEPTED evidence must now resolve to a repository file, a registry CI artifact that a script actually produces, or a logs_<run>.zip plus source-commit pair, and feature pos_offline is bound to its real exact-source R3 artifact instead of free text. Two demonstrated instances closed; the finding itself remains open."
     },
     {
       "id": "audit:A-03",
@@ -1021,5 +1025,30 @@
     "UI-DESIGN-SYSTEM.md",
     "config/p5-v4-total-ui-rebuild.json",
     "docs/P5-V4-TOTAL-PRESENTATION-REBUILD.md"
+  ],
+  "runtimeEvidenceArtifacts": [
+    "handoff/quality/github-r1-tenant-access-probe-latest.json",
+    "handoff/quality/github-r2-hr-payroll-probe-latest.json",
+    "handoff/quality/github-r3-residual-probe-latest.json",
+    "handoff/quality/github-r4-core-business-probe-latest.json",
+    "handoff/quality/github-r5-assets-fleet-probe-latest.json",
+    "handoff/quality/github-r6-scale-ai-probe-latest.json",
+    "handoff/quality/github-r7-ui-probe-latest.json",
+    "handoff/quality/github-r8-reporting-security-probe-latest.json",
+    "handoff/quality/github-r8-release-evidence-latest.json",
+    "handoff/quality/github-w3-cash-postgres-probe-latest.json",
+    "handoff/quality/github-p2a-multi-uom-runtime-probe-latest.json",
+    "handoff/quality/github-p2-payroll-runtime-probe-latest.json",
+    "handoff/quality/github-p3-productization-probe-latest.json",
+    "handoff/quality/github-p4-canonical-ownership-probe-latest.json",
+    "handoff/quality/github-full-system-simulation-latest.json",
+    "handoff/quality/built-browser-uat-latest.json",
+    "handoff/quality/browser-uat-latest.json",
+    "handoff/quality/github-api-runtime-sweep-latest.json",
+    "handoff/quality/github-notification-provider-probe-latest.json",
+    "handoff/quality/github-worker-runtime-probe-latest.json",
+    "handoff/quality/postgres-dr-drill-latest.json",
+    "logs/payroll-adjustment-postgres-stage/latest.json",
+    "logs/stage20-release-readiness/latest.json"
   ]
 }
