@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "audit",
   "wave": "W0",
-  "phase": "IMPLEMENTATION",
+  "phase": "CLOSED",
   "risk": "CRITICAL",
   "owner": "openai",
   "featureFlag": "",
@@ -60,5 +60,8 @@
     "handoff/CURRENT-WORK.md"
   ],
   "createdAt": "2026-10-14T18:32:10+08:00",
-  "updatedAt": "2026-10-14T10:58:02.554Z"
+  "updatedAt": "2026-10-14T11:18:12.109Z",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261014-183210-a-02-harden-audit-and-test-gates-against-vacuous-green.md"
+  ]
 }

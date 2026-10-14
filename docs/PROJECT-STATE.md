@@ -529,3 +529,22 @@ API, permission, schema or runtime path changed; this is verification-layer only
 48/48, `audit:product:completeness` PASS, `audit:canonical:ownership` PASS, `ci:ui:audit` PASS (514).
 GitHub evidence for the hardened probe executing on both heavy workflows is the pending acceptance
 criterion.
+
+**Closed.** `T360-20261014-183210` moved IMPLEMENTATION → VERIFICATION → STAGING → RELEASE_READY →
+RELEASED → CLOSED with evidence in
+`handoff/release-evidence/T360-20261014-183210-a-02-harden-audit-and-test-gates-against-vacuous-green.md`.
+
+Exact-source GitHub verification on commit `1256c01`: Workflow Governance `38553931267`, Full System
+Simulation `38553931368`, Full Automated UAT `38553931228`, all success. The hardened probe ran and
+reported `status PASS`, `scenarioCount 12`, `sourceIdentity 65ac7d665ffa31fd…` (916 files),
+`productionTouched false`, `humanStage20 PENDING`, and all eight checks **derived** — `exactSource`,
+`exactBuildArtifact`, `executedCriticalScenarios`, `r8ReportingSecurity`, `safeBrowserMutationJourneys`,
+`providerChain`, `loadIndependentHumanGate`, `humanStage20Pending`. `STEP_R7_UI`, `STEP_BUILT_BROWSER`,
+`STEP_R8_REPORTING_SECURITY`, `STEP_R8_RELEASE`, `STEP_STAGE20` and `STEP_CANDIDATE` all success with
+`STAGE20_MODE: AUTOMATED_PASS_HUMAN_UAT_PENDING`.
+
+**A-02 stays open.** Two instances closed, zero remaining all-literal `checks` objects found in a
+bounded scan, `status` untouched at `IMPLEMENTED_RUNTIME_PENDING`. The next item on this thread is the
+full sweep that would actually justify closing it.
+
+**No work item is currently active.**

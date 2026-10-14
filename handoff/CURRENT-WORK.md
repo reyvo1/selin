@@ -1,5 +1,13 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-14 — A-02 hardening CLOSED; A-02 itself still open (RELEASED)
+
+- `T360-20261014-183210` closed. Evidence: `handoff/release-evidence/T360-20261014-183210-a-02-harden-audit-and-test-gates-against-vacuous-green.md`.
+- Exact-source GitHub on `1256c01`: Governance `38553931267`, Simulation `38553931368`, Automated UAT `38553931228`, all success. Hardened `ci:r8:probe` reported `sourceIdentity 65ac7d665ffa31fd… (916 files)`, `scenarioCount 12`, `productionTouched false`, `humanStage20 PENDING`, all eight checks derived and true; `STAGE20_MODE AUTOMATED_PASS_HUMAN_UAT_PENDING`.
+- **A-02 status was not promoted.** Two demonstrated instances are closed; a bounded scan found zero remaining all-literal `checks` objects, but that is not proof that no other audit can report green without substance. Closing A-02 needs the full sweep as evidence.
+- Local: `test:dependency-free` 1838/1838, lint, `workflow:validate` (48), `validate:repo` (1204 files / 202 models), `audit:full:repo` (7), `audit:recovery`, `audit:product:completeness`, `audit:canonical:ownership`, `ci:ui:audit` — all PASS.
+- **No work item is currently active.** Open findings: A-02 CRITICAL, A-07 HIGH, A-09 HIGH, A-12 MEDIUM, A-13 MEDIUM, A-14 MEDIUM, A-15 MEDIUM. Canonical matrix unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
+- **Critical path remains human:** P5 cannot close and P6 cannot start until a human accepts the runtime presentation. Automation is green; the human acceptance has been rejected twice (V1, V2) and is PENDING for V4.
 ## 2026-10-14 — A-02 vacuous-green hardening (IMPLEMENTATION)
 
 - Active work item `T360-20261014-183210` (bug, W0/audit, CRITICAL). A-02 stays `IMPLEMENTED_RUNTIME_PENDING`; this item closes two demonstrated instances only.
