@@ -1,6 +1,16 @@
 # R8 — GitHub Full Runtime UAT and Release Evidence
 
-Status: SOURCE IMPLEMENTED / EXACT-RUNTIME VERIFICATION PENDING.
+Status: AUTOMATED LAYER CLOSED ON EXACT-SOURCE GITHUB EVIDENCE — HUMAN STAGE-20 REMAINS PENDING.
+
+Closed as `T360-20260925-143000` on 2026-10-14. Verification basis is the exact-source GitHub runs on
+commit `0f4b38d` (Full Automated UAT `38545068254`, Full System Simulation `38545068348`, Workflow
+Governance `38545068220`, all success) plus the local test plan. Evidence:
+`handoff/release-evidence/T360-20260925-143000-recovery-r8-runtime-uat.md`.
+
+Closure covers the automated evidence layer only. `productReady` stays false, `currentPhase` stays
+P5, `humanStage20` stays PENDING, and P6 must not start until a human accepts the runtime
+presentation. The same evidence file documents a disclosed limitation of `ci:r8:probe` that keeps
+post-audit finding A-02 (CRITICAL) open; R8 closure is not evidence that A-02 is resolved.
 
 R8 is the final automated recovery evidence layer. It does not replace Human Stage-20 and it cannot be declared CLOSED until the exact-source R7 gate is PASS.
 

@@ -401,3 +401,58 @@ PASS (47), `validate:repo` PASS (1198 files / 202 Prisma models), `audit:full:re
 **Not claimed.** F11 is now `SOURCE_IMPLEMENTATION_COMPLETE_UAT_DEFERRED`, which is a source statement
 only. P5 remains `IMPLEMENTED_RUNTIME_PENDING`, `humanStage20=PENDING`, `productReady=false`, and R8
 (`T360-20260925-143000`) remains `BLOCKED`. Nothing here advances canonical product readiness.
+
+## 2026-10-14 — R8 automated layer closed; the remaining critical path is human, not code
+
+Work item `T360-20260925-143000` (R8, `release-uat`, W7, HIGH) moved
+BLOCKED → VERIFICATION → STAGING → RELEASE_READY → RELEASED → CLOSED.
+
+**Why it was BLOCKED and why that was stale.** The item was created already in `BLOCKED` on
+2026-09-25. Its only documented blocker — `docs/R8-GITHUB-FULL-RUNTIME-UAT.md` and the work item's own
+business rule — is exact-source R7 PASS. R7 (`T360-20260923-221011`) closed on 2026-10-11, and the
+exact-source R7 gate then passed *inside* the R8 probe chain on current source.
+
+`config/workflow-policy.json` gives `phaseOrder.BLOCKED = 99`, so `scripts/workflow.mjs` refuses any
+advance out of BLOCKED. Its error prescribes the remedy — "Gunakan work item baru atau dokumentasikan
+rollback fase secara manual" — so the rollback to `VERIFICATION` was performed manually and the
+justification is written into the work item's `businessRules`. The guard was not weakened.
+
+**Evidence basis.** Exact-source GitHub runs on commit `0f4b38d`: Full Automated UAT `38545068254`,
+Full System Simulation `38545068348`, Workflow Governance `38545068220`, all success. `ci:r8:probe`
+returned `PASS` with `scenarioCount 12` and 12/12 PASS, `sourceIdentity`
+`019b50aacbebd12a4e97ad7a362f1276a20a2379301c8d53bac0425123e82fa5` (913 files), `buildArtifactId`
+`0a42c8007b4e485622552c7c9b939e7c9290e90066eaae270608583d7e45dde1`, `productionTouched false`,
+`humanStage20 PENDING`; `STAGE20_MODE: AUTOMATED_PASS_HUMAN_UAT_PENDING`; and
+`UAT candidate fail-closed assertion PASS: hanya Human Stage-20 yang masih pending.`
+Local test plan: `tests/recovery-r8-runtime-uat.test.mjs` 10/10, `audit:recovery` 48/48 mapped
+(0 unmapped, 202 models, 532 handlers, 514 controls), `test:dependency-free` 1827/1827, lint,
+`workflow:validate` (47), `validate:repo` (1198 files / 202 Prisma models), `audit:full:repo` (7),
+`ci:ui:audit` (514). All seven acceptance criteria map to a line of evidence in
+`handoff/release-evidence/T360-20260925-143000-recovery-r8-runtime-uat.md`.
+
+**A limitation I am disclosing rather than papering over.** While auditing the R8 gate I found that
+`scripts/ci-r8-release-evidence-probe.mjs:47-53` builds the twelve critical scenarios from a *static*
+`id → evidence-ref` table stamped `PASS`, and hardcodes `exactSource`, `r8ReportingSecurity`,
+`executedCriticalScenarios` (`scenarios.length === 12`) and `humanStage20Pending`. Lines 33-45 do
+enforce the substance — every referenced artifact must report PASS and every artifact carrying a
+`sourceIdentity` must match the current fingerprint or the probe throws — but
+`if (s && s !== source.value)` **skips the staleness check entirely** for an artifact that has no
+`sourceIdentity` at all.
+
+No false PASS occurred here: all thirteen source-carrying artifacts matched. But this is precisely
+post-audit finding **A-02 (CRITICAL, P0) "Audit/test design can report green while product
+incomplete"**, still open, and R8 closure is explicitly not evidence that A-02 is resolved. A-02 is
+the next intake.
+
+**The critical path is now human, not code.** `config/product-completeness.json` carries two gates
+that automation cannot satisfy: "P5 cannot close and P6 cannot start until a human explicitly accepts
+the runtime presentation after automated exact-source PASS", and "P5 V4 human visual acceptance is
+explicitly recorded only after the local runtime is visibly accepted and exact-source automation
+passes; only then may P6 start." The V4 automated evidence is green. The human visual acceptance has
+been **rejected twice** (V1, V2) and is currently `PENDING`.
+
+**Not claimed.** `productReady` stays `false`, `currentPhase` stays `P5` / `IMPLEMENTED_RUNTIME_PENDING`,
+`humanStage20` stays `PENDING`. R8 closure covers the automated evidence layer only; it neither
+records nor implies human visual acceptance, and no automated probe may mutate it. Canonical matrix is
+unchanged at 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED,
+with 8/15 post-audit findings RUNTIME_VERIFIED.

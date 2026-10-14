@@ -4,7 +4,7 @@
   "type": "release",
   "module": "release-uat",
   "wave": "W7",
-  "phase": "BLOCKED",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -28,7 +28,9 @@
     "F06 requires at least two non-production Browser UAT mutation journeys across distinct domains; reversible configuration must be restored.",
     "F23/F24/F25/F44 require PostgreSQL runtime proof for denial, enabled flag authority, minStock-aware digest selection, and verified recipient bindings.",
     "R1-R7 runtime evidence, provider, worker, DR, payroll, and automated Stage-20 evidence must all match the current source; Browser/worker artifact IDs must match the exact build artifact.",
-    "Human Stage-20 remains PENDING and automation must not mutate human acceptance."
+    "Human Stage-20 remains PENDING and automation must not mutate human acceptance.",
+    "Manual phase rollback from BLOCKED to VERIFICATION on 2026-10-14: the only documented R8 blocker (exact-source R7 PASS) is satisfied — dependency T360-20260923-221011 is CLOSED with release evidence, github-r7-ui-probe-latest.json carries the current source fingerprint and reports PASS inside the exact-source r8 probe chain, and both GitHub workflows report STEP_R7_UI=success on commit 0f4b38d. workflow.mjs forbids advancing out of BLOCKED because BLOCKED has phaseOrder 99, so the engine-required manual documentation is recorded here rather than by bypassing the guard.",
+    "R8 closure covers only the automated evidence layer. productReady stays false, currentPhase stays P5, humanStage20 stays PENDING, and P6 must not start until a human accepts the P5 V4 runtime presentation."
   ],
   "acceptanceCriteria": [
     "ci:uat:coverage is explicitly classified SOURCE_CONTRACT and not runtime closure evidence.",
@@ -62,5 +64,8 @@
     "handoff/CURRENT-WORK.md"
   ],
   "createdAt": "2026-09-25T14:30:00+08:00",
-  "updatedAt": "2026-09-25T14:45:00+08:00"
+  "updatedAt": "2026-10-14T10:12:18.418Z",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20260925-143000-recovery-r8-runtime-uat.md"
+  ]
 }

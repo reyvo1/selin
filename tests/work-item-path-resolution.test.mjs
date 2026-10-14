@@ -37,10 +37,18 @@ test('every work-item file literal in tests resolves to exactly one real work it
 });
 
 test('the shared work-item resolver stays usable after an item moves between directories', () => {
-  const directory = workItemFiles('work-items/active')[0];
-  assert.ok(directory, 'minimal satu work item aktif harus ada untuk exercise resolver');
-  const moved = JSON.parse(readFileSync(`${ROOT}${directory}`, 'utf8'));
-  assert.equal(readWorkItem(directory.split('/').pop()).id, moved.id);
+  const active = workItemFiles('work-items/active');
+  const completed = workItemFiles('work-items/completed');
+  assert.ok(active.length + completed.length > 0, 'active maupun completed boleh kosong sesaat, tetapi repo tidak boleh tanpa work item sama sekali');
+  const overlap = active.filter((file) => completed.includes(file));
+  assert.deepEqual(overlap, [], `work item tidak boleh berada di active dan completed sekaligus:\n${overlap.join('\n')}`);
+  for (const file of [...active, ...completed]) {
+    const name = file.split('/').pop();
+    const onDisk = JSON.parse(readFileSync(`${ROOT}${file}`, 'utf8'));
+    const resolved = resolveWorkItemPath(name);
+    assert.equal(resolved, `${ROOT}${file}`, `resolver harus mengembalikan direktori asli ${name}`);
+    assert.equal(readWorkItem(name).id, onDisk.id, `${name} harus terbaca sama setelah perpindahan direktori`);
+  }
   assert.throws(() => resolveWorkItemPath('T360-00000000-000000-does-not-exist.json'), /tidak ditemukan/);
 });
 

@@ -1,5 +1,13 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-14 — R8 automated layer CLOSED; next blocker is human P5 visual acceptance (RELEASED)
+
+- Active work item `T360-20260925-143000` (R8) moved BLOCKED → VERIFICATION → STAGING → RELEASE_READY → RELEASED → CLOSED. The BLOCKED state dated from 2026-09-25, before its only documented blocker (exact-source R7 PASS) could be satisfied; R7 `T360-20260923-221011` closed 2026-10-11. Because `phaseOrder.BLOCKED = 99`, `scripts/workflow.mjs` forbids advancing out of BLOCKED, so the engine-prescribed **manual phase rollback was documented inside the work item's `businessRules`** rather than by weakening the guard.
+- Verification basis: exact-source GitHub runs on commit `0f4b38d` — Full Automated UAT `38545068254`, Full System Simulation `38545068348`, Workflow Governance `38545068220`, all success. `ci:r8:probe` returned PASS with 12/12 scenarios, `sourceIdentity 019b50aa…` (913 files), `buildArtifactId 0a42c800…`, `productionTouched=false`, `humanStage20=PENDING`; `STAGE20_MODE: AUTOMATED_PASS_HUMAN_UAT_PENDING`; `UAT candidate fail-closed assertion PASS: hanya Human Stage-20 yang masih pending.` Local: `tests/recovery-r8-runtime-uat.test.mjs` 10/10, `audit:recovery` 48/48 mapped, `test:dependency-free` 1827/1827, lint, `workflow:validate` (47), `validate:repo`, `audit:full:repo`, `ci:ui:audit` all PASS.
+- Evidence: `handoff/release-evidence/T360-20260925-143000-recovery-r8-runtime-uat.md`.
+- **Disclosed limitation, feeds A-02:** `scripts/ci-r8-release-evidence-probe.mjs:47-53` stamps the twelve critical scenarios from a static id→evidence table and hardcodes `exactSource` / `r8ReportingSecurity` / `humanStage20Pending`. Lines 33-45 really do require PASS + exact fingerprint, but `if (s && s !== source.value)` **skips** staleness for any artifact lacking `sourceIdentity`. R8 closure is explicitly not evidence that A-02 (CRITICAL, P0) is resolved.
+- **Critical path:** `config/product-completeness.json` gates say P5 cannot close and **P6 cannot start** until a human accepts the runtime presentation after automated exact-source PASS. Automation is green; the human acceptance has not happened. `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING` — unchanged.
+- No work item is currently active. Next intake: A-02 (CRITICAL, P0).
 ## 2026-10-09 — W3 npm native graph closure and secure GitHub handoff (IMPLEMENTATION)
 
 - Source authority is the Oct 9 full W3 audit-failclosed checkpoint; all W3 Local Candidate and PostgreSQL security preflight gates previously reported PASS by the operator are preserved. Exact-source GitHub full UAT and Human Stage-20 remain distinct from local/test-simulator evidence; `productReady=false`.
