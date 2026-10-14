@@ -1,5 +1,17 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-14 — A-09 + A-12 CLOSED (RELEASED); 5 findings left (IMPLEMENTATION)
+
+- Active work item: none. Last closed: `T360-20261014-113115` — generalised hygiene gate, then promoted A-09 (HIGH) and A-12 (MEDIUM) to `RUNTIME_VERIFIED`.
+- Root cause of the item: the previous guard was `file === 'payroll-adjustment-postgres-stage.env' || endsWith('.recovery-backup') || handoff/quality/*.{json,md} || three named logs/ subdirs`. `staging.env`, `server.pem`, `secrets.json` and `logs/uat-anything/` all passed green — an A-02 instance guarding the A-09/A-12 closure.
+- New `scripts/lib/tracked-hygiene.mjs`: general env/key/credential/quality/logs/backup rules, content scan (private key, provider token, non-placeholder connection string outside fixtures), exemptions path-scoped with >=20-char rationale, `HYGIENE_EXEMPTIONS` empty by test.
+- Evidence for both findings: `source-commit:5692b19bd1259bfda387eb4b66ac87115b5e5c51`, `logs_38558772478.zip`, `logs_38558772502.zip`, `scripts/lib/tracked-hygiene.mjs`, `tests/tracked-hygiene-gate.test.mjs`.
+- CI on `5692b19`: Governance `38558772486`, UAT `38558772478`, Simulation `38558772502` — all success. The first Simulation attempt failed on a runner Chrome/dbus error (`uat:browser:built`), which correctly cascaded into fail-closed r7/p5/r8; rerun passed with no code change.
+- Open findings: **A-02 CRITICAL**, A-07 HIGH, A-13, A-14, A-15 MEDIUM. A-02 stays `IMPLEMENTED_RUNTIME_PENDING`.
+- Canonical matrix unchanged except the two promotions: 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
+- Local: `test:dependency-free` 1850/1850, lint, `workflow:validate` (49), `validate:repo` (1208 files / 202 Prisma models), `audit:full:repo` (7) — all PASS.
+- **Critical path is still human:** P5 cannot close and P6 cannot start until a human accepts the runtime presentation. Automation is green; human acceptance was rejected twice (V1, V2) and is `PENDING` for V4.
+- Next candidate work items, in evidence order: A-02 full sweep (CRITICAL), A-14 status/governance lag (MEDIUM), A-15 UI audit proves handler presence not workflow completeness (MEDIUM), A-13 Windows launchers (MEDIUM), A-07 visual acceptance (HIGH, needs human).
 ## 2026-10-14 — A-02 hardening CLOSED; A-02 itself still open (RELEASED)
 
 - `T360-20261014-183210` closed. Evidence: `handoff/release-evidence/T360-20261014-183210-a-02-harden-audit-and-test-gates-against-vacuous-green.md`.

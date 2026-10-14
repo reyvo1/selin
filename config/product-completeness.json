@@ -870,8 +870,15 @@
       "title": "Tracked staging env contains PostgreSQL credential",
       "severity": "HIGH",
       "targetPhase": "P0",
-      "status": "IMPLEMENTED_RUNTIME_PENDING",
-      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence."
+      "status": "RUNTIME_VERIFIED",
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. Verified 2026-10-14 under work item T360-20261014-113115: git ls-files and git log --diff-filter=A show only .env.example, .env.local.example and .env.postgres.example tracked, all three carrying CHANGE_ME/USER/PASSWORD placeholders, and no credential-bearing env file was ever added in this repository history. The guard that keeps it that way is no longer a single literal path: scripts/lib/tracked-hygiene.mjs forbids an env file at any path, key and credential-container files, and connection strings with non-placeholder passwords, with exemptions requiring a 20-character rationale and shipping empty. Both GitHub heavy workflows executed the generalised rule through audit:full:repo.",
+      "evidence": [
+        "source-commit:5692b19bd1259bfda387eb4b66ac87115b5e5c51",
+        "logs_38558772478.zip",
+        "logs_38558772502.zip",
+        "scripts/lib/tracked-hygiene.mjs",
+        "tests/tracked-hygiene-gate.test.mjs"
+      ]
     },
     {
       "id": "audit:A-10",
@@ -917,8 +924,15 @@
       "title": "Committed recovery backups and runtime evidence pollute active source",
       "severity": "MEDIUM",
       "targetPhase": "P0",
-      "status": "IMPLEMENTED_RUNTIME_PENDING",
-      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence."
+      "status": "RUNTIME_VERIFIED",
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. Verified 2026-10-14 under work item T360-20261014-113115: git ls-files shows zero paths under logs/, zero *.recovery-backup files and only handoff/quality/.gitkeep - generated runtime evidence lives in untracked paths and CI artifacts, while handoff/release-evidence holds deliberate Markdown records. The retired guard checked three named logs subdirectories; the generalised rule forbids every tracked path under logs/, any recovery backup by name and any generated handoff/quality json or md. Both GitHub heavy workflows executed it through audit:full:repo.",
+      "evidence": [
+        "source-commit:5692b19bd1259bfda387eb4b66ac87115b5e5c51",
+        "logs_38558772478.zip",
+        "logs_38558772502.zip",
+        "scripts/lib/tracked-hygiene.mjs",
+        "tests/tracked-hygiene-gate.test.mjs"
+      ]
     },
     {
       "id": "audit:A-13",

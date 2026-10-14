@@ -548,3 +548,55 @@ bounded scan, `status` untouched at `IMPLEMENTED_RUNTIME_PENDING`. The next item
 full sweep that would actually justify closing it.
 
 **No work item is currently active.**
+
+## 2026-10-14 — A-09 + A-12 closed on a general hygiene rule
+
+Work item `T360-20261014-113115` (security, W0, HIGH), CLOSED with evidence in
+`handoff/release-evidence/T360-20261014-113115-a-09-a-12-generalise-tracked-hygiene-gate.md`.
+
+**The gate that was supposed to close them was itself an A-02 instance.**
+`scripts/audit-product-completeness.mjs` enforced "no tracked credential, no tracked runtime
+evidence" with four expressions: one literal env path
+(`payroll-adjustment-postgres-stage.env`), `*.recovery-backup`, `handoff/quality/*.{json,md}`, and
+**three named** `logs/` subdirectories. `staging.env`, `server.pem`, `secrets.json` or
+`logs/uat-anything/probe.json` would all have been reported PASS. Closing A-09/A-12 on top of that
+would have been a status string, not evidence — so the rule was generalised first.
+
+**New `scripts/lib/tracked-hygiene.mjs`.** Env file at any path (unless `.example`), key and
+credential-container files, generated `handoff/quality` artifacts, **every** path under `logs/`,
+recovery backups by name, and content rules — private keys and provider tokens in every tracked
+file, connection strings with non-placeholder passwords outside fixtures. Escaping requires a
+path-scoped, rule-scoped exemption with a rationale of at least 20 characters; `HYGIENE_EXEMPTIONS`
+ships empty and a test asserts it stays empty.
+
+**Measured, not assumed.** A repository scan found 19 tracked files containing a connection string;
+every password is a placeholder (`CHANGE_ME_*`, `USER`/`PASSWORD`, `toko360`,
+`toko360_ci_password`, `schema_check`, `secret`, `p`), and no private key, AWS key, GitHub token or
+OpenAI key exists in tracked content. No exemption was needed, so none was granted. The two
+non-placeholder passwords are `alice:p%40ss` in test fixtures, handled by a documented tier rule
+rather than a per-path escape.
+
+**Assertions.** The test demanding the literal `payroll-adjustment-postgres-stage.env` asserted the
+defect and was converted to behaviour-level controls; `tests/product-completeness-p0.test.mjs` now
+validates CRITICAL/HIGH finding evidence through `validateEvidenceArray` instead of checking
+`evidence.length`, so a prose sentence no longer satisfies `runtimeEvidenceRequiredForCriticalHigh`.
+
+**Closed.** A-09 (HIGH) and A-12 (MEDIUM) → `RUNTIME_VERIFIED`, evidence =
+`source-commit:5692b19bd1259bfda387eb4b66ac87115b5e5c51` + `logs_38558772478.zip` +
+`logs_38558772502.zip` + the implementation file + its regression test. Both GitHub heavy workflows
+executed the generalised rule through `audit:full:repo`: Governance `38558772486`, Automated UAT
+`38558772478`, Full System Simulation `38558772502`.
+
+**A first Simulation attempt failed on infrastructure, not on this change.**
+`uat:browser:built` reported *"Chrome menolak start (bukan timeout) — dbus: Failed to connect to the
+bus"*, then `ci:r7:probe` and `ci:p5:probe` failed closed because browser evidence was not `PASS`,
+then `ci:r8:probe` failed because `github-r7-ui-probe-latest.json` never existed. The rerun passed
+end to end with no code change. The fail-closed chain behaved exactly as designed.
+
+**Open findings: 5 of 15** — A-02 (CRITICAL), A-07 (HIGH), A-13, A-14, A-15 (MEDIUM). A-02 stays
+`IMPLEMENTED_RUNTIME_PENDING`: one more narrow gate was removed, which is not proof that none
+remains. Canonical matrix otherwise unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
+17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+`humanStage20=PENDING`. Local: `test:dependency-free` **1850/1850** (+12), lint,
+`workflow:validate` (49), `validate:repo` (1208 files / 202 Prisma models), `audit:full:repo` (7)
+— all PASS.

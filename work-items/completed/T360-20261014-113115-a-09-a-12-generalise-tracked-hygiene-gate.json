@@ -4,7 +4,7 @@
   "type": "security",
   "module": "security",
   "wave": "W0",
-  "phase": "IMPLEMENTATION",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "",
@@ -58,6 +58,8 @@
     "handoff/CURRENT-WORK.md"
   ],
   "createdAt": "2026-10-14T11:31:15.495Z",
-  "updatedAt": "2026-10-14T11:31:28.624Z",
-  "releaseEvidence": []
+  "updatedAt": "2026-10-14T12:12:00.554Z",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261014-113115-a-09-a-12-generalise-tracked-hygiene-gate.md"
+  ]
 }
