@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "procurement",
   "wave": "W1",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "openai",
   "featureFlag": "procurement.purchaseUom",
@@ -82,7 +82,7 @@
     "Three source-contract gates asserted the old inline arithmetic (productUnit.findFirst inside purchase-orders.service.ts, baseUnitCost = purchaseUnitCost.div(quantityFactor) inline, scannedQty increment 1). Each was rewritten to pin the NEW invariant instead of being deleted: the shared resolver must be used by all three purchase documents, and scanning must be factor-aware and unable to overshoot expectedQty."
   ],
   "createdAt": "2026-10-11T17:29:23.000Z",
-  "updatedAt": "2026-10-14T09:32:56.546Z",
+  "updatedAt": "2026-10-14T09:48:08.375Z",
   "testResults": [
     "node --test tests/f11-purchase-uom-request-barcode-scan-runtime.test.mjs: 5/5 PASS (real SQLite, real services)",
     "node --test tests/f11-transaction-uom-integration.test.mjs tests/procurement-integrity.test.mjs tests/commerce-fulfillment-integrity.test.mjs: 23/23 PASS",
@@ -95,5 +95,11 @@
     "npm run ci:ui:audit: PASS, 514 controls",
     "npm run db:migrations:rehearse:postgres: PASS against real PostgreSQL 16.15 container",
     "npm run db:migrations:rehearse:sqlite: PASS"
-  ]
+  ],
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261012-012923-f11-purchase-uom-request-barcode-scan-runtime.md"
+  ],
+  "releasedAt": "2026-10-14T09:45:00+08:00",
+  "releaseEvidenceUrl": "https://github.com/reyvo1/selin/actions/runs/38543313276",
+  "releaseNotes": "All local gates PASS (1827/1827 dependency-free, lint, workflow:validate, validate:repo, audit:full:repo, ci:ui:audit). Migration rehearsal EXECUTED against a real PostgreSQL 16.15 container and real SQLite. GitHub Full Automated UAT 38543313276 success, Full System Simulation 38543313366 success, Workflow Governance 38543313270 success on exact commit 32f8356, STAGE20_MODE=AUTOMATED_PASS_HUMAN_UAT_PENDING. Human Stage-20 remains PENDING."
 }
