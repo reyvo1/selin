@@ -56,3 +56,41 @@ test('GitHub summary appends markdown to GITHUB_STEP_SUMMARY when requested', ()
   assert.match(fs.readFileSync(stepSummary,'utf8'),/Evidence gates/);
   fs.rmSync(root,{recursive:true,force:true});
 });
+
+test('A-02: a checks-based gate fails when checks is empty instead of passing vacuously', async () => {
+  const { sourceFingerprint } = await import('../scripts/lib/source-fingerprint.mjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 't360-ci-summary-'));
+  copySourceSkeleton(root);
+  const current = sourceFingerprint(root).value;
+  const q = path.join(root, 'handoff', 'quality');
+  fs.mkdirSync(q, { recursive: true });
+  const gates = {
+    r2HrPayroll: 'github-r2-hr-payroll-probe-latest.json',
+    r4CoreBusiness: 'github-r4-core-business-probe-latest.json',
+    r5AssetsFleet: 'github-r5-assets-fleet-probe-latest.json',
+    r6ScaleAi: 'github-r6-scale-ai-probe-latest.json',
+    r3Residual: 'github-r3-residual-probe-latest.json',
+    p3Productization: 'github-p3-productization-probe-latest.json',
+  };
+  // Every field the predicate needs except the checks themselves: PASS with an
+  // empty object used to satisfy Object.values(...).every(Boolean), because
+  // [].every(Boolean) is true.
+  for (const [gate, file] of Object.entries(gates)) {
+    const fixture = { status: 'PASS', sourceIdentity: { value: current }, checks: {} };
+    if (gate === 'p3Productization') fixture.productionTouched = false;
+    fs.writeFileSync(path.join(q, file), JSON.stringify(fixture));
+  }
+  const result = collectFullSystemSummary(root, { T360_CI_JOB_STATUS: 'failure' });
+  for (const gate of Object.keys(gates)) {
+    assert.equal(result.gates[gate], 'FAIL', `${gate} must reject empty checks, got ${result.gates[gate]}`);
+  }
+
+  // And the same evidence with a real check passes that predicate, so the fix
+  // raised the bar without breaking the happy path.
+  fs.writeFileSync(path.join(q, 'github-r2-hr-payroll-probe-latest.json'), JSON.stringify({
+    status: 'PASS', sourceIdentity: { value: current }, checks: { attendance: true },
+  }));
+  const second = collectFullSystemSummary(root, { T360_CI_JOB_STATUS: 'failure' });
+  assert.equal(second.gates.r2HrPayroll, 'PASS');
+  fs.rmSync(root, { recursive: true, force: true });
+});

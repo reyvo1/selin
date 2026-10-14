@@ -101,7 +101,13 @@ test('aggregate and UAT summaries fail closed when P2A exact-runtime evidence is
   assert.match(summary, /p2aMultiUom: gateStatus\(/);
   assert.match(summary, /v\.status === 'PASS'/);
   assert.match(summary, /v\.productionTouched === false/);
-  assert.match(summary, /Object\.values\(v\.checks \|\| \{\}\)\.every\(Boolean\)/);
+  // This assertion used to demand the vacuous predicate itself - an empty
+  // checks object satisfies Object.values(...).every(Boolean) because
+  // [].every(Boolean) is true. That expectation was the A-02 defect, so it is
+  // replaced by the contract (non-empty and all true) plus a guard that the
+  // old expression never comes back.
+  assert.match(summary, /allChecksPass\(v\)/);
+  assert.doesNotMatch(summary, /Object\.values\(v\.checks \|\| \{\}\)\.every\(Boolean\)/);
   assert.match(summary, /T360_CI_STEP_P2A_MULTI_UOM/);
   assert.match(summary, /'p2aMultiUom'/);
   assert.match(uatReport, /P2A mixed-UOM runtime probe/);

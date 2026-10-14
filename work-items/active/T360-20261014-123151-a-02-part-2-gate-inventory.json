@@ -1,0 +1,63 @@
+{
+  "id": "T360-20261014-123151",
+  "title": "A-02 part 2: kill the empty-checks vacuous pass and enforce a machine-verified gate inventory",
+  "type": "bug",
+  "module": "audit",
+  "wave": "W0",
+  "phase": "IMPLEMENTATION",
+  "risk": "CRITICAL",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20261014-113115"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "HIGH",
+    "performance": "LOW"
+  },
+  "businessRules": [
+    "A-02 (CRITICAL, P0) is the last remaining critical finding. The two demonstrated instances were closed by T360-20261014-183210; this item closes the third and adds the continuous control that makes a fourth impossible to add silently. A-02 moves to RUNTIME_VERIFIED only with resolvable evidence from a green run that executes the new control; editing the status string is forbidden.",
+    "Instance three, measured not guessed: 14 of the 15 checks-based predicates in scripts/ci-write-full-system-summary.mjs evaluate Object.values(v.checks || {}).every(Boolean), and an empty object satisfies that - [].every(Boolean) is true. A probe that emitted status PASS with checks: {} would be accepted by the aggregate gate. Only w3CashPostgres requires a minimum key count.",
+    "The control is an inventory, not a longer list of opinions: every scripts/*.mjs that emits status PASS must be mechanically bound to something that can fail the build, via at least one verifiable mechanism - fail-fast checks loop, assert helper, three or more inline throws, a workflow step that runs it, or an artifact the aggregate summary gates. The mechanism must be proven by parsing, never declared in prose.",
+    "A new PASS-emitting script that is not yet classified must fail the test. An exemption requires a path and a rationale of at least 20 characters, ships empty, and is not a way to avoid classifying a script.",
+    "The repository currently classifies 26 of 26 scripts with zero exemptions. That result was measured before the rule was written; if the rule cannot reproduce it, the rule is wrong, not the repository.",
+    "This work item is verification-layer only. No business logic, API contract, permission, tenant or branch authority, schema or runtime mutation path may change, and no existing gate predicate, assertion or step may be weakened or removed to keep a gate green.",
+    "productReady remains false, currentPhase remains P5, humanStage20 remains PENDING; closing the last critical finding cannot promote any product status, and the human Stage-20 acceptance remains a separate, human-only gate."
+  ],
+  "acceptanceCriteria": [
+    "Every checks-based gate predicate in scripts/ci-write-full-system-summary.mjs requires the checks object to be non-empty as well as all-true; a synthetic evidence file with status PASS, a matching sourceIdentity and checks: {} makes that gate FAIL rather than PASS.",
+    "The negative control is behavioural: it runs collectFullSystemSummary against a temporary source skeleton with fixture evidence, not a regular expression over the summary source.",
+    "scripts/lib/gate-inventory.mjs classifies every scripts/*.mjs that emits status PASS by at least one mechanically verified mechanism, and a dependency-free test fails when a script is unclassified, when a classification points at a file that no longer emits PASS, or when a claimed mechanism marker is absent from the file.",
+    "HYGIENE exemptions for the inventory ship empty and any exemption carries a rationale of at least 20 characters.",
+    "npm run ci:summary:github:assert continues to reject a summary with failing gates, failing steps, unexpected uatCandidate or productionTouched true.",
+    "Both GitHub heavy workflows and Workflow Governance stay green on the exact commit, with productionTouched false and humanStage20 PENDING, and no gate, test or assertion is narrowed to achieve it."
+  ],
+  "testPlan": [
+    "node --test tests/vacuous-green-gate.test.mjs — existing A-02 controls stay green",
+    "node --test tests/gate-inventory.test.mjs — unclassified script fails, stale classification fails, missing mechanism marker fails, empty exemption set asserted",
+    "node --test tests/github-full-system-summary.test.mjs — new negative control: empty checks must not pass a checks-based gate; existing summary tests unaffected",
+    "npm run test:dependency-free — full suite",
+    "npm run ci:summary:github, npm run audit:full:repo, npm run lint, npm run workflow:validate, npm run validate:repo",
+    "GitHub exact-source Full Automated UAT and Full System Simulation — aggregate summary gates and ci:summary:github:assert stay PASS"
+  ],
+  "migrationPlan": "No schema migration. Only verification scripts, one dependency-free inventory module, tests and canonical finding status change; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the commit. The summary predicates return to their previous (weaker) all-true checks evaluation and the inventory test disappears; no data is written, no status is promoted outside the revert, and no runtime path is affected. Verification-layer only, so there is no compensating operation and the prior green commit remains a valid checkpoint.",
+  "monitoringPlan": "Observe both heavy workflows plus Workflow Governance on the exact commit: the aggregate summary must report PASS with productionTouched false, ci:summary:github:assert must stay green, and the new inventory test must execute in the dependency-free suite. A failure of the inventory test means a new PASS-emitting script was added without a verified binding to a failing gate - that is the signal the control exists to raise.",
+  "securityNotes": "A vacuous aggregate gate can mask a security regression because the security probes r1, r8-reporting and verify-security-lock all feed it. The change must only add requirements: non-empty checks and a verified binding for every PASS-emitting script. It must not introduce an allow-list that lets a script report green without a failing path, must not weaken the restricted-operator, digest-recipient or security-lock checks, and must not read or print credential material while classifying files.",
+  "documentation": [
+    "docs/PRODUCT-COMPLETENESS-STATUS.md",
+    "docs/PROJECT-STATE.md",
+    "docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-14T12:31:51.385Z",
+  "updatedAt": "2026-10-14T12:31:52.550Z",
+  "releaseEvidence": []
+}

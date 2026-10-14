@@ -108,6 +108,10 @@ export function collectFullSystemSummary(root = process.cwd(), env = process.env
             : expectedArtifactId && artifactId !== expectedArtifactId ? 'ARTIFACT_MISMATCH'
               : 'PASS';
 
+  // A-02: [].every(Boolean) is true, so an empty checks object used to satisfy
+  // every checks-based gate. PASS now requires at least one check that is true.
+  const allChecksPass = (v) => Object.keys(v.checks || {}).length > 0 && Object.values(v.checks).every(Boolean);
+
   const gate = {
     build: gateStatus(build, current, (v) => v.status === 'PASS' && v.buildArtifactId === artifactId),
     buildArtifact: artifactState,
@@ -120,19 +124,19 @@ export function collectFullSystemSummary(root = process.cwd(), env = process.env
     uiInteractionAudit: gateStatus(uiAudit, current, (v) => v.status === 'PASS' && Object.values(v.surfaces || {}).every((surface) => surface.inertButtons === 0 && surface.inertLinks === 0)),
     apiRuntimeSweep: gateStatus(apiSweep, current, (v) => v.status === 'PASS' && v.operationCount > 0 && v.blockerCount === 0),
     r1TenantAccess: gateStatus(r1TenantAccess, current, (v) => v.status === 'PASS' && v.isolation?.foreignBranchDenied === true && v.isolation?.foreignCompanyDenied === true && v.tenant?.switched === true && v.access?.statusLifecycle === true),
-    r2HrPayroll: gateStatus(r2HrPayroll, current, (v) => v.status === 'PASS' && Object.values(v.checks || {}).every(Boolean)),
-    r4CoreBusiness: gateStatus(r4CoreBusiness, current, (v) => v.status === 'PASS' && Object.values(v.checks || {}).every(Boolean)),
-    w3CashPostgres: gateStatus(w3CashPostgres, current, (v) => v.status === 'PASS' && v.productionTouched === false && v.humanStage20 === 'PENDING' && Object.keys(v.checks || {}).length >= 10 && Object.values(v.checks).every(Boolean)),
-    p2aMultiUom: gateStatus(p2aMultiUom, current, (v) => v.status === 'PASS' && v.productionTouched === false && Object.values(v.checks || {}).every(Boolean)),
-    p2Payroll: gateStatus(p2Payroll, current, (v) => v.status === 'PASS' && v.productionTouched === false && Object.values(v.checks || {}).every(Boolean)),
-    r5AssetsFleet: gateStatus(r5AssetsFleet, current, (v) => v.status === 'PASS' && Object.values(v.checks || {}).every(Boolean)),
-    r6ScaleAi: gateStatus(r6ScaleAi, current, (v) => v.status === 'PASS' && Object.values(v.checks || {}).every(Boolean)),
-    p3Productization: gateStatus(p3Productization, current, (v) => v.status === 'PASS' && v.productionTouched === false && Object.values(v.checks || {}).every(Boolean)),
-    p4CanonicalOwnership: gateStatus(p4CanonicalOwnership, current, (v) => v.status === 'PASS' && v.productionTouched === false && Object.values(v.checks || {}).every(Boolean) && v.ownership?.domainCount === 9),
-    p5VisualRebuild: gateStatus(p5VisualRebuild, current, (v) => v.status === 'PASS' && v.productionTouched === false && v.humanAcceptance === 'PENDING' && Object.values(v.checks || {}).every(Boolean) && Object.entries(expectedP5Screenshots).every(([key, expected]) => expected >= 0 && v.screenshotCounts?.[key] === expected)),
-    r3Residual: gateStatus(r3Residual, current, (v) => v.status === 'PASS' && Object.values(v.checks || {}).every(Boolean)),
-    r7Ui: gateStatus(r7Ui, current, (v) => v.status === 'PASS' && Object.values(v.checks || {}).every(Boolean) && v.workspaceCount === expectedP5Screenshots.adminPrimary && v.contextualWorkspaceCount >= Math.max(0, expectedP5Screenshots.adminPrimary - 1)),
-    r8ReportingSecurity: gateStatus(r8ReportingSecurity, current, (v) => v.status === 'PASS' && Object.values(v.checks || {}).every(Boolean) && v.productionTouched === false),
+    r2HrPayroll: gateStatus(r2HrPayroll, current, (v) => v.status === 'PASS' && allChecksPass(v)),
+    r4CoreBusiness: gateStatus(r4CoreBusiness, current, (v) => v.status === 'PASS' && allChecksPass(v)),
+    w3CashPostgres: gateStatus(w3CashPostgres, current, (v) => v.status === 'PASS' && v.productionTouched === false && v.humanStage20 === 'PENDING' && allChecksPass(v) && Object.keys(v.checks).length >= 10),
+    p2aMultiUom: gateStatus(p2aMultiUom, current, (v) => v.status === 'PASS' && v.productionTouched === false && allChecksPass(v)),
+    p2Payroll: gateStatus(p2Payroll, current, (v) => v.status === 'PASS' && v.productionTouched === false && allChecksPass(v)),
+    r5AssetsFleet: gateStatus(r5AssetsFleet, current, (v) => v.status === 'PASS' && allChecksPass(v)),
+    r6ScaleAi: gateStatus(r6ScaleAi, current, (v) => v.status === 'PASS' && allChecksPass(v)),
+    p3Productization: gateStatus(p3Productization, current, (v) => v.status === 'PASS' && v.productionTouched === false && allChecksPass(v)),
+    p4CanonicalOwnership: gateStatus(p4CanonicalOwnership, current, (v) => v.status === 'PASS' && v.productionTouched === false && allChecksPass(v) && v.ownership?.domainCount === 9),
+    p5VisualRebuild: gateStatus(p5VisualRebuild, current, (v) => v.status === 'PASS' && v.productionTouched === false && v.humanAcceptance === 'PENDING' && allChecksPass(v) && Object.entries(expectedP5Screenshots).every(([key, expected]) => expected >= 0 && v.screenshotCounts?.[key] === expected)),
+    r3Residual: gateStatus(r3Residual, current, (v) => v.status === 'PASS' && allChecksPass(v)),
+    r7Ui: gateStatus(r7Ui, current, (v) => v.status === 'PASS' && allChecksPass(v) && v.workspaceCount === expectedP5Screenshots.adminPrimary && v.contextualWorkspaceCount >= Math.max(0, expectedP5Screenshots.adminPrimary - 1)),
+    r8ReportingSecurity: gateStatus(r8ReportingSecurity, current, (v) => v.status === 'PASS' && allChecksPass(v) && v.productionTouched === false),
     r8Release: gateStatus(r8Release, current, (v) => v.status === 'PASS' && v.scenarioCount === 12 && v.productionTouched === false && v.humanStage20 === 'PENDING'),
     notificationProviderProbe: gateStatus(providerProbe, current, (v) => v.status === 'PASS' && v.productionTouched === false && v.simulator?.telegramCalls >= 2 && v.simulator?.whatsappCalls >= 1),
     stage18: gateStatus(stage18, current, (v) => v.gate?.passed === true),
