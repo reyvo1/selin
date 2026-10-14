@@ -1,6 +1,6 @@
 > **SUPERSEDED — historical only.** Current product status is defined solely by `config/product-completeness.json`: `productReady=false`, `humanStage20=PENDING`, `currentPhase=P5 / IMPLEMENTED_RUNTIME_PENDING`. Nothing below claims product readiness.
 >
-> The 2026-09-22 "UI-P1 through UI-P7 is closed" and "no remaining active work items" statements describe only the UI productization stream as of that date. They were superseded on 2026-09-25 when the P0–P7 product-completion workflow was activated, and they are now factually stale: `work-items/active/` currently holds **4 work items** (3 VERIFICATION, 1 BLOCKED). The "708 PASS" regression count is from 2026-09-22; the current count is 1089. The commit, fingerprint, and build-artifact hashes cannot be verified from the current working copy because it carries no `.git`.
+> The 2026-09-22 "UI-P1 through UI-P7 is closed" and "no remaining active work items" statements describe only the UI productization stream as of that date. They were superseded on 2026-09-25 when the P0–P7 product-completion workflow was activated, and the numbers inside them belong to 2026-09-22. For anything live, do not read this file: `npm run workflow:status` prints the active work items, `npm run test:dependency-free` prints the regression count, and `git log` verifies the commit, fingerprint and build-artifact hashes that this file can no longer confirm.
 >
 > Read `docs/PRODUCT-COMPLETENESS-STATUS.md` and `handoff/CURRENT-WORK.md` (top block) instead.
 

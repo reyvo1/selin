@@ -28,7 +28,7 @@ F12 is a presentation-only closure over the already-authoritative F2–F11 busin
 ## Verification
 - Focused F12 + existing UI guards: **40/40 PASS**.
 - Workflow validation: **PASS**.
-- Repository validation: **PASS** (918 files at the time of this wave, 180 Prisma models, SQLite/PostgreSQL profiles valid). The current count is 1021 files; the model count has not moved.
+- Repository validation: **PASS** (918 files at the time of this wave, 180 Prisma models, SQLite/PostgreSQL profiles valid). Regenerate the file and model counts with `npm run validate:repo`.
 - Full dependency-free regression: **814/814 PASS**.
 - Runtime/browser/human UAT: **DEFERRED** by operator instruction until source implementation is complete.
 

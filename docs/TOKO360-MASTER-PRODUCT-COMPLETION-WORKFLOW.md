@@ -80,7 +80,7 @@ The following **never** close a capability by themselves:
 
 ## Scope
 
-14 Admin primary workspaces and Dashboard + 63 contextual views. The live count is in `config/admin-contextual-workflow-map.json`; `npm run audit:admin:contextual` is the fail-closed authority and currently reports 63/63.
+14 Admin primary workspaces and Dashboard + 63 contextual views. The value lives in `config/admin-contextual-workflow-map.json`; `npm run audit:admin:contextual` is the fail-closed authority and prints it on every run.
 
 ## Required work
 

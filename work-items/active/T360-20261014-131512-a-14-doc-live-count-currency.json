@@ -1,0 +1,64 @@
+{
+  "id": "T360-20261014-131512",
+  "title": "A-14: stop documents stating live counts that silently lag the evidence",
+  "type": "documentation",
+  "module": "documentation",
+  "wave": "W0",
+  "phase": "STAGING",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20261014-123151"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "LOW",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "A-14 (MEDIUM, P0) is canonical in config/product-completeness.json. It closes only when no governance document states an undated live count and a dependency-free test prevents one from returning; editing the status string alone is forbidden.",
+    "The defect is a class, not a typo: prose that says currently, current count is, live counts are, current figures are or now reports carries a number that is true when written and false at the next commit. Measured on 2026-10-14, seven such lines exist across STATUS-FINAL.md, docs/PROJECT-STATE.md, docs/F12-FINAL-UI-UX-COMPLETION.md, docs/COMPLETION-DOCS-INDEX.md and docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md - they claim 4 active work items, 1089 tests, 180 Prisma models, 1021 files, 454 routes, 420 controls and 63/63, all of which are stale today.",
+    "Counts belong to machines. A document may name the command or file that regenerates a number, and may record a number that is explicitly dated as a historical fact; it may not assert an undated current value.",
+    "STATUS-FINAL.md is already superseded and its header tries to say so, but the header itself makes three live claims that are now false, including that the working copy carries no .git while this repository does. The correction must be timeless too.",
+    "Legacy status documents must keep deferring to config/product-completeness.json; productReady false, currentPhase P5 and humanStage20 PENDING are untouched by this work item.",
+    "This work item is documentation plus one dependency-free test. No business logic, API contract, permission, tenant or branch authority, schema, runtime path or gate predicate may change, and no existing assertion may be weakened."
+  ],
+  "acceptanceCriteria": [
+    "No line in docs/**, handoff/** (excluding handoff/release-evidence/**) or STATUS-FINAL.md matches a live-claim phrasing together with a number; the seven measured lines are rewritten to point at the command or file that regenerates the value instead.",
+    "tests/status-doc-currency.test.mjs fails the dependency-free suite when a live-claim phrasing with a number reappears in any of those files, and passes today.",
+    "The rule is narrow by design: a dated historical count such as as of 2026-10-14 still renders, because the phrasing list only covers undated current-value claims.",
+    "STATUS-FINAL.md no longer asserts that the working copy lacks .git, that four work items are active, or that the regression count is 1089; it points at npm run workflow:status and npm run test:dependency-free.",
+    "tests/product-completeness-p0.test.mjs still passes, so every legacy status document still names config/product-completeness.json as status authority.",
+    "Both GitHub heavy workflows and Workflow Governance stay green on the exact commit."
+  ],
+  "testPlan": [
+    "node --test tests/status-doc-currency.test.mjs — today zero live-claim lines; a synthetic fixture with currently reports 42 must fail",
+    "node --test tests/product-completeness-p0.test.mjs — canonical authority assertions unchanged",
+    "npm run test:dependency-free — full suite",
+    "npm run lint, npm run workflow:validate, npm run validate:repo, npm run audit:full:repo",
+    "GitHub exact-source Full Automated UAT and Full System Simulation — green with productionTouched false"
+  ],
+  "migrationPlan": "No schema migration. Only Markdown governance documents and one dependency-free test change; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the commit. The documents return to their previous wording and the currency test disappears; nothing else changes, no data is written and no runtime path is affected. Documentation-layer only, so there is no compensating operation and the prior green commit remains a valid checkpoint.",
+  "monitoringPlan": "The test itself is the monitor: it runs inside test:dependency-free on every local run and on both heavy workflows, so a reintroduced live count fails the build rather than quietly ageing.",
+  "securityNotes": "No secret, token, database URL, credential or personal data appears in any document this work item edits, and none may be introduced. The STATUS-FINAL header claim that the tree has no .git was itself inaccurate and is removed rather than repeated.",
+  "documentation": [
+    "STATUS-FINAL.md",
+    "docs/PROJECT-STATE.md",
+    "docs/F12-FINAL-UI-UX-COMPLETION.md",
+    "docs/COMPLETION-DOCS-INDEX.md",
+    "docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md",
+    "docs/PRODUCT-COMPLETENESS-STATUS.md",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-14T13:15:12.913Z",
+  "updatedAt": "2026-10-14T13:29:05.347Z",
+  "releaseEvidence": []
+}

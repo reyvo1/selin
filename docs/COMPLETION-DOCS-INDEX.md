@@ -10,10 +10,11 @@
 > Current truth (2026-10-03): `productReady=false`, `humanStage20=PENDING`,
 > `currentPhase=P5 / IMPLEMENTED_RUNTIME_PENDING`. F10 source maturity is implemented
 > and its canonical status is `IMPLEMENTED_RUNTIME_PENDING`; F9 remains `PARTIAL`
-> pending live provider readiness. Current source audit reports 509 API handlers,
-> 195 Prisma models and 65 contextual destinations. This copy has no `.git`, so every
-> commit SHA and source fingerprint below remains an unverifiable note from the
-> originating machine.
+> pending live provider readiness. For the API handler, Prisma model and contextual
+> destination counts, read the canonical matrix or regenerate them; do not quote a
+> number from this line. Any commit SHA and source fingerprint below was recorded on
+> the originating machine and should be verified against `git log` on the current
+> repository before it is trusted.
 
 # Completion Docs — F1–F12 and the per-wave addenda
 
@@ -31,11 +32,11 @@ These were hand-maintained and went stale as the source grew. The generator scri
 rewrite them from source, so a hand correction is not needed and would be undone:
 
 - `config/f1-backend-ui-audit.json` + `docs/F1-BACKEND-UI-AUDIT.md` — regenerate with
-  `node scripts/run-f1-backend-ui-audit.mjs`. It now reports 454 routes, payroll 30,
-  platform 41 (it said 451 / 28 / 40).
+  `node scripts/run-f1-backend-ui-audit.mjs`; it prints the route, payroll and platform
+  counts. Quote them from that run, never from prose here.
 - `config/p5-full-ui-root-audit.json` + `docs/P5-FULL-UI-ROOT-AUDIT.md` — regenerate with
-  `node scripts/audit-ui-domain-surface-depth.mjs` (part of `npm run audit:p5:visual`).
-  It now reports 454 routes and 420 controls.
+  `node scripts/audit-ui-domain-surface-depth.mjs` (part of `npm run audit:p5:visual`);
+  it prints the route and control counts.
 - Contextual destinations: `config/admin-contextual-workflow-map.json` is 63/63 and
   `npm run audit:admin:contextual` fails closed on that. `P1-…-ISOLATION.md` still
   says 61 and `TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md` says 62/62; both

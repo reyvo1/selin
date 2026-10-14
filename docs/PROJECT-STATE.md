@@ -1,8 +1,8 @@
 > **Canonical product status:** `config/product-completeness.json` is the only machine-readable completion authority. Historical recovery/F1/F12 status below is evidence/context, not proof of product completeness.
 >
-> **Counting rule for this file:** every number below is the count *at the time that wave was authored* and is kept as a historical record. The live counts are regenerated from source by `npm run audit:p5:visual` into `config/p5-full-ui-root-audit.json` and are currently **36 controllers / 454 API handlers / 180 Prisma models / 63 contextual destinations / 420 interactive controls**, with **1089/1089** dependency-free tests passing. Do not treat a number in a dated section as a current one.
+> **Counting rule for this file:** every number below is the count *at the time that wave was authored* and is kept as a historical record. Nothing here states a current value: regenerate the controller, API handler, Prisma model, contextual destination and interactive control counts with `npm run audit:p5:visual` into `config/p5-full-ui-root-audit.json`, the file and model counts with `npm run validate:repo`, and the regression count with `npm run test:dependency-free`. Do not treat a number in a dated section as a current one.
 >
-> **This copy has no `.git`.** Commit SHAs and source fingerprints below are notes from the originating machine and cannot be verified from here.
+> **Historical note:** this file was originally authored on a machine that had no `.git` in the working copy, so commit SHAs and source fingerprints below are notes from that machine. Verify any of them against `git log` on the current repository before quoting them.
 
 # Toko360 Project State
 
@@ -243,7 +243,7 @@ V4.8.2 repaired the Admin React hook invariant and stale isolated-dev output, bu
 - The presentation wave does not add API/business-domain imports to shells or layouts and therefore does not change canonical business behavior.
 - V4.8.2 hook-order and fresh `.next/dev` contracts remain active.
 
-Server verification after V4.9 staging: focused root-design/runtime suite 55/55 PASS, dependency-free 1030/1030 PASS, workflow validation PASS, repository validation PASS (977 files / 180 Prisma models), product/Admin/canonical/P5/UI/full-repository audits PASS (451 API handlers / 401 controls). *(Counts are as of 2026-09-27; the current figures are 1021 files, 454 API handlers, 420 controls, 1089 dependency-free tests, regenerated into `config/p5-full-ui-root-audit.json` by `npm run audit:p5:visual`.)* Frontend API-call signatures match the V4.8.2 baseline across all 25 files that contain API calls, and apps/api, apps/worker, packages, and database have zero source changes. Real production builds and Human Visual Acceptance remain pending on the Ubuntu operator environment. P5 remains OPEN; P6, commit and push remain blocked.
+Server verification after V4.9 staging: focused root-design/runtime suite 55/55 PASS, dependency-free 1030/1030 PASS, workflow validation PASS, repository validation PASS (977 files / 180 Prisma models), product/Admin/canonical/P5/UI/full-repository audits PASS (451 API handlers / 401 controls). *(Counts are as of 2026-09-27; regenerate the file, API-handler, control and test counts with `npm run validate:repo`, `npm run audit:p5:visual` and `npm run test:dependency-free` rather than quoting them here.)* Frontend API-call signatures match the V4.8.2 baseline across all 25 files that contain API calls, and apps/api, apps/worker, packages, and database have zero source changes. Real production builds and Human Visual Acceptance remain pending on the Ubuntu operator environment. P5 remains OPEN; P6, commit and push remain blocked.
 
 ## P5 V4.10 — product-scoped theme integrity and safe Next bootstrap — 2026-09-28
 
