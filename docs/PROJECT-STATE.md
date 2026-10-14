@@ -600,3 +600,48 @@ remains. Canonical matrix otherwise unchanged: 48 features = 27 FOUNDATION, 3 PA
 `humanStage20=PENDING`. Local: `test:dependency-free` **1850/1850** (+12), lint,
 `workflow:validate` (49), `validate:repo` (1208 files / 202 Prisma models), `audit:full:repo` (7)
 — all PASS.
+
+## 2026-10-14 — A-02 CLOSED: third instance removed, continuous control added
+
+Work item `T360-20261014-123151` (bug, W0, CRITICAL), CLOSED with evidence in
+`handoff/release-evidence/T360-20261014-123151-a-02-part-2-gate-inventory.md`.
+
+**Instance three.** Fourteen of the fifteen checks-based predicates in
+`scripts/ci-write-full-system-summary.mjs` evaluated `Object.values(v.checks || {}).every(Boolean)`.
+Because `[].every(Boolean)` is `true`, a probe emitting `status: 'PASS'` with `checks: {}` would have
+been accepted by the aggregate gate and `ci:summary:github:assert` — which only reads
+`summary.failures.gates` — would have seen an empty failure list. Only `w3CashPostgres` required a
+minimum key count. Predicates now share `allChecksPass(v)`: at least one check **and** all true.
+
+**Why the finding can close now.** Fixing instances one at a time is not a close.
+`scripts/lib/gate-inventory.mjs` enforces the property instead: every `scripts/**/*.mjs` that emits
+`status: 'PASS'` must be mechanically bound to something that can fail the build — fail-fast checks
+loop, assert helper, three or more inline throws, an assertion export that throws, a workflow step
+that runs it, or an artifact the aggregate summary gates read. The mechanism is **proven by parsing
+the file**, never declared in prose, and classification is derived on every run so there is no stored
+registry that can go stale. Measured before the rule was written: **28 of 28** PASS-emitting files
+classify with **zero exemptions**.
+
+**Behavioural controls.** `tests/gate-inventory.test.mjs` (4 tests) reports a synthetic rogue
+emitter and pins every mechanism marker. `tests/github-full-system-summary.test.mjs` gained the
+negative control: six checks-based gates fed `status:'PASS'` with a matching `sourceIdentity` and
+`checks:{}` must each report `FAIL`, and the same gate with one real check must report `PASS` — the
+bar moved up without breaking the happy path.
+
+**One expectation proven stale.**
+`tests/product-completion-p2a-runtime-gate.test.mjs` demanded the literal
+`Object.values(v.checks || {}).every(Boolean)` in the summary source: it asserted the defect. It now
+demands `allChecksPass(v)` and asserts the old expression never returns. Nothing was weakened.
+
+**Closed.** A-02 (CRITICAL) → `RUNTIME_VERIFIED`, evidence =
+`source-commit:d6c54877cd69aa80b409ea1e68d8239ccc694938` + `logs_38566522222.zip` +
+`logs_38566522268.zip` + the inventory module, its test, and the first item's binding module and
+controls. Exact-source GitHub on `d6c5487`: Workflow Governance `38566522526`, Automated UAT
+`38566522222` (9m22s), Full System Simulation `38566522268` (8m23s) — all success.
+
+**Open findings: 4 of 15** — A-07 (HIGH, requires human Stage-20 acceptance), A-13, A-14, A-15
+(MEDIUM). Canonical matrix otherwise unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
+17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+`humanStage20=PENDING`. Local: `test:dependency-free` **1855/1855** (+5), lint,
+`workflow:validate` (50), `validate:repo` (1212 files / 202 Prisma models), `audit:full:repo` (7)
+— all PASS.

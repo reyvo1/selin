@@ -1,5 +1,17 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-14 — A-02 CLOSED; 4 findings left (IMPLEMENTATION)
+
+- Active work item: none. Last closed: `T360-20261014-123151`.
+- Third and final demonstrated A-02 instance: 14 of 15 checks-based aggregate predicates accepted an empty `checks` object because `[].every(Boolean)` is true. Fixed with `allChecksPass(v)` (non-empty **and** all true).
+- Continuous control: `scripts/lib/gate-inventory.mjs` requires every `scripts/**/*.mjs` emitting `status:'PASS'` to be **mechanically bound** to a failing gate (fail-fast loop / assert helper / inline throws / assertion export / workflow step / aggregate artifact), proven by parsing, derived each run, zero exemptions. Measured 28/28 before the rule was written.
+- Evidence: `source-commit:d6c54877cd69aa80b409ea1e68d8239ccc694938`, `logs_38566522222.zip`, `logs_38566522268.zip`, `scripts/lib/gate-inventory.mjs`, `tests/gate-inventory.test.mjs`, `scripts/lib/r8-evidence-binding.mjs`, `tests/vacuous-green-gate.test.mjs`.
+- CI on `d6c5487`: Governance `38566522526`, UAT `38566522222`, Simulation `38566522268` — all success.
+- **Open findings: A-07 HIGH (needs human Stage-20 acceptance), A-13 MEDIUM, A-14 MEDIUM, A-15 MEDIUM.** All CRITICAL findings are closed.
+- Canonical matrix unchanged except A-02: 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
+- Local: `test:dependency-free` 1855/1855, lint, `workflow:validate` (50), `validate:repo` (1212 files / 202 Prisma models), `audit:full:repo` (7) — all PASS.
+- **Next in evidence order:** A-14 (status docs still embed live counts that lag: `STATUS-FINAL.md:3` claims 4 active work items and 1089 tests, `docs/PROJECT-STATE.md:3` claims 180 models and 1089 tests, `docs/F12-...:31` claims 1021 files, `docs/PROJECT-STATE.md:246` claims "current figures"; `docs/TOKO360-MASTER-...:83` claims 63/63) → then A-15 (UI audit proves handler presence, not workflow completeness) → then A-13 (Windows launchers).
+- **Human gate remains untouched and postponed by request:** P5 cannot close until a human accepts the runtime presentation (rejected twice: V1, V2; PENDING for V4).
 ## 2026-10-14 — A-09 + A-12 CLOSED (RELEASED); 5 findings left (IMPLEMENTATION)
 
 - Active work item: none. Last closed: `T360-20261014-113115` — generalised hygiene gate, then promoted A-09 (HIGH) and A-12 (MEDIUM) to `RUNTIME_VERIFIED`.

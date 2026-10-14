@@ -751,8 +751,17 @@
       "title": "Audit/test design can report green while product incomplete",
       "severity": "CRITICAL",
       "targetPhase": "P0",
-      "status": "IMPLEMENTED_RUNTIME_PENDING",
-      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. 2026-10-14 progress, work item T360-20261014-183210: ci:r8:probe no longer emits constant checks and no longer skips the stale-source comparison for artifacts without sourceIdentity; RUNTIME_VERIFIED/HUMAN_ACCEPTED evidence must now resolve to a repository file, a registry CI artifact that a script actually produces, or a logs_<run>.zip plus source-commit pair, and feature pos_offline is bound to its real exact-source R3 artifact instead of free text. Two demonstrated instances closed; the finding itself remains open."
+      "status": "RUNTIME_VERIFIED",
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. Closed 2026-10-14 across two work items. T360-20261014-183210 removed two instances: the R8 probe stamped twelve critical scenarios PASS from a static table and compared a length to itself, and the completeness audit accepted any non-empty evidence array so prose counted as RUNTIME_VERIFIED evidence. T360-20261014-123151 removed the third and added the continuous control: 14 of 15 checks-based aggregate predicates accepted an empty checks object because [].every(Boolean) is true, and every scripts/**/*.mjs that emits status PASS is now mechanically bound to a failing gate by gate-inventory, classified by parsing into fail-fast loop, assert helper, inline throws, assertion export, workflow step or aggregate artifact - 28 of 28 files classify with zero exemptions.",
+      "evidence": [
+        "source-commit:d6c54877cd69aa80b409ea1e68d8239ccc694938",
+        "logs_38566522222.zip",
+        "logs_38566522268.zip",
+        "scripts/lib/gate-inventory.mjs",
+        "tests/gate-inventory.test.mjs",
+        "scripts/lib/r8-evidence-binding.mjs",
+        "tests/vacuous-green-gate.test.mjs"
+      ]
     },
     {
       "id": "audit:A-03",
