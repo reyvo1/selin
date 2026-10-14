@@ -1,0 +1,63 @@
+{
+  "id": "T360-20261014-113115",
+  "title": "A-09/A-12 generalise the tracked-credential and runtime-evidence gate before closing both findings",
+  "type": "security",
+  "module": "security",
+  "wave": "W0",
+  "phase": "IMPLEMENTATION",
+  "risk": "HIGH",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20261014-183210"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "HIGH",
+    "performance": "LOW"
+  },
+  "businessRules": [
+    "Findings A-09 (HIGH, P0) and A-12 (MEDIUM, P0) are canonical in config/product-completeness.json. They may move to RUNTIME_VERIFIED only after the gate that guards them is generalised and green on both GitHub heavy workflows with resolvable evidence; editing the status string alone is forbidden.",
+    "The current guard is an allow-list of five hard-coded paths in scripts/audit-product-completeness.mjs: payroll-adjustment-postgres-stage.env, *.recovery-backup, handoff/quality/*.{json,md}, and three named logs subdirectories. A credential file at any other path, or a runtime artifact at any other logs path, passes green today. That narrowness is itself an instance of A-02 and must be closed before the finding is claimed closed.",
+    "The rule must be general, not a longer list of paths: any tracked env file that is not a documented placeholder, any tracked key/credential file, any tracked generated quality artifact, any tracked file under logs/, and any tracked recovery backup fails the audit, with exemptions explicit, path-scoped, and carrying a rationale of at least 20 characters - the same contract as SOURCE_BINDING_EXEMPTIONS.",
+    "Content scanning must not become a blanket grep that flags CI-local throwaway passwords as secrets. Exemptions are limited to documented placeholder and CI-local values, each listed with its path and rationale, starting from the smallest set that keeps the real repository green.",
+    "This work item is verification-layer only. No business logic, API contract, permission, tenant or branch authority, schema, or runtime mutation path may change, and no existing assertion may be weakened to keep a gate green. The source-string assertions in tests/product-completeness-p0.test.mjs are strengthened to behaviour-level negative controls, never removed.",
+    "productReady remains false, currentPhase remains P5, humanStage20 remains PENDING; closing a hygiene finding cannot promote any product status.",
+    "Closing two findings is a claim about evidence, not about effort: A-09 and A-12 are promoted only with evidence references that satisfy the resolver introduced by T360-20261014-183210, and the promotion happens in the same change that proves them, not in a later status-only commit."
+  ],
+  "acceptanceCriteria": [
+    "scripts/audit-product-completeness.mjs fails when any tracked file matches a general forbidden rule (unplaceholdered env file, key or credential file, generated handoff/quality artifact, any tracked path under logs/, any *.recovery-backup) instead of only the five hard-coded paths it checks today.",
+    "A tracked non-example, non-workflow file containing a database connection string with non-placeholder credentials fails the audit; every exemption is path-scoped, listed in code with a rationale of at least 20 characters, and the set starts minimal.",
+    "A dependency-free regression test proves both directions: a synthetic forbidden file list must make the gate fail, and the real repository must pass. The existing source-string assertions in tests/product-completeness-p0.test.mjs are converted to or supplemented by behaviour-level controls with nothing removed.",
+    "npm run audit:product:completeness and npm run audit:full:repo stay PASS on the real repository, and the hardened audit runs inside both GitHub heavy workflows that already execute audit:full:repo.",
+    "A-09 and A-12 are promoted to RUNTIME_VERIFIED with evidence entries that resolve through scripts/lib/evidence-resolver.mjs (repository file, registry CI artifact, or logs_<run>.zip plus source-commit pair); all other finding statuses, the 48-feature matrix, productReady, currentPhase and humanStage20 are unchanged.",
+    "Both GitHub heavy workflows and Workflow Governance stay green on the exact commit containing the promotion."
+  ],
+  "testPlan": [
+    "node --test tests/tracked-hygiene-gate.test.mjs — negative controls: a tracked staging env file, a tracked .pem, a tracked handoff/quality/*.json, a tracked logs/ file and a tracked *.recovery-backup each fail the gate; the real repository passes; an exemption without rationale fails",
+    "node --test tests/product-completeness-p0.test.mjs — strengthened guards, nothing weakened",
+    "npm run audit:product:completeness and npm run audit:full:repo — real repository green",
+    "npm run test:dependency-free — full suite",
+    "npm run lint, npm run workflow:validate, npm run validate:repo",
+    "GitHub exact-source Full Automated UAT and Full System Simulation — audit:full:repo executes the hardened rule and the aggregate summary/assert stays PASS with productionTouched=false"
+  ],
+  "migrationPlan": "No schema migration. Only the verification audit, one dependency-free regression test, canonical finding statuses and their evidence references change; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the commit. The audit returns to its previous five-path allow-list, the two finding statuses return to IMPLEMENTED_RUNTIME_PENDING, no data is written and no runtime path is affected. Because the change is verification-layer only there is no compensating operation to unwind and no feature flag is required; the prior commit remains a valid green checkpoint.",
+  "monitoringPlan": "Observe both GitHub heavy workflows plus Workflow Governance on the exact commit: audit:full:repo must execute the generalised rule, the full-system summary gates and ci:summary:github:assert must remain PASS, and productionTouched must stay false. A false positive on a legitimate placeholder must be treated as a defect in the exemption contract, not as a reason to widen the rule silently.",
+  "securityNotes": "A narrow allow-list is exactly how a credential file survives an audit. The generalised rule must catch env, key, certificate, service-account and generated-evidence files at any path, and the content rule must catch connection strings with real credentials while refusing to call CI-local throwaway database passwords secrets. Inspection must never print, persist or diff credential material into an assertion, a log line or a handoff file; only path classification and a boolean result may leave the gate.",
+  "documentation": [
+    "docs/PRODUCT-COMPLETENESS-STATUS.md",
+    "docs/PROJECT-STATE.md",
+    "docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-14T11:31:15.495Z",
+  "updatedAt": "2026-10-14T11:31:28.624Z",
+  "releaseEvidence": []
+}

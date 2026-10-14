@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { collectScriptSource, loadDeclaredArtifacts, validateEvidenceArray, validateRegistry } from './lib/evidence-resolver.mjs';
+import { trackedHygieneFailures } from './lib/tracked-hygiene.mjs';
 
 const root = process.cwd();
 const matrixPath = path.join(root, 'config/product-completeness.json');
@@ -47,16 +48,14 @@ for (const file of ['docs/PROJECT-STATE.md','STATUS-FINAL.md','docs/FUNCTIONAL-D
 let tracked = [];
 try { tracked = execFileSync('git',['ls-files'],{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}).split(/\r?\n/).filter(Boolean); }
 catch {
-  const walk=(dir,out=[])=>{ for(const e of fs.readdirSync(dir,{withFileTypes:true})){ const p=path.join(dir,e.name); const rel=path.relative(root,p).replaceAll('\\','/'); if(e.isDirectory()){ if(['node_modules','.git','.next','dist','coverage','runtime'].includes(e.name) || rel==='handoff/quality' || rel==='handoff/generated' || rel==='logs') continue; walk(p,out); } else if(!rel.endsWith('.recovery-backup')) out.push(rel); } return out; };
+  const walk=(dir,out=[])=>{ for(const e of fs.readdirSync(dir,{withFileTypes:true})){ const p=path.join(dir,e.name); const rel=path.relative(root,p).replaceAll('\\','/'); if(e.isDirectory()){ if(['node_modules','.git','.next','dist','coverage','runtime'].includes(e.name) || rel==='handoff/quality' || rel==='handoff/generated' || rel==='logs') continue; walk(p,out); } else out.push(rel); } return out; };
   tracked = walk(root);
 }
-const forbiddenTracked = tracked.filter((file) =>
-  file === 'payroll-adjustment-postgres-stage.env' ||
-  file.endsWith('.recovery-backup') ||
-  /^handoff\/quality\/.+\.(json|md)$/.test(file) ||
-  /^logs\/(payroll-adjustment-postgres-stage|report-exports|stage20-release-readiness)\//.test(file)
-);
-for (const file of forbiddenTracked) failures.push(`Generated/credential artifact must not be tracked: ${file}`);
+// A-09/A-12: aturan umum, bukan daftar lima path. Env/key/credential file,
+// artefak quality yang di-generate, seluruh logs/ dan recovery backup dilarang
+// ditrack; konten rahasia diperiksa pada setiap file tracked. Pengecualian
+// harus eksplisit, per path, per aturan, dengan rationale minimal 20 karakter.
+failures.push(...trackedHygieneFailures({ root, tracked }));
 
 
 const summary = {
