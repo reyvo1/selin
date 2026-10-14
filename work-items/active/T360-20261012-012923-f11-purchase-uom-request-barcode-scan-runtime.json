@@ -1,0 +1,99 @@
+{
+  "id": "T360-20261012-012923",
+  "title": "F11 purchase UOM: purchase request, barcode entry, factor-aware receiving scan, runtime evidence",
+  "type": "feature",
+  "module": "procurement",
+  "wave": "W1",
+  "phase": "STAGING",
+  "risk": "HIGH",
+  "owner": "openai",
+  "featureFlag": "procurement.purchaseUom",
+  "dependencies": [
+    "T360-20260923-221011",
+    "T360-20261004-184500"
+  ],
+  "impacts": {
+    "database": "MEDIUM",
+    "inventory": "HIGH",
+    "accounting": "MEDIUM",
+    "tax": "MEDIUM",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "LOW",
+    "security": "MEDIUM",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "ProductUnit remains the single authority for purchase conversion factors; a barcode is only a shortcut that may point at the same ProductUnit, exactly as on the selling side.",
+    "Purchase-side conversion is resolved by ONE shared helper, not by per-service inline arithmetic, so PurchaseOrder, PurchaseRequest and GoodsReceipt cannot drift apart on factor safety, variant matching or master-reference validation.",
+    "Integer physical stock stays canonical: baseQuantity = unitQuantity * quantityFactor must be a safe integer >= 1, and quantityFactor must be a safe integer >= 1.",
+    "A purchase unit whose factor > 1 must use a unitCode different from the product base unit, and every non-base purchase unit must be active in the company UNIT master reference.",
+    "PurchaseRequestItem gains the same immutable UOM snapshot as PurchaseOrderItem and GoodsReceiptItem, so a request can say '3 cartons' and PR->PO conversion must forward that snapshot instead of collapsing every line to factor 1.",
+    "Estimated cost on a purchase request is per PURCHASE unit; the approval amount is estimatedUnitCost * unitQuantity. Legacy rows with factor 1 keep identical arithmetic because unitQuantity equals the previous quantity.",
+    "Goods receipt inspection scanning must count the scanned barcode's conversion factor, because expectedQty is canonical base quantity; a carton scanned once is one factor's worth of base units, not one base unit.",
+    "Conversion factors are snapshotted at transaction time. A later master-data edit to quantityFactor must never rewrite historical purchase, receipt, return or accounting meaning.",
+    "Accounting and tax keep consuming converted base quantities and base-unit cost; no journal line may be produced from an unconverted purchase unit.",
+    "Tenant scope is unchanged: product, ProductUnit, barcode, supplier, warehouse and master reference lookups remain company/branch scoped, and a cross-company ProductUnit never resolves."
+  ],
+  "acceptanceCriteria": [
+    "apps/api/src/common/purchase-uom.ts exposes one resolvePurchaseUnitLine used by PurchaseOrdersService.create, PurchaseRequestsService.create and the goods receipt draft path.",
+    "resolvePurchaseUnitLine validates base unit in the company UNIT master, ProductUnit activity, variant matching, barcode/ProductUnit conflict, integer-safe factor, factor>1 implies different unitCode, and safe-integer base quantity.",
+    "CreatePurchaseRequestDto and PurchaseRequestItemDto accept optional productUnitId/variantId/barcodeCode/unitQuantity and reject a quantity that is not a safe integer >= 1.",
+    "PurchaseRequestItem persists variantId, productUnitId, unitCode, unitQuantity, quantityFactor and sourceBarcode; quantity remains canonical base quantity.",
+    "PurchaseRequestsService.create snapshots the resolved UOM, and PurchaseRequestsService.submit computes the approval amount from estimatedUnitCost * unitQuantity.",
+    "PurchaseRequestsService.convert forwards the request snapshot into PurchaseOrdersService.create so the created PO line carries the same productUnitId, unitCode, quantityFactor and purchaseUnitCost.",
+    "CreatePurchaseOrderDto and the purchase request DTO accept a barcode that must resolve to the same product; a barcode belonging to another product is rejected.",
+    "Goods receipt barcode inspection evidence increments scannedQty by the scanned barcode conversion factor instead of a hardcoded 1, and rejects a non-integer-safe factor.",
+    "Goods receipt barcode matching accepts product.barcodes as well as product.barcode and product.sku.",
+    "A runtime test proves a 24-factor purchase unit: 2 purchase units on a PO become 48 base ordered, a receipt of 2 purchase units with 1 damaged becomes 48 received / 24 damaged / 24 accepted, stock moves by 24 base, and the journal/tax base equals purchaseUnitCost * 2.",
+    "The same runtime test proves snapshot immutability: editing ProductUnit.quantityFactor after confirmation does not change the posted receipt, its return basis, or its accounting lines.",
+    "config/f1-backend-ui-audit.json and its mirrors stop asserting that PurchaseOrder/GoodsReceipt lack first-class purchase UOM, because purchase-orders.service.ts and goods-receipts.service.ts already convert and snapshot.",
+    "The feature flag procurement.purchaseUom defaults off for the new PurchaseRequestItem columns being authoritative on read paths, so a rollback can stop relying on them without dropping data."
+  ],
+  "testPlan": [
+    "node --test tests/f11-purchase-uom-request-barcode-scan-runtime.test.mjs",
+    "Runtime inventory movement invariant: 2 purchase units at factor 24 must append InventoryMovement of 24 base on confirm and must never oversell or double-append on replay.",
+    "Runtime accounting journal invariant: PURCHASE_RECEIPT_CREDIT debit inventory and debit input tax must equal credit payable, with line quantity x base unit cost equal to the net amount for every purchase-UOM line.",
+    "node --test tests/f11-transaction-uom-integration.test.mjs tests/procurement-integrity.test.mjs tests/functional-w1-purchase-request.test.mjs",
+    "node --test tests/product-completion-p2a-multi-uom-lineage.test.mjs tests/functional-w1-unit-conversion-authoritative.test.mjs tests/uom-multilevel-sale-runtime.test.mjs",
+    "node --test tests/tenant-scope-sales-purchase.test.mjs tests/tenant-scope-goods-receipts.test.mjs tests/core-pos-transaction-integrity.test.mjs",
+    "Concurrency and retry: PR convert and GRN confirm keep their existing idempotency keys and serializable transactions while carrying a UOM snapshot; an offline/retry attempt with the same key must not create a second PO, receipt, stock movement or journal.",
+    "Conflict: a second convert or confirm against the same base quantity under a different snapshot is rejected rather than silently re-scaled.",
+    "node --test tests/postgres-expand-migration-parity.test.mjs",
+    "npm run db:migrations:rehearse:postgres",
+    "npm run test:dependency-free",
+    "npm run workflow:validate && npm run validate:repo && npm run lint"
+  ],
+  "migrationPlan": "Expand-only. New migration directory T360-20261012-f11-purchase-uom-request adds nullable PurchaseRequestItem columns variantId, productUnitId, unitCode, unitQuantity, quantityFactor and sourceBarcode, with PostgreSQL and SQLite variants registered in config/expand-migration-order.json. No column is dropped or renamed. Backfill: legacy rows read as factor 1 / unitQuantity = quantity via a read-side coalesce, so no data rewrite is required and no backfill job is needed. Existing PurchaseOrderItem and GoodsReceiptItem columns are untouched.",
+  "rollbackPlan": "Feature flag procurement.purchaseUom switches read paths back to the pre-existing behaviour without dropping data. Reverting the migration is a pure additive column removal performed only on a fresh database; on production the columns are left in place as inert nullable columns, which is the documented expand-only contract. PR->PO conversion reverts by omitting the snapshot, which restores factor 1 for any newly created PO. No posting, stock or journal row is rewritten by any rollback.",
+  "monitoringPlan": "Purchase goods-receipt confirm logs the ordered/received base and unit quantities already, and the runtime probe is bound to the exact build artifact in ci:p2a:multi-uom-probe. New failure messages are explicit BadRequest messages naming the unit and factor so a wrong-unit operator error is diagnosable from logs without reading rows.",
+  "securityNotes": "Every lookup stays company/branch scoped: ProductUnit requires product.companyId = scope.companyId, barcode must match the already-authorised product id, and the master reference check is company scoped with branchId null. Scanning a barcode from another company cannot match because it is resolved against the receipt's own product. No credential, token, biometric or card data is introduced. Inspection evidence storage path and hash handling are unchanged.",
+  "documentation": [
+    "docs/F11-UOM-TRANSACTION-COMPLETION.md",
+    "docs/DEVELOPMENT-KIT.md",
+    "docs/PROJECT-STATE.md",
+    "docs/F1-BACKEND-UI-AUDIT.md"
+  ],
+  "notes": [
+    "config/functional-depth-roadmap.json lists F11 as NEXT_SOURCE_IMPLEMENTATION, and F11 is the only phase in that file that is not SOURCE_IMPLEMENTATION_COMPLETE_UAT_DEFERRED or IN_PROGRESS.",
+    "PurchaseOrderItem and GoodsReceiptItem already convert and snapshot correctly; the open gap is PurchaseRequestItem, which has no UOM column at all, so purchase-requests.service.ts:169 always creates a PO line with quantityFactor 1.",
+    "F11 gap text in config/f1-backend-ui-audit.json is stale for PO/GoodsReceipt and is corrected in this work item rather than left contradicting purchase-orders.service.ts.",
+    "Migration rehearsal was executed locally against a real PostgreSQL 16.15 container and a real SQLite database, not asserted: the new migration was applied on top of the previous commit schema and the full schema contract (tables, columns, enums, critical indexes) matched.",
+    "Three source-contract gates asserted the old inline arithmetic (productUnit.findFirst inside purchase-orders.service.ts, baseUnitCost = purchaseUnitCost.div(quantityFactor) inline, scannedQty increment 1). Each was rewritten to pin the NEW invariant instead of being deleted: the shared resolver must be used by all three purchase documents, and scanning must be factor-aware and unable to overshoot expectedQty."
+  ],
+  "createdAt": "2026-10-11T17:29:23.000Z",
+  "updatedAt": "2026-10-14T09:32:56.546Z",
+  "testResults": [
+    "node --test tests/f11-purchase-uom-request-barcode-scan-runtime.test.mjs: 5/5 PASS (real SQLite, real services)",
+    "node --test tests/f11-transaction-uom-integration.test.mjs tests/procurement-integrity.test.mjs tests/commerce-fulfillment-integrity.test.mjs: 23/23 PASS",
+    "npm run test:dependency-free: 1827/1827 PASS",
+    "npm run test --workspaces --if-present: PASS",
+    "npm run lint: PASS (all workspaces, strict TypeScript)",
+    "npm run workflow:validate: PASS, 47 work items, 8 delivery waves",
+    "npm run validate:repo: PASS, 1198 files, 202 Prisma models",
+    "npm run audit:full:repo: PASS (7 audits)",
+    "npm run ci:ui:audit: PASS, 514 controls",
+    "npm run db:migrations:rehearse:postgres: PASS against real PostgreSQL 16.15 container",
+    "npm run db:migrations:rehearse:sqlite: PASS"
+  ]
+}

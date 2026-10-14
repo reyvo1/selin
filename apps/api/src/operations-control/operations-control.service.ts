@@ -98,19 +98,45 @@ export class OperationsControlService {
 
     let scannedProductId: string | undefined;
     let scannedSerialId: string | undefined;
+    let scanQuantity = 1;
     if (evidenceType === 'BARCODE') {
       const value = dto.value?.trim();
       if (!value) throw new BadRequestException('Nilai barcode wajib diisi.');
       if (inspection.sourceType === 'GoodsReceipt') {
-        const receipt = await this.prisma.goodsReceipt.findFirst({
+const receipt = await this.prisma.goodsReceipt.findFirst({
           where: { id: inspection.sourceId, warehouse: { branchId: scope.branchId, branch: { companyId: scope.companyId } } },
-          include: { items: { include: { product: true } } },
+          include: {
+            items: {
+              include: {
+                product: {
+                  include: {
+                    barcodes: { include: { productUnit: { select: { id: true, quantityFactor: true, isActive: true } } } },
+                  },
+                },
+              },
+            },
+          },
         });
         if (!receipt) return this.denyTenantAccess(this.prisma, user, scope, 'GoodsReceipt', inspection.sourceId);
-        const matched = receipt.items.find((item) => item.product.barcode === value || item.product.sku === value);
+        const matched = receipt.items.find((item) => item.product.barcode === value || item.product.sku === value || item.product.barcodes.some((barcode) => barcode.code === value));
         if (!matched) throw new BadRequestException('Barcode/SKU tidak termasuk dalam Goods Receipt ini.');
         scannedProductId = matched.productId;
         metadata.productId = matched.productId;
+        // InspectionResultItem.expectedQty is canonical BASE quantity (goods-receipts.service.ts sets
+        // expectedQty to quantityReceived), so counting one scanned carton used to add exactly 1 base
+        // unit and forced the operator to scan a 24-unit carton 24 times. The scanned barcode's own
+        // conversion factor decides how much base stock that scan represents.
+        const scannedBarcode = matched.product.barcodes.find((barcode) => barcode.code === value);
+        scanQuantity = scannedBarcode
+          ? Number(scannedBarcode.productUnitId
+            ? scannedBarcode.productUnit?.quantityFactor ?? 1
+            : scannedBarcode.quantityFactor)
+          : 1;
+        if (!Number.isSafeInteger(scanQuantity) || scanQuantity < 1) {
+          throw new BadRequestException(`Konversi barcode ${value} tidak aman untuk stok integer.`);
+        }
+        metadata.scanQuantity = scanQuantity;
+        metadata.scanUnitCode = scannedBarcode?.unitCode ?? matched.unitCode ?? matched.product.unit;
       } else if (inspection.sourceType === 'OrderReturn') {
         const orderReturn = await this.prisma.orderReturn.findFirst({
           where: { id: inspection.sourceId, companyId: scope.companyId, branchId: scope.branchId },
@@ -199,7 +225,10 @@ export class OperationsControlService {
       return await this.prisma.$transaction(async (tx) => {
         if (scannedProductId) {
           const results = await tx.inspectionResultItem.findMany({ where: { inspectionId: id, productId: scannedProductId }, orderBy: { id: 'asc' } });
-          const result = results.find((row) => (row.expectedQty ?? 0) > 0 && (row.scannedQty ?? 0) < (row.expectedQty ?? 0));
+          // A single scan can carry a whole purchase unit, so the line is only eligible when the
+          // remaining capacity still fits that unit. Scanning the last partial unit is rejected
+          // instead of silently pushing scannedQty past expectedQty.
+          const result = results.find((row) => (row.expectedQty ?? 0) - (row.scannedQty ?? 0) >= scanQuantity && (row.scannedQty ?? 0) < (row.expectedQty ?? 0));
           if (!result) throw new BadRequestException('Jumlah scan produk ini sudah memenuhi kuantitas yang diharapkan.');
           if (scannedSerialId) {
             const claimed = await tx.inventorySerial.updateMany({
@@ -210,9 +239,10 @@ export class OperationsControlService {
           }
           const currentScanned = result.scannedQty ?? 0;
           const expectedQty = result.expectedQty ?? 0;
+          const nextScanned = currentScanned + scanQuantity;
           const scanClaim = await tx.inspectionResultItem.updateMany({
             where: { id: result.id, scannedQty: currentScanned },
-            data: { scannedQty: { increment: 1 }, ...(currentScanned + 1 >= expectedQty ? { result: 'PASS' } : {}) },
+            data: { scannedQty: nextScanned, ...(nextScanned >= expectedQty ? { result: 'PASS' } : {}) },
           });
           if (scanClaim.count !== 1) throw new BadRequestException('Jumlah scan berubah saat proses berjalan. Silakan scan ulang.');
         }

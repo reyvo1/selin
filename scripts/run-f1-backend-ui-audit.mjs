@@ -236,7 +236,7 @@ const capabilities = [
       const purchaseUom = includesAny(apiText, [/purchase.*unitCode/i, /ordered.*unitCode/i, /purchase.*quantityFactor/i]);
       return pos && sales && !purchaseUom ? 'PARTIAL' : pos && sales && purchaseUom ? 'EXPOSED' : sales ? 'HIDDEN' : 'MISSING';
     },
-    gap: 'Sales/POS multi-UOM sudah jauh lebih matang. Purchase request/PO/receipt masih berbasis orderedQty/unitCost tanpa purchase UOM conversion first-class; ini blocker utama F11.'
+    gap: 'Purchase-side UOM sudah first-class pada PurchaseRequest, PurchaseOrder dan GoodsReceipt: satu resolver bersama (common/purchase-uom.ts) memvalidasi ProductUnit/barcode terhadap master UNIT perusahaan, menyimpan snapshot unitCode/quantityFactor/unitQuantity pada tiap dokumen, dan menjaga stok, pajak serta jurnal tetap memakai base quantity dan harga base. Sisa gap F11 bukan lagi konversi, melainkan bukti runtime dan closure Human Stage-20: hanya sisi jual (POS) yang punya runtime test purchase-independent, dan tests/f11-purchase-uom-request-barcode-scan-runtime.test.mjs harus tetap hijau pada setiap perubahan konversi.'
   },
 ];
 

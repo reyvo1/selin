@@ -713,7 +713,7 @@
       "key": "F11",
       "title": "Purchase / Sales / POS integration ke UOM baru",
       "status": "PARTIAL",
-      "historicalSourceStatus": "NEXT_SOURCE_IMPLEMENTATION",
+      "historicalSourceStatus": "SOURCE_IMPLEMENTATION_COMPLETE_UAT_DEFERRED",
       "notes": "Historical F1-F12 source phase; canonical post-audit status comes from this matrix."
     },
     {

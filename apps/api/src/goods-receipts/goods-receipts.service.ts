@@ -5,6 +5,7 @@ import { AuthUser } from '../auth/auth.types';
 import { beginIdempotent, completeIdempotent } from '../common/idempotency';
 import { nextDocumentNumber } from '../common/numbering';
 import { depositLocationStock } from '../common/location-inventory';
+import { toPurchaseBaseQuantity } from '../common/purchase-uom';
 import { serializableTx } from '../common/serializable-tx';
 import { decodeCursor, parsePageLimit, toCursorPage } from '../common/pagination';
 import { OperationsControlService } from '../operations-control/operations-control.service';
@@ -117,9 +118,9 @@ export class GoodsReceiptsService {
         const unitQuantity = input.quantityReceived;
         const damagedUnitQuantity = input.quantityDamaged ?? 0;
         if (damagedUnitQuantity > unitQuantity) throw new BadRequestException(`Jumlah rusak untuk ${poItem.product.name} melebihi jumlah diterima.`);
-        const quantityReceived = unitQuantity * factor;
-        const damaged = damagedUnitQuantity * factor;
-        if (!Number.isSafeInteger(quantityReceived) || !Number.isSafeInteger(damaged)) throw new BadRequestException(`Konversi penerimaan ${poItem.product.name} tidak aman.`);
+        // Same shared guard as PurchaseOrder and PurchaseRequest: integer physical stock is canonical.
+        const quantityReceived = toPurchaseBaseQuantity(unitQuantity, factor);
+        const damaged = damagedUnitQuantity > 0 ? toPurchaseBaseQuantity(damagedUnitQuantity, factor) : 0;
         const receivedForLine = (requestedByPoItem.get(poItem.id) ?? 0) + quantityReceived;
         requestedByPoItem.set(poItem.id, receivedForLine);
         const remaining = poItem.orderedQty - poItem.receivedQty;

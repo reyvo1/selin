@@ -48,7 +48,14 @@ test('barcode and serial scanning is source-bound, quantity-bound, and concurren
   assert.match(operations, /status: 'RESERVED', referenceType: 'Shipment', referenceId: inspection\.sourceId/);
   assert.match(operations, /where: \{ id: result\.id, scannedQty: currentScanned \}/);
   assert.match(operations, /scanClaim\.count !== 1/);
-  assert.match(operations, /currentScanned \+ 1 >= expectedQty \? \{ result: 'PASS' \}/);
+  assert.match(operations, /currentScanned \+ scanQuantity/);
+  // expectedQty is canonical BASE quantity, so a scan may carry a whole purchase unit. The old
+  // `scannedQty: { increment: 1 }` forced an operator to scan a 24-unit carton 24 times, and the
+  // old row pick allowed the last scan to push scannedQty past expectedQty. Both are now pinned.
+  assert.match(operations, /scannedQty: nextScanned/);
+  assert.match(operations, /nextScanned >= expectedQty \? \{ result: 'PASS' \}/);
+  assert.match(operations, /\(row\.expectedQty \?\? 0\) - \(row\.scannedQty \?\? 0\) >= scanQuantity/);
+  assert.doesNotMatch(operations, /scannedQty: \{ increment: 1 \}/);
   assert.match(operations, /Scan barcode belum lengkap/);
 });
 

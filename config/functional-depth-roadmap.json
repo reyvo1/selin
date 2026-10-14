@@ -303,7 +303,7 @@
     {
       "id": "F11",
       "title": "Purchase / Sales / POS integration ke UOM baru",
-      "status": "NEXT_SOURCE_IMPLEMENTATION",
+      "status": "SOURCE_IMPLEMENTATION_COMPLETE_UAT_DEFERRED",
       "dependsOn": [
         "F2",
         "F3",

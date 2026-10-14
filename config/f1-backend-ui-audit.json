@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-03T12:04:02.332Z",
+  "generatedAt": "2026-10-14T09:28:22.787Z",
   "source": {
     "prismaSchema": "apps/api/prisma/schema.prisma",
-    "controllerCount": 43,
-    "routeCount": 509,
-    "prismaModelCount": 195,
+    "controllerCount": 46,
+    "routeCount": 532,
+    "prismaModelCount": 202,
     "uiApps": [
       "admin",
       "pos",
@@ -39,7 +39,7 @@
         "ProductBarcode",
         "ProductPrice"
       ],
-      "backendRouteCount": 20,
+      "backendRouteCount": 22,
       "backendRoutes": [
         "GET /master-data/references",
         "POST /master-data/references",
@@ -57,6 +57,8 @@
         "POST /master-data/products/:productId/prices",
         "PATCH /master-data/products/:productId/prices/:id",
         "GET /products",
+        "GET /products/export-csv",
+        "POST /products/bulk-import",
         "GET /products/:id",
         "POST /products",
         "PATCH /products/:id",
@@ -520,7 +522,7 @@
         "pos",
         "storefront"
       ],
-      "gap": "Sales/POS multi-UOM sudah jauh lebih matang. Purchase request/PO/receipt masih berbasis orderedQty/unitCost tanpa purchase UOM conversion first-class; ini blocker utama F11."
+      "gap": "Purchase-side UOM sudah first-class pada PurchaseRequest, PurchaseOrder dan GoodsReceipt: satu resolver bersama (common/purchase-uom.ts) memvalidasi ProductUnit/barcode terhadap master UNIT perusahaan, menyimpan snapshot unitCode/quantityFactor/unitQuantity pada tiap dokumen, dan menjaga stok, pajak serta jurnal tetap memakai base quantity dan harga base. Sisa gap F11 bukan lagi konversi, melainkan bukti runtime dan closure Human Stage-20: hanya sisi jual (POS) yang punya runtime test purchase-independent, dan tests/f11-purchase-uom-request-barcode-scan-runtime.test.mjs harus tetap hijau pada setiap perubahan konversi."
     }
   ],
   "controllerExposure": [
@@ -609,6 +611,15 @@
       "exposure": "EXPOSED_OR_PARTIAL"
     },
     {
+      "controller": "apps/api/src/digital-services/digital-services.controller.ts",
+      "routeCount": 9,
+      "uiApps": [
+        "admin",
+        "pos"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
       "controller": "apps/api/src/employee-self-service/employee-self-service.controller.ts",
       "routeCount": 16,
       "uiApps": [
@@ -689,6 +700,14 @@
       "exposure": "EXPOSED_OR_PARTIAL"
     },
     {
+      "controller": "apps/api/src/manufacturing/manufacturing.controller.ts",
+      "routeCount": 8,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
       "controller": "apps/api/src/master-data/master-data.controller.ts",
       "routeCount": 30,
       "uiApps": [
@@ -741,7 +760,7 @@
     },
     {
       "controller": "apps/api/src/platform/platform.controller.ts",
-      "routeCount": 41,
+      "routeCount": 42,
       "uiApps": [
         "admin",
         "pos",
@@ -752,7 +771,7 @@
     },
     {
       "controller": "apps/api/src/products/products.controller.ts",
-      "routeCount": 5,
+      "routeCount": 7,
       "uiApps": [
         "admin",
         "pos",
@@ -847,6 +866,16 @@
       "uiApps": [
         "admin",
         "pos"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/staff-memos/staff-memos.controller.ts",
+      "routeCount": 3,
+      "uiApps": [
+        "admin",
+        "pos",
+        "employee-portal"
       ],
       "exposure": "EXPOSED_OR_PARTIAL"
     },

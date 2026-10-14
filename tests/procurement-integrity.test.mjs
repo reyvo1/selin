@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const read = (path) => fs.readFileSync(path, 'utf8');
 const po = read('apps/api/src/purchase-orders/purchase-orders.service.ts');
+const purchaseUom = read('apps/api/src/common/purchase-uom.ts');
 const grDto = read('apps/api/src/goods-receipts/dto/create-goods-receipt.dto.ts');
 const gr = read('apps/api/src/goods-receipts/goods-receipts.service.ts');
 const operationsController = read('apps/api/src/operations-control/operations-control.controller.ts');
@@ -19,7 +20,10 @@ const operationsUi = read('apps/admin/app/modules/operations-control.tsx');
 
 test('purchase order money arithmetic uses Decimal and create is idempotent', () => {
   assert.match(po, /purchaseUnitCost = new Prisma\.Decimal\(item\.unitCost\)/);
-  assert.match(po, /baseUnitCost = purchaseUnitCost\.div\(quantityFactor\)/);
+  // Base unit cost is derived by the shared purchase-UOM helper, not re-implemented inline, so PO,
+  // PR and GRN cannot disagree on the conversion.
+  assert.match(po, /toPurchaseBaseUnitCost\(purchaseUnitCost, uom\.quantityFactor\)/);
+  assert.match(purchaseUom, /purchaseUnitCost\.div\(quantityFactor\)/);
   assert.match(po, /subtotal: purchaseUnitCost\.mul\(item\.orderedQty\)/);
   assert.doesNotMatch(po, /item\.orderedQty \* item\.unitCost/);
   assert.match(po, /beginIdempotent\([\s\S]*scope: scopeKey/);

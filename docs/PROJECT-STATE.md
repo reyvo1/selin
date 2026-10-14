@@ -341,3 +341,63 @@ green on both workflows is still pending until the runs finish.
 
 P5 remains `IMPLEMENTED_RUNTIME_PENDING`, `humanStage20=PENDING`, `productReady=false`, and R8
 (`T360-20260925-143000`) remains BLOCKED. Nothing here advances canonical product readiness.
+
+## 2026-10-12 — F11 purchase-side UOM: request, barcode, receiving scan, runtime evidence
+
+Work item `T360-20261012-012923` (phase STAGING). F11 was the only phase in
+`config/functional-depth-roadmap.json` still marked `NEXT_SOURCE_IMPLEMENTATION`.
+
+**What was actually broken.** `PurchaseOrderItem` and `GoodsReceiptItem` already converted and
+snapshotted purchase UOM correctly, but `PurchaseRequestItem` had no UOM column at all. So
+`purchase-requests.service.ts` built every PO line as `{ productId, orderedQty: item.quantity, unitCost }`
+with no `productUnitId`: an operator asking for "3 karton" got a purchase order for 3 *base* units.
+The approval amount had the same shape problem, because `estimatedUnitCost` had no stated unit.
+
+**Second defect, found by running the service rather than reading it.** Goods receipt inspection
+evidence incremented `scannedQty` by a hardcoded `1`. `InspectionResultItem.expectedQty` is canonical
+base quantity, so receiving 2 cartons of 24 meant scanning the same carton 48 times, and the row pick
+`(scannedQty ?? 0) < (expectedQty ?? 0)` let a final scan push `scannedQty` past `expectedQty`.
+Scanning now uses the scanned barcode's own conversion factor and only selects a line whose remaining
+capacity fits that unit.
+
+**Third defect.** The F11 gap text in `scripts/run-f1-backend-ui-audit.mjs`, its generated mirrors
+(`config/f1-backend-ui-audit.json`, `config/p5-full-ui-root-audit.json`, `docs/F1-BACKEND-UI-AUDIT.md`,
+`docs/P5-FULL-UI-ROOT-AUDIT.md`) and `handoff/quality/ui-domain-surface-depth-latest.json` all asserted
+that PO and goods receipt lack first-class purchase UOM. That was contradicted by
+`purchase-orders.service.ts` and `goods-receipts.service.ts` and had been for some time. Corrected in
+the generator and regenerated, so the audit cannot drift back.
+
+**Change.** New `apps/api/src/common/purchase-uom.ts` is the single purchase-side resolver
+(`resolvePurchaseUnitLine`, `toPurchaseBaseQuantity`, `toPurchaseBaseUnitCost`), mirroring
+`common/transaction-uom.ts` on the selling side: base unit must be active in the company UNIT master,
+ProductUnit activity and variant match, barcode/ProductUnit conflict, integer-safe factor, factor > 1
+implies a different unit code, safe-integer base quantity. Purchase request, purchase order and goods
+receipt all use it, so factor arithmetic can no longer drift between the three documents.
+
+`PurchaseRequestItem` gains an immutable snapshot — `unitQuantity`, `quantityFactor`, `unitCode`,
+`productUnitId`, `variantId`, `sourceBarcode` — through expand-only migration
+`database/migrations/T360-20261012-f11-purchase-uom-request/` (SQLite + PostgreSQL, registered in
+`config/expand-migration-order.json`). `quantity` stays canonical base. `estimatedUnitCost` is now
+explicitly per purchase unit and the approval amount is `estimatedUnitCost * unitQuantity`; legacy rows
+carry factor 1 and a null `unitQuantity`, so their arithmetic is unchanged. `convert()` forwards the
+snapshot. PO and PR also accept a purchase `barcodeCode` that must resolve to the same product.
+
+**Evidence.** `tests/f11-purchase-uom-request-barcode-scan-runtime.test.mjs` is a real runtime test,
+not a source regex: against SQLite with the actual services it proves 3 karton request → 72 base PO,
+barcode resolution, 2 karton received with 1 damaged → 48 received / 24 damaged / 24 accepted, stock
+and a single append-only movement, a balanced `PURCHASE_RECEIPT_CREDIT` journal whose inventory basis
+is the base unit cost and whose input tax is computed from base net, snapshot immutability after the
+master factor is edited to 99, and factor-aware inspection scanning including rejection of an overshoot.
+
+Three existing gates asserted the old inline arithmetic and were rewritten to pin the new invariant
+rather than deleted. Migration rehearsal was executed, not asserted: PASS against a real PostgreSQL
+16.15 container and a real SQLite database, applying the new migration on top of the previous commit's
+schema and matching the full schema contract.
+
+Local: `test:dependency-free` 1827/1827 PASS, workspace tests PASS, `lint` PASS, `workflow:validate`
+PASS (47), `validate:repo` PASS (1198 files / 202 Prisma models), `audit:full:repo` PASS (7 audits),
+`ci:ui:audit` PASS (514 controls).
+
+**Not claimed.** F11 is now `SOURCE_IMPLEMENTATION_COMPLETE_UAT_DEFERRED`, which is a source statement
+only. P5 remains `IMPLEMENTED_RUNTIME_PENDING`, `humanStage20=PENDING`, `productReady=false`, and R8
+(`T360-20260925-143000`) remains `BLOCKED`. Nothing here advances canonical product readiness.

@@ -2,7 +2,7 @@
 
 ## Scope
 
-- API: **43 controllers / 509 handlers / 195 Prisma models**.
+- API: **46 controllers / 532 handlers / 202 Prisma models**.
 - Admin: **15 primary workspaces / 70 contextual views**.
 - POS: **4 views**; Storefront: **5 views**; Employee Portal: **7 views**.
 - Static interaction inventory: **514 controls**.
@@ -58,7 +58,7 @@ All **70/70** contextual destinations are source-mapped. No canonical Admin cont
 | F8 | Automation + scheduled reports | **EXPOSED** | admin | Automation worker tersedia, tetapi scheduler/report schedule first-class dan operator execution history/rule management belum lengkap. |
 | F9 | WhatsApp / Telegram notification center | **PARTIAL** | admin, employee-portal | Template, queue, Telegram worker, WhatsApp provider adapter, dan UI queue sudah ada. Provider setup/verification, channel binding UX, scheduled report destinations, retry diagnostics, dan production readiness masih harus dituntaskan. |
 | F10 | AI / forecasting / operator assistant | **EXPOSED** | admin | Source implementation lengkap: explainable forecast/reorder, permission-scoped deterministic operator assistant, anomaly insights, confidence, source links, dan human-confirmation guardrail tersedia. Runtime/browser/human UAT tetap wajib sebelum closure. |
-| F11 | Purchase / Sales / POS integration ke UOM baru | **EXPOSED** | admin, pos, storefront | Sales/POS multi-UOM sudah jauh lebih matang. Purchase request/PO/receipt masih berbasis orderedQty/unitCost tanpa purchase UOM conversion first-class; ini blocker utama F11. |
+| F11 | Purchase / Sales / POS integration ke UOM baru | **EXPOSED** | admin, pos, storefront | Purchase-side UOM sudah first-class pada PurchaseRequest, PurchaseOrder dan GoodsReceipt: satu resolver bersama (common/purchase-uom.ts) memvalidasi ProductUnit/barcode terhadap master UNIT perusahaan, menyimpan snapshot unitCode/quantityFactor/unitQuantity pada tiap dokumen, dan menjaga stok, pajak serta jurnal tetap memakai base quantity dan harga base. Sisa gap F11 bukan lagi konversi, melainkan bukti runtime dan closure Human Stage-20: hanya sisi jual (POS) yang punya runtime test purchase-independent, dan tests/f11-purchase-uom-request-barcode-scan-runtime.test.mjs harus tetap hijau pada setiap perubahan konversi. |
 
 ## API-only / missing useful UI
 

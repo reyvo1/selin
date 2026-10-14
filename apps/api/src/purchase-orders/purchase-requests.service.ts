@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/com
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../auth/auth.types';
 import { nextDocumentNumber } from '../common/numbering';
+import { resolvePurchaseUnitLine, toPurchaseBaseQuantity } from '../common/purchase-uom';
 import { serializableTx } from '../common/serializable-tx';
 import { PlatformService } from '../platform/platform.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,6 +11,15 @@ import { ConvertPurchaseRequestDto, CreatePurchaseRequestDto, DecidePurchaseRequ
 
 type TenantScope = { companyId: string; branchId: string };
 const OPEN_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'] as const;
+
+/**
+ * Quantity expressed in the purchase unit the requester chose.
+ * Rows created before the UOM snapshot existed carry quantityFactor 1 and no unitQuantity,
+ * so they read as their own base quantity and every derived amount stays identical.
+ */
+function purchaseUnitQuantity(item: { quantity: number; unitQuantity: number | null }): number {
+  return item.unitQuantity ?? item.quantity;
+}
 
 @Injectable()
 export class PurchaseRequestsService {
@@ -63,8 +73,38 @@ export class PurchaseRequestsService {
       if (!supplier) throw new BadRequestException('Supplier tidak ditemukan pada company aktif.');
     }
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
-    const products = await this.prisma.product.findMany({ where: { id: { in: productIds }, companyId: scope.companyId, isActive: true }, select: { id: true } });
+    const products = await this.prisma.product.findMany({ where: { id: { in: productIds }, companyId: scope.companyId, isActive: true }, select: { id: true, unit: true } });
     if (products.length !== productIds.length) throw new BadRequestException('Satu atau lebih produk tidak ditemukan pada company aktif.');
+    const productById = new Map(products.map((product) => [product.id, product]));
+
+    // PurchaseUnit is snapshotted here, exactly as it already is on PurchaseOrderItem and
+    // GoodsReceiptItem. Before this, a purchase request could not express a purchase unit at all and
+    // convert() always produced a PO line with quantityFactor 1, so "3 cartons" became "3 base units".
+    const preparedItems: Array<{
+      productId: string; quantity: number; unitQuantity: number; quantityFactor: number; unitCode: string;
+      productUnitId: string | null; variantId: string | null; sourceBarcode: string | null;
+      estimatedUnitCost: Prisma.Decimal; notes?: string;
+    }> = [];
+    for (const item of dto.items) {
+      const product = productById.get(item.productId)!;
+      const uom = await resolvePurchaseUnitLine(this.prisma, scope, product, {
+        productUnitId: item.productUnitId,
+        variantId: item.variantId,
+        barcodeCode: item.barcodeCode,
+      });
+      preparedItems.push({
+        productId: item.productId,
+        quantity: toPurchaseBaseQuantity(item.quantity, uom.quantityFactor),
+        unitQuantity: item.quantity,
+        quantityFactor: uom.quantityFactor,
+        unitCode: uom.unitCode,
+        productUnitId: uom.productUnitId,
+        variantId: uom.variantId,
+        sourceBarcode: uom.sourceBarcode,
+        estimatedUnitCost: new Prisma.Decimal(item.estimatedUnitCost),
+        notes: item.notes,
+      });
+    }
 
     return serializableTx(this.prisma, async (tx) => {
       const row = await tx.purchaseRequest.create({
@@ -78,7 +118,7 @@ export class PurchaseRequestsService {
           neededBy: dto.neededBy ? new Date(dto.neededBy) : undefined,
           reason: dto.reason,
           notes: dto.notes,
-          items: { create: dto.items.map((item) => ({ productId: item.productId, quantity: item.quantity, estimatedUnitCost: new Prisma.Decimal(item.estimatedUnitCost), notes: item.notes })) },
+          items: { create: preparedItems },
         },
         include: this.include,
       });
@@ -93,7 +133,10 @@ export class PurchaseRequestsService {
     if (!request) return this.denyTenantAccess(user, scope, id);
     if (!['DRAFT', 'SUBMITTING'].includes(request.status)) throw new BadRequestException('Hanya purchase request DRAFT yang dapat diajukan.');
     if (!request.items.length) throw new BadRequestException('Purchase request tidak memiliki item.');
-    const amount = request.items.reduce((sum, item) => sum.add(item.estimatedUnitCost.mul(item.quantity)), new Prisma.Decimal(0));
+    // estimatedUnitCost is per PURCHASE unit, so the approval amount is estimatedUnitCost * unitQuantity.
+    // Rows written before the UOM snapshot existed have quantityFactor 1 and a null unitQuantity,
+    // which makes purchaseUnitQuantity() return the base quantity and keeps the arithmetic identical.
+    const amount = request.items.reduce((sum, item) => sum.add(item.estimatedUnitCost.mul(purchaseUnitQuantity(item))), new Prisma.Decimal(0));
 
     // Claim status first so concurrent submit cannot create two approval requests. SUBMITTING is recoverable:
     // if a process died after ApprovalRequest creation, retry links that pending approval instead of creating another.
@@ -166,7 +209,13 @@ export class PurchaseRequestsService {
       warehouseId: request.warehouseId,
       expectedDate: dto.expectedDate ?? request.neededBy?.toISOString(),
       notes: dto.notes ?? request.notes ?? `Konversi dari ${request.number}`,
-      items: request.items.map((item) => ({ productId: item.productId, orderedQty: item.quantity, unitCost: Number(item.estimatedUnitCost) })),
+      items: request.items.map((item) => ({
+        productId: item.productId,
+        productUnitId: item.productUnitId ?? undefined,
+        variantId: item.variantId ?? undefined,
+        orderedQty: purchaseUnitQuantity(item),
+        unitCost: Number(item.estimatedUnitCost),
+      })),
     }, user);
     const claimed = await this.prisma.purchaseRequest.updateMany({ where: { id, status: 'APPROVED', purchaseOrderId: null }, data: { status: 'CONVERTED', supplierId, purchaseOrderId: order.id, convertedAt: new Date() } });
     if (claimed.count === 0) {

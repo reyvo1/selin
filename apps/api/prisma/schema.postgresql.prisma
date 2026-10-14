@@ -722,6 +722,14 @@ model PurchaseRequestItem {
   purchaseRequestId String
   productId         String
   quantity          Int
+  /// Purchase unit the requester actually asked in; `quantity` stays canonical base quantity.
+  unitQuantity      Int?
+  quantityFactor    Int      @default(1)
+  unitCode          String?
+  productUnitId     String?
+  variantId         String?
+  sourceBarcode     String?
+  /// Cost per PURCHASE unit, so estimatedUnitCost * unitQuantity is the requestable amount.
   estimatedUnitCost Decimal
   notes             String?
   createdAt         DateTime @default(now())

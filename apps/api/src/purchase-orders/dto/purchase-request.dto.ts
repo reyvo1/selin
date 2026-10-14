@@ -4,8 +4,15 @@ import { IsArray, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Min
 
 export class PurchaseRequestItemDto {
   @ApiProperty() @IsString() productId!: string;
-  @ApiProperty({ example: 10 }) @IsInt() @Min(1) quantity!: number;
-  @ApiProperty({ example: 10000 }) @IsNumber() @Min(0) estimatedUnitCost!: number;
+  @ApiProperty({
+    description: 'Jumlah dalam UNIT PEMBELIAN yang dipilih. Dikonversi ke base quantity memakai snapshot quantityFactor dari ProductUnit.',
+    example: 3,
+  })
+  @IsInt() @Min(1) quantity!: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() productUnitId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() variantId?: string;
+  @ApiPropertyOptional({ description: 'Shortcut barcode; harus milik produk yang dipilih dan boleh menunjuk ProductUnit yang sama.' }) @IsOptional() @IsString() barcodeCode?: string;
+  @ApiProperty({ description: 'Estimasi biaya per UNIT PEMBELIAN yang dipilih.', example: 36000 }) @IsNumber() @Min(0) estimatedUnitCost!: number;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 }
 
