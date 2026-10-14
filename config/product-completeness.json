@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "TOKO360 Canonical Product Completeness Matrix",
-  "updatedAt": "2026-10-05T19:00:00+08:00",
+  "updatedAt": "2026-10-14T13:40:00.000Z",
   "authoritative": true,
   "productReady": false,
   "humanStage20": "PENDING",
@@ -960,8 +960,15 @@
       "title": "Status/governance documents conflict or lag current evidence",
       "severity": "MEDIUM",
       "targetPhase": "P0",
-      "status": "IMPLEMENTED_RUNTIME_PENDING",
-      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence."
+      "status": "RUNTIME_VERIFIED",
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. Closed 2026-10-14 by T360-20261014-131512. Measured defect: seven undated live-count lines across five governance documents (STATUS-FINAL.md claimed 4 active work items and 1089 tests; docs/PROJECT-STATE.md claimed 36 controllers / 454 handlers / 180 models / 63 destinations / 420 controls and 1089/1089 tests; docs/F12-FINAL-UI-UX-COMPLETION.md claimed 1021 files; docs/COMPLETION-DOCS-INDEX.md claimed 454 routes / 420 controls and 509 handlers; docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md claimed 63/63), plus three false claims that the working copy had no .git. Rule: counts belong to machines - a document may name the regenerating command or record a dated number, never assert an undated current value. Guard: tests/status-doc-currency.test.mjs fails on a curated live-claim phrasing beside a digit, or on any scoped document claiming the tree lacks .git; the phrasing list is closed and extended only when a new undated claim is measured, because a generic number scan was measured to over-flag dated records.",
+      "evidence": [
+        "source-commit:b2f96bc",
+        "logs_38572274675.zip",
+        "logs_38572274795.zip",
+        "tests/status-doc-currency.test.mjs",
+        "handoff/release-evidence/T360-20261014-131512-a-14-doc-live-count-currency.md"
+      ]
     },
     {
       "id": "audit:A-15",

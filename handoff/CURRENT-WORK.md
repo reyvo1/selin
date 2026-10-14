@@ -1,5 +1,39 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-14 — A-14 CLOSED; 3 findings left; workflow phase-skip hole found (CLOSED)
+
+- Active work item: none. Last closed: `T360-20261014-131512` (A-14).
+- **A-14 (MEDIUM) → `RUNTIME_VERIFIED`.** Nine undated live-count lines across five governance
+  documents claimed 4 active work items, 1089 tests, 180 Prisma models, 1021 files, 454 routes,
+  420 controls, 63/63 and 509 handlers; three more claimed the working copy had no `.git` while
+  the repository does. Rule now enforced: counts belong to machines — a document may name the
+  regenerating command or record a dated number, never assert an undated current value.
+- Guard: `tests/status-doc-currency.test.mjs` fails on a **curated** live-claim phrasing beside
+  a digit, or on any scoped document claiming the tree lacks `.git`. A generic number scan was
+  measured and rejected (10 hits, 3 false positives on dated records); the curated list flags
+  exactly the nine real defects. Extend the list only when a new undated claim is measured.
+- Evidence: `source-commit:b2f96bc`, `logs_38572274675.zip`, `logs_38572274795.zip`,
+  `tests/status-doc-currency.test.mjs`,
+  `handoff/release-evidence/T360-20261014-131512-a-14-doc-live-count-currency.md`.
+- CI on `b2f96bc`: Governance `38572274826`, UAT `38572274675` (8m05s), Simulation
+  `38572274795` (8m06s) — all success.
+- **Phase-skip hole found while closing A-14, same class as A-02.** `workflow:advance` only
+  rejects a phase whose order is *lower* than the current one; it does not require the next
+  phase in sequence. This item therefore went STAGING → RELEASED → CLOSED without passing
+  `RELEASE_READY`, whose `releaseEvidence` check never ran, and the item's `releaseEvidence`
+  array had to be backfilled after close. A gate that can be bypassed by skipping the step that
+  would have enforced it is not a gate. **Next work item: make `commandAdvance` require
+  `nextOrder === currentOrder + 1` (BLOCKED excepted), with a test that a jump over
+  `RELEASE_READY` is rejected and `RELEASE_READY` still requires resolvable evidence.**
+- **Open findings: A-07 HIGH (needs human Stage-20 acceptance), A-13 MEDIUM, A-15 MEDIUM.**
+  All CRITICAL findings are closed.
+- Canonical matrix: 48 features = 27 FOUNDATION, 3 PARTIAL, 16 IMPLEMENTED_RUNTIME_PENDING,
+  2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
+- Local: `test:dependency-free` 1859/1859 (+4), lint, `workflow:validate` (51),
+  `validate:repo` (1215 files / 202 Prisma models), `audit:full:repo` (7),
+  `audit:product:completeness` — all PASS.
+- **Human gate remains untouched and postponed by request:** P5 cannot close until a human
+  accepts the runtime presentation (rejected twice: V1, V2; PENDING for V4).
 ## 2026-10-14 — A-02 CLOSED; 4 findings left (IMPLEMENTATION)
 
 - Active work item: none. Last closed: `T360-20261014-123151`.

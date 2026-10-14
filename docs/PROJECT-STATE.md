@@ -645,3 +645,67 @@ controls. Exact-source GitHub on `d6c5487`: Workflow Governance `38566522526`, A
 `humanStage20=PENDING`. Local: `test:dependency-free` **1855/1855** (+5), lint,
 `workflow:validate` (50), `validate:repo` (1212 files / 202 Prisma models), `audit:full:repo` (7)
 — all PASS.
+
+---
+
+## 2026-10-14 — A-14 CLOSED — undated live counts removed from governance prose
+
+`T360-20261014-131512` (`documentation`, W0, `MEDIUM`, dependency `T360-20261014-123151`) is
+CLOSED. The finding was `audit:A-14`, "status/governance documents conflict or lag current
+evidence".
+
+**The defect was a class, not a typo.** Prose that says *currently*, *current count is*, *live
+counts are*, *current figures are* or *now reports* carries a number that is true when written
+and false at the next commit. Measured before the fix, nine such lines existed:
+
+| File | Line | Stale claim (paraphrased; the exact wording is preserved only in `handoff/release-evidence/`) |
+| --- | --- | --- |
+| `STATUS-FINAL.md` | 3 | 4 active work items, 1089 tests, and a false claim that the tree had no `.git` |
+| `docs/PROJECT-STATE.md` | 3 | 36 controllers / 454 handlers / 180 models / 63 destinations / 420 controls / 1089 tests |
+| `docs/PROJECT-STATE.md` | 5 | a false claim that this copy had no `.git` |
+| `docs/PROJECT-STATE.md` | 246 | 1021 files, 454 API handlers, 420 controls, 1089 dependency-free tests |
+| `docs/F12-FINAL-UI-UX-COMPLETION.md` | 31 | a file count of 1021 |
+| `docs/COMPLETION-DOCS-INDEX.md` | 34 | 454 routes, payroll 30, platform 41 |
+| `docs/COMPLETION-DOCS-INDEX.md` | 38 | 454 routes and 420 controls |
+| `docs/COMPLETION-DOCS-INDEX.md` | 14 | 509 handlers, 195 models, 65 destinations, plus the same false `.git` claim |
+| `docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md` | 83 | 63 of 63 contextual views |
+
+The counting rule in `docs/PROJECT-STATE.md` was the worst offender: it announced the canonical
+counting rule and then broke it in the same sentence.
+
+**Business rule.** Counts belong to machines. A document may name the command or file that
+regenerates a number, and may record a number that is explicitly dated as a historical fact; it
+may not assert an undated current value.
+
+**Guard, deliberately narrow.** `tests/status-doc-currency.test.mjs` fails on a line that
+matches one of a **curated** live-claim phrasing *and* contains a digit. A generic number scan
+was measured first and rejected: it flagged 10 lines, three of which were dated records or
+harmless prose. The curated list flags exactly the nine real defects and nothing else. A
+A separate rule rejects any prose asserting the working copy lacks `.git`; that claim was
+repeated in three files and is false in this repository.
+
+**One expectation proven stale.** `docs/PROJECT-STATE.md:3` and `STATUS-FINAL.md:3` both
+asserted the working copy had no `.git`; the repository does. Both were rewritten to a timeless
+instruction to verify against `git log`.
+
+**Closed.** `audit:A-14` (MEDIUM) → `RUNTIME_VERIFIED`, evidence =
+`source-commit:b2f96bc` + `logs_38572274675.zip` + `logs_38572274795.zip` +
+`tests/status-doc-currency.test.mjs` +
+`handoff/release-evidence/T360-20261014-131512-a-14-doc-live-count-currency.md`. Exact-source
+GitHub on `b2f96bc`: Workflow Governance `38572274826`, Automated UAT `38572274675` (8m05s),
+Full System Simulation `38572274795` (8m06s) — all success.
+
+**Open findings: 3 of 15** — A-07 (HIGH, requires human Stage-20 acceptance), A-13, A-15
+(MEDIUM). Canonical matrix otherwise unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
+16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+`humanStage20=PENDING`. Local: `test:dependency-free` **1859/1859** (+4), lint,
+`workflow:validate` (51), `validate:repo` (1215 files / 202 Prisma models), `audit:full:repo` (7)
+— all PASS.
+
+**Phase-skip hole found during close, out of scope for A-14.** `workflow:advance` only rejects
+a phase whose order is *lower* than the current one; it does not require the next phase in
+sequence. This item therefore went STAGING → RELEASED → CLOSED without passing `RELEASE_READY`,
+whose `releaseEvidence` check never ran, and the item's `releaseEvidence` array had to be
+backfilled after close. Same class as A-02: a gate that can be bypassed by skipping the step
+that would have enforced it. A separate work item must make `commandAdvance` require
+`nextOrder === currentOrder + 1` (BLOCKED excepted) so no phase can be skipped.
