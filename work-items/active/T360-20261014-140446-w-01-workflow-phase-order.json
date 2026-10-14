@@ -1,0 +1,58 @@
+{
+  "id": "T360-20261014-140446",
+  "title": "W-01: workflow:advance must not skip a phase",
+  "type": "bug",
+  "module": "workflow",
+  "wave": "W0",
+  "phase": "STAGING",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20261014-131512"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "MEDIUM",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "W-01 is canonical in config/product-completeness.json only if a finding is added for it; this work item closes the demonstrated hole regardless. It closes only when workflow:advance rejects a skipped phase and a dependency-free test proves it; editing the phase string by hand to claim the fix is forbidden.",
+    "The defect was demonstrated, not hypothesised: while closing T360-20261014-131512 the advance commands were STAGING -> RELEASED -> CLOSED, because commandAdvance only rejects a phase whose order is lower than the current one. RELEASE_READY and its releaseEvidence check never ran, and the item file had to be backfilled after close.",
+    "A gate that can be bypassed by skipping the step that would have enforced it is not a gate. This is the same class as A-02 and must be closed by the same standard: the control derives the rule, the test proves the negative case, and nothing is weakened to make the happy path pass.",
+    "A transition is legal only when the target phase is the immediate successor of the current phase in config/workflow-policy.json phaseOrder. BLOCKED remains reachable from any phase and remains a dead end, matching the documented manual path for a blocked item.",
+    "RELEASE_READY must fail when releaseEvidence is empty; because every path to CLOSED now passes through RELEASE_READY, that check is reachable on every close and can no longer be skipped.",
+    "No existing assertion may be weakened, no phase may be removed from phaseOrder, and productReady, currentPhase and humanStage20 stay untouched."
+  ],
+  "acceptanceCriteria": [
+    "workflow:advance rejects any non-BLOCKED transition whose target is not the immediate successor of the current phase, with an error naming both phases.",
+    "workflow:advance still allows a single-step advance through every phase, and still allows entering BLOCKED from any phase.",
+    "A dependency-free test proves the negative cases: a jump from STAGING to RELEASED is rejected; a jump from INTAKE to VERIFICATION is rejected; a step from STAGING to RELEASE_READY with empty releaseEvidence is rejected, and the same step succeeds once the evidence path is set.",
+    "The test also proves the positive case: a fresh item walks INTAKE through CLOSED one step at a time with no gaps.",
+    "Both GitHub heavy workflows and Workflow Governance stay green on the exact commit."
+  ],
+  "testPlan": [
+    "node --test tests/workflow-phase-order.test.mjs — new control, negative and positive cases",
+    "npm run test:dependency-free — full suite, including workflow validation over the repository work items",
+    "npm run lint, npm run workflow:validate, npm run validate:repo, npm run audit:full:repo",
+    "GitHub exact-source Full Automated UAT and Full System Simulation — green with productionTouched false"
+  ],
+  "migrationPlan": "No schema migration. Only scripts/workflow.mjs and one dependency-free test change; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the commit. workflow:advance returns to allowing skips and the phase-order test disappears; nothing else changes and no data is written. The prior green commit remains a valid checkpoint.",
+  "monitoringPlan": "The test runs inside test:dependency-free on every local run and on both heavy workflows, so a reintroduced skip fails the build rather than quietly bypassing RELEASE_READY.",
+  "securityNotes": "Process integrity only. No secret, token, credential or personal data is read or written; no runtime path, permission or tenant check changes.",
+  "documentation": [
+    "docs/PROJECT-STATE.md",
+    "handoff/CURRENT-WORK.md",
+    "handoff/release-evidence/T360-20261014-140446-w-01-workflow-phase-order.md"
+  ],
+  "createdAt": "2026-10-14T14:04:46.848Z",
+  "updatedAt": "2026-10-14T14:18:33.198Z",
+  "releaseEvidence": []
+}

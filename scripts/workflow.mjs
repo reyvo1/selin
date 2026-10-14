@@ -187,7 +187,20 @@ function commandAdvance(args) {
   const item = loadJson(path);
   const currentOrder = policy.phaseOrder[item.phase] ?? 99;
   const nextOrder = policy.phaseOrder[phase] ?? 99;
-  if (phase !== 'BLOCKED' && nextOrder < currentOrder) fail(`Tidak boleh mundur dari ${item.phase} ke ${phase}. Gunakan work item baru atau dokumentasikan rollback fase secara manual.`);
+  // W-01: a phase can only advance to its immediate successor. Anything else either
+  // goes backwards or skips the gate that would have enforced the next check, and a gate
+  // that can be bypassed by skipping the step that enforces it is not a gate.
+  const blockedOrder = policy.phaseOrder.BLOCKED ?? 99;
+  if (phase !== 'BLOCKED' && nextOrder !== currentOrder + 1) {
+    if (currentOrder === blockedOrder) {
+      fail(`Item berstatus ${item.phase} adalah dead end; hanya BLOCKED yang dapat dituju. Gunakan work item baru atau dokumentasikan rollback fase secara manual.`);
+    }
+    if (nextOrder < currentOrder) {
+      fail(`Tidak boleh mundur dari ${item.phase} ke ${phase}. Gunakan work item baru atau dokumentasikan rollback fase secara manual.`);
+    }
+    const expected = Object.entries(policy.phaseOrder).find(([, order]) => order === currentOrder + 1)?.[0];
+    fail(`Tidak boleh melompat dari ${item.phase} ke ${phase}; phase berikutnya harus ${expected}.`);
+  }
   item.phase = phase;
   item.updatedAt = new Date().toISOString();
   const errors = validateItem(item, basename(path));
