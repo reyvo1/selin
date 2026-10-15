@@ -697,7 +697,7 @@ Full System Simulation `38572274795` (8m06s) — all success.
 
 **Open findings: 3 of 15** — A-07 (HIGH, requires human Stage-20 acceptance), A-13, A-15
 (MEDIUM). Canonical matrix otherwise unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
-16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
 `humanStage20=PENDING`. Local: `test:dependency-free` **1859/1859** (+4), lint,
 `workflow:validate` (51), `validate:repo` (1215 files / 202 Prisma models), `audit:full:repo` (7)
 — all PASS.
@@ -744,7 +744,7 @@ System Simulation `38579364562` — all success.
 
 **Open findings unchanged: 3 of 15** — A-07 (HIGH, requires human Stage-20 acceptance), A-13,
 A-15 (MEDIUM). Canonical matrix unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
-16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
 `humanStage20=PENDING`. Local: `test:dependency-free` **1861/1861** (+2), lint,
 `workflow:validate` (52), `audit:full:repo` (7) — all PASS.
 
@@ -792,3 +792,46 @@ own fix.
 human gate and cannot be closed by code. `productReady=false`, `currentPhase=P5`,
 `humanStage20=PENDING` — all unchanged. Local: `test:dependency-free` **1875/1875**, lint,
 `workflow:validate`, `validate:repo`, `audit:full:repo` — all PASS.
+
+## 2026-10-15 — A-16 CLOSED — the A-14 phrasing list was defeated by its own predicted case
+
+A-14 closed with `tests/status-doc-currency.test.mjs`, whose rule is a curated `LIVE_CLAIM`
+regex of seven phrasings. Its closing notes recorded the limitation in plain words: *"Extend the
+list only when a new undated claim is measured."* The limitation was measured the next day, by
+this project's own work.
+
+Two governance documents came to assert a feature-matrix distribution whose
+`IMPLEMENTED_RUNTIME_PENDING` and `RUNTIME_VERIFIED` counts were each off by one from the
+authoritative figures in `config/product-completeness.json`: two blocks in `docs/PROJECT-STATE.md`
+and three in `handoff/CURRENT-WORK.md`, ten count tokens in total. `git show`
+across the five commits of the A-13/A-15 session confirms the matrix never held those values — the
+counts were wrong when written and then copied forward between handoff blocks. The prose used none
+of the seven curated phrasings, so the guard read every line as clean: local gates and all three
+GitHub workflows stayed green through the whole session.
+
+This is the same argument that raised A-15, applied to A-14's own control. A rule that is a list
+of known-good names fails on the first name nobody thought of.
+
+**The rule is now derived rather than curated.** A distribution claim is any sentence naming two
+or more canonical status tokens; inside such a sentence, every `N STATUS` must equal the count in
+the matrix, from `features` or from `postAuditFindings`. Both tokens and counts are read from
+`config/product-completeness.json`, so there is nothing to curate and a future status token is
+picked up by reading the file rather than by editing a regex.
+
+A bare `N STATUS` is deliberately not checked, for two reasons measured on the pre-fix corpus. A
+sequence such as `27 FOUNDATION, 3 PARTIAL` would otherwise read `3` as FOUNDATION's count, and
+phase designators such as `` `P2 RUNTIME_VERIFIED` `` and `` `P5 IMPLEMENTED_RUNTIME_PENDING` ``
+carry no count at all — a phase id is never a count, so both are exempted structurally rather
+than by a list of exceptions. The naive form produced **10 hits**, one of which was a phase
+designator. The sentence-scoped form produced **9 hits with none**, and all nine were this
+defect. The rule was run against the documents *before* they were corrected, so it is proven red
+on the real defect rather than on a synthetic case. `handoff/generated/` is excluded from the scan
+because it is derived from the same source each run and cannot drift on its own.
+
+Closed by `T360-20261015-150000`. Local: `test:dependency-free` **1878/1878** (+3), lint,
+`workflow:validate` (55), `validate:repo` (1228 files / 202 Prisma models), `audit:full:repo` (7)
+— all PASS.
+
+**Findings: 15 of 16 `RUNTIME_VERIFIED`.** The one remaining is `audit:A-07` (HIGH) — the human
+gate, which code cannot close. `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING` —
+all unchanged.

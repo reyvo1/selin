@@ -993,6 +993,23 @@
         "config/admin-contextual-workflow-map.json",
         "handoff/release-evidence/T360-20261015-131743-a-15-admin-contextual-mount-enforcement.md"
       ]
+    },
+    {
+      "id": "audit:A-16",
+      "kind": "POST_AUDIT_FINDING",
+      "key": "A-16",
+      "title": "Status-doc currency guard enforces a curated phrasing list, so a matrix distribution claim in other wording is not checked",
+      "severity": "MEDIUM",
+      "targetPhase": "P0",
+      "status": "RUNTIME_VERIFIED",
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. Closed 2026-10-15 by T360-20261015-150000. A-14 closed with a LIVE_CLAIM regex of seven curated phrasings, and its closing notes recorded the limitation: extend the list only when a new undated claim is measured. The limitation materialised. Two governance documents, docs/PROJECT-STATE.md and handoff/CURRENT-WORK.md, asserted 16 IMPLEMENTED_RUNTIME_PENDING and 2 RUNTIME_VERIFIED for the feature matrix while config/product-completeness.json held 17 and 1 - ten wrong-count occurrences in total, four in the first file and six in the second, copied forward between handoff blocks. git show across the five commits confirms the matrix never held those values. The prose used no LIVE_CLAIM wording, so every local and CI gate stayed green. Rule: a distribution claim is any sentence naming two or more canonical status tokens, and inside it every N STATUS must equal the count in the matrix, from features or postAuditFindings. The tokens and counts are read from the matrix, so there is nothing to curate and a future token is picked up by reading the file. A bare N STATUS is deliberately not checked: 27 FOUNDATION, 3 PARTIAL would otherwise read 3 as FOUNDATION's count, and phase designators such as P2 RUNTIME_VERIFIED or P5 IMPLEMENTED_RUNTIME_PENDING carry no count. Measured on the pre-fix corpus, the naive form produced 10 hits and the sentence-scoped form 9; the single hit the scope dropped was the phase designator, and all 9 remaining were this defect. handoff/generated/ is excluded because it is derived from the same source each run and cannot drift on its own, so counting it would report one defect under two filenames.",
+      "evidence": [
+        "tests/status-doc-currency.test.mjs",
+        "docs/PROJECT-STATE.md",
+        "handoff/CURRENT-WORK.md",
+        "config/product-completeness.json",
+        "handoff/release-evidence/T360-20261015-150000-a-16-matrix-distribution-currency.md"
+      ]
     }
   ],
   "phaseOrder": [

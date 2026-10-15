@@ -1,0 +1,63 @@
+{
+  "id": "T360-20261015-150000",
+  "title": "A-16: matrix distribution claims must match the canonical matrix, not a curated phrasing list",
+  "type": "bug",
+  "module": "governance",
+  "wave": "W0",
+  "phase": "CLOSED",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20261014-131512"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "LOW",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "A-16 is canonical in config/product-completeness.json postAuditFindings; closure requires the phase exit criteria and a derived control, not marker presence. The finding says the A-14 guard enforces a curated phrasing list, and a curated list fails on the first phrasing nobody thought of.",
+    "Measured 2026-10-15: four governance documents (docs/PROJECT-STATE.md twice, handoff/CURRENT-WORK.md three times) asserted '16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED' while config/product-completeness.json held 17 and 1. The defect was introduced in the A-13/A-15 session and survived every local and CI gate because status-doc-currency.test.mjs only matches LIVE_CLAIM phrasings such as 'currently holds' and 'current count is', and that prose never used one. A-14's own closing notes recorded the limitation ('a new undated claim written in words outside the list would not trip the guard'); this is that limitation materialising.",
+    "The fix is a derived rule, not a longer list. A distribution claim is any sentence that names two or more of the canonical status tokens; inside it, every 'N STATUS' must equal the count in config/product-completeness.json (features or postAuditFindings). The tokens and counts come from the matrix itself, so there is no phrasing to curate and no name to forget.",
+    "A bare 'N STATUS' is deliberately not checked: '27 FOUNDATION, 3 PARTIAL' would otherwise read 3 as FOUNDATION's count, and phase designators such as 'P2 RUNTIME_VERIFIED' or 'P5 IMPLEMENTED_RUNTIME_PENDING' carry no count at all. The two-or-more-tokens-per-sentence requirement is what separates a distribution claim from a phase label, and it was measured: the naive form produced 12 hits with 2 false positives; this form produced 9 with none.",
+    "handoff/generated/ is excluded from the scan because it is derived from the same source each run and cannot drift on its own; counting it would report one defect under two filenames.",
+    "No business logic, API contract, permission, tenant or branch authority, schema, runtime path or gate predicate may be weakened to make this pass. productReady, currentPhase and humanStage20 stay untouched."
+  ],
+  "acceptanceCriteria": [
+    "tests/status-doc-currency.test.mjs fails when a governance document asserts a status distribution that disagrees with config/product-completeness.json, regardless of the wording used.",
+    "A control proves the negative case on the exact phrasing that shipped wrong ('16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED') and the positive case on the corrected counts.",
+    "Phase designators ('P2 RUNTIME_VERIFIED', 'P5 IMPLEMENTED_RUNTIME_PENDING') and single-token mentions are not flagged, so the rule does not demand an escape hatch.",
+    "The 9 real defects are corrected in docs/PROJECT-STATE.md and handoff/CURRENT-WORK.md, and no residual wrong count remains outside handoff/generated/.",
+    "productReady, currentPhase and humanStage20 stay untouched.",
+    "Both GitHub heavy workflows and Workflow Governance stay green on the exact commit."
+  ],
+  "testPlan": [
+    "node --test tests/status-doc-currency.test.mjs",
+    "npm run test:dependency-free",
+    "npm run lint",
+    "npm run workflow:validate",
+    "npm run validate:repo",
+    "npm run audit:full:repo",
+    "GitHub exact-source Full Automated UAT and Full System Simulation"
+  ],
+  "migrationPlan": "No schema migration. Only the currency test and the governance prose change; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the commit. The distribution rule and its controls disappear, the curated LIVE_CLAIM list remains, and the four prose locations return to the wrong counts. Nothing else changes and no data is written.",
+  "monitoringPlan": "The distribution control runs inside the dependency-free suite on every local run and on both heavy workflows, so a status distribution that disagrees with the matrix fails the build rather than propagating into handoff and project state.",
+  "securityNotes": "No secret, token, credential or personal data appears in any file this work item edits, and none may be introduced. This is a governance-strength change only.",
+  "documentation": [
+    "docs/PROJECT-STATE.md",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-15T15:00:00.000Z",
+  "updatedAt": "2026-10-15T15:00:00.000Z",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261015-150000-a-16-matrix-distribution-currency.md"
+  ]
+}

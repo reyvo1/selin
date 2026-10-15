@@ -1,5 +1,43 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-15 — A-16 CLOSED; the A-14 phrasing list was defeated (CLOSED)
+
+- Active work item: none. Last closed: `T360-20261015-150000` (A-16).
+- **A-16 (MEDIUM) → `RUNTIME_VERIFIED`.** Raised and closed in the same session. The
+  `LIVE_CLAIM` regex that A-14 closed with is a curated list of seven phrasings, and its own
+  closing notes recorded the limitation: *"Extend the list only when a new undated claim is
+  measured."* It was measured. Two governance documents asserted a feature-matrix
+  distribution whose `IMPLEMENTED_RUNTIME_PENDING` and `RUNTIME_VERIFIED` counts were each off by
+  one — ten occurrences in total, four in `docs/PROJECT-STATE.md` and six in this file, copied
+  forward between handoff
+  blocks; `git show` across the five commits confirms the matrix
+  never held them. The prose used no curated wording, so every local and CI gate stayed green —
+  through five commits and three workflows.
+- **The rule is derived, not curated.** A distribution claim is any sentence naming two or more
+  canonical status tokens; inside it, every `N STATUS` must equal the count in the matrix, from
+  `features` or `postAuditFindings`. Tokens and counts are read from the matrix, so there is
+  nothing to curate and a future token is picked up by reading the file. This is the same argument
+  as A-15: a rule that is a list of known-good names fails on the first name nobody thought of.
+- **A bare `N STATUS` is deliberately not checked.** `27 FOUNDATION, 3 PARTIAL` would otherwise
+  read `3` as FOUNDATION's count, and phase designators (`P2 RUNTIME_VERIFIED`,
+  `P5 IMPLEMENTED_RUNTIME_PENDING`) carry no count. Measured on the pre-fix corpus: the naive form
+  produced 10 hits and the sentence-scoped form 9; the single hit the scope dropped was the phase
+  designator, and all 9 remaining were this defect. It was proven red on the documents *before*
+  they were corrected.
+- **`handoff/generated/` is out of scope** — derived from the same source each run, so counting it
+  would report one defect under two filenames and train a reader to ignore the report.
+- Evidence: `tests/status-doc-currency.test.mjs` (7 controls, up from 4),
+  `handoff/release-evidence/T360-20261015-150000-a-16-matrix-distribution-currency.md`.
+- Canonical matrix: 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING,
+  1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
+- Findings: **15 of 16 `RUNTIME_VERIFIED`**. The one remaining is `audit:A-07` (HIGH) — the
+  human gate.
+- Local: `test:dependency-free` **1878/1878** (+3), lint, `workflow:validate` (55),
+  `validate:repo` (1228 files / 202 Prisma models), `audit:full:repo` (7) — all PASS.
+- **Next: nothing code can close.** A-07 requires a human accepting the runtime presentation
+  (rejected twice: V1, V2; PENDING for V4), postponed by request. Any further work should be
+  human-acceptance readiness for Stage 20, or a new finding measured from the repository.
+
 ## 2026-10-15 — A-13 + A-15 CLOSED; 1 finding left, and it is human (CLOSED)
 
 - Active work item: none. Last closed: `T360-20261015-131743` (A-15), after
@@ -28,7 +66,7 @@
   acceptance failed despite automated green. It is the human gate and cannot be closed by code.
   All CRITICAL findings are closed.
 - Canonical matrix otherwise unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
-  16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+  17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
   `humanStage20=PENDING`.
 - Local: `test:dependency-free` 1875/1875 (+8), lint, `workflow:validate`, `validate:repo`,
   `audit:full:repo` (7) — all PASS.
@@ -56,7 +94,7 @@
 - **Open findings: A-07 HIGH (needs human Stage-20 acceptance), A-13 MEDIUM (PARTIAL),
   A-15 MEDIUM.** All CRITICAL findings are closed.
 - Canonical matrix unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
-  16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`,
+  17 IMPLEMENTED_RUNTIME_PENDING, 1 RUNTIME_VERIFIED; `productReady=false`,
   `currentPhase=P5`, `humanStage20=PENDING`.
 - Local: `test:dependency-free` 1861/1861 (+2), lint, `workflow:validate` (52),
   `validate:repo`, `audit:full:repo` (7) — all PASS.
@@ -93,8 +131,8 @@
   `RELEASE_READY` is rejected and `RELEASE_READY` still requires resolvable evidence.**
 - **Open findings: A-07 HIGH (needs human Stage-20 acceptance), A-13 MEDIUM, A-15 MEDIUM.**
   All CRITICAL findings are closed.
-- Canonical matrix: 48 features = 27 FOUNDATION, 3 PARTIAL, 16 IMPLEMENTED_RUNTIME_PENDING,
-  2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
+- Canonical matrix: 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING,
+  1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
 - Local: `test:dependency-free` 1859/1859 (+4), lint, `workflow:validate` (51),
   `validate:repo` (1215 files / 202 Prisma models), `audit:full:repo` (7),
   `audit:product:completeness` — all PASS.
