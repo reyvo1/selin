@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "admin",
   "wave": "W0",
-  "phase": "VERIFICATION",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",

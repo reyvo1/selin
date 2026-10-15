@@ -747,3 +747,48 @@ A-15 (MEDIUM). Canonical matrix unchanged: 48 features = 27 FOUNDATION, 3 PARTIA
 16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
 `humanStage20=PENDING`. Local: `test:dependency-free` **1861/1861** (+2), lint,
 `workflow:validate` (52), `audit:full:repo` (7) — all PASS.
+
+## 2026-10-15 — A-13 + A-15 CLOSED — the last two findings that code can close
+
+**A-13 (MEDIUM) → `RUNTIME_VERIFIED`, commit `c938056`.** The launchers it described were
+removed before intake, so `PARTIAL` was a status lagging the evidence — the A-14 class of defect.
+Measured 2026-10-14: zero tracked `.bat`/`.cmd`/`.ps1`/`.vbs`, zero of 123 `package.json` scripts
+invoking a Windows shell. `tests/ubuntu-workflow-windows-launchers.test.mjs` fails if a tracked
+file has a launcher extension or a script targets a Windows shell. Measured zero, so the rule
+reproduces the repository instead of demanding an escape hatch. Closed by
+`T360-20261015-045528`.
+
+**A-15 (MEDIUM) → `RUNTIME_VERIFIED`, commit `ef47455`.** Closed by `T360-20261015-131743`.
+
+A-15 says the UI audit proves handler presence, not workflow completeness. It was demonstrated
+by `R2HrConfiguration`, defined but never rendered, so `/people/attendance` and
+`/people/compliance` both displayed the payroll lifecycle and all ten panels were unreachable
+from every role while every gate stayed green. Presence in source is not a mounted workflow.
+
+The gap was still live at intake. `config/admin-contextual-workflow-map.json` claimed
+`inventory-control/overview` was rendered by a component called `InventoryLedger`, and that
+identifier appears in **no file in the repository**. The work shipped under `OperationsView` plus
+an inline ledger section, and no gate noticed that the map named a component that was never
+written. Same shape as `R2HrConfiguration`, found by the same method — which is the argument for
+deriving the rule rather than writing a list of known-good names.
+
+`scripts/lib/admin-contextual-mount.mjs` derives two checks from the map and the page. A renderer
+must appear as a JSX element in the page; a subview must be bound as a mode by a callsite that
+mounts it. Both are wired into `audit-admin-contextual-workflows.mjs`, and either one failing
+fails the audit. Three shapes are honoured rather than assumed away: a mode-less renderer such as
+`ManufacturingView` is self-routing and is not asked for a mode union, a dynamic mode such as
+`activeDomainView?.key` is treated as reachable, and `commerceSection` folds into
+`commerce/<section>`. The subview union is recomputed per row rather than cached per component,
+because a cache would make the verdict depend on row order, and a gate whose verdict depends on
+iteration order is not a gate.
+
+The wiring is proven end to end rather than by reading it: a control copies the files the audit
+reads into a scratch directory, plants the same phantom renderer, and runs the real audit against
+it, asserting a non-zero exit naming `InventoryLedger`. That is the A-02 standard applied to A-15's
+own fix.
+
+**Findings: 14 of 15 `RUNTIME_VERIFIED`.** The one remaining is `audit:A-07` (HIGH,
+`IMPLEMENTED_RUNTIME_PENDING`): R7/F12 visual acceptance failed despite automated green. It is the
+human gate and cannot be closed by code. `productReady=false`, `currentPhase=P5`,
+`humanStage20=PENDING` — all unchanged. Local: `test:dependency-free` **1875/1875**, lint,
+`workflow:validate`, `validate:repo`, `audit:full:repo` — all PASS.

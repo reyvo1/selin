@@ -1,5 +1,43 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-15 — A-13 + A-15 CLOSED; 1 finding left, and it is human (CLOSED)
+
+- Active work item: none. Last closed: `T360-20261015-131743` (A-15), after
+  `T360-20261015-045528` (A-13).
+- **A-13 (MEDIUM) → `RUNTIME_VERIFIED`, commit `c938056`.** The Windows launchers it described
+  were removed before intake, so `PARTIAL` was a status lagging the evidence (A-14's class).
+  Measured: zero tracked `.bat`/`.cmd`/`.ps1`/`.vbs`, zero of 123 `package.json` scripts invoking
+  a Windows shell. `tests/ubuntu-workflow-windows-launchers.test.mjs` now fails on either.
+- **A-15 (MEDIUM) → `RUNTIME_VERIFIED`, commit `ef47455`.** The gap was still live at intake:
+  the map claimed `inventory-control/overview` was rendered by `InventoryLedger` and that
+  identifier appears in **no file in the repository** — the work shipped under `OperationsView`
+  plus an inline ledger section. Same shape as `R2HrConfiguration`, found by the same method.
+- **The rule is derived, not a list of known-good names.** `scripts/lib/admin-contextual-mount.mjs`
+  checks that a mapped renderer appears as JSX in the page and that a mapped subview is bound as a
+  mode by a callsite that mounts it. Both are wired into `audit-admin-contextual-workflows.mjs`;
+  either failing fails the audit. Three shapes honoured: mode-less renderers are self-routing,
+  dynamic modes are reachable, `commerceSection` folds into `commerce/<section>`. The union is
+  recomputed per row — a component-keyed cache would make the verdict depend on row order.
+- **Wiring proven end to end, not by reading it.** A control copies the files the audit reads into
+  a scratch directory, plants the phantom renderer, runs the real audit, and asserts a non-zero
+  exit naming `InventoryLedger`. That is the A-02 standard applied to A-15's own fix.
+- **A process defect was found and fixed:** `config/product-completeness.json` had promoted A-15
+  as a side effect of the A-13 session hook rather than by its own measured evidence. A finding's
+  promotion belongs to the commit that carries its evidence; it was corrected in `a490b9e`.
+- **Open findings: 1 of 15 — `audit:A-07` (HIGH, `IMPLEMENTED_RUNTIME_PENDING`).** R7/F12 visual
+  acceptance failed despite automated green. It is the human gate and cannot be closed by code.
+  All CRITICAL findings are closed.
+- Canonical matrix otherwise unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
+  16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+  `humanStage20=PENDING`.
+- Local: `test:dependency-free` 1875/1875 (+8), lint, `workflow:validate`, `validate:repo`,
+  `audit:full:repo` (7) — all PASS.
+- **Next: nothing code can close.** A-07 requires a human accepting the runtime presentation
+  (rejected twice: V1, V2; PENDING for V4), postponed by request. Any further work should be
+  human-acceptance readiness for Stage 20, or a new finding measured from the repository — not a
+  re-audit of findings already closed with derived controls.
+- **Human gate remains untouched and postponed by request:** P5 cannot close until a human
+  accepts the runtime presentation.
 ## 2026-10-14 — W-01 CLOSED; 3 findings left (CLOSED)
 
 - Active work item: none. Last closed: `T360-20261014-140446` (W-01, process finding).
