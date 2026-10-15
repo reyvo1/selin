@@ -1,0 +1,48 @@
+{
+  "id": "T360-20261015-225143",
+  "title": "information density: large containers render almost nothing, and storefront shows a single letter where a photo belongs",
+  "type": "bug",
+  "module": "ui-shell",
+  "wave": "W0",
+  "phase": "VERIFICATION",
+  "risk": "LOW",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "An empty state exists to tell the operator what is missing and what to do next. A box that reserves 144px of a till screen to say one sentence fails that purpose even when the sentence is correct.",
+    "The box may be styled without its text being styled, and that is what happened: the POS and the storefront sized and coloured .emptyState but shipped no rule for the <h4> and <p> inside it, so both rendered at browser-default size and margin. The Admin app had those rules; the other two did not.",
+    "A heading is a heading whichever element carries it. One real Admin empty state uses <h2> where the stylesheet only listed <h4>, and until h2 and h3 were listed it rendered unstyled inside the same 132px box that h4 handled correctly.",
+    "One line of text does not need a full panel, so a single-sentence empty state stops reserving the min-height reserved by icon-bearing ones.",
+    "The box is never filled with placeholder content to make it look busy. The fix is legibility and proportion, not invented data."
+  ],
+  "acceptanceCriteria": [
+    "POS .emptyState and .syncEmpty style their h4, p, span, strong and small children; storefront .emptyState styles its h4 and p; Admin styles h2 and h3 as well as h4.",
+    "tests/operator-surface-completeness.test.mjs passes 10 of 10, pinning all three so the typography cannot be removed again.",
+    "npm run lint passes across all six workspaces and the full dependency-free suite is green."
+  ],
+  "testPlan": [
+    "tests/operator-surface-completeness.test.mjs: source contract over the three stylesheets. It asserts the text rules exist and that the h2/h3 gap is closed.",
+    "Visual acceptance on a real till size is NOT done: whether 144px became 92px reads better is a judgement no source assertion can make."
+  ],
+  "migrationPlan": "No database change. Stylesheet rules only.",
+  "rollbackPlan": "Revert the commit. Four CSS rule blocks in three stylesheets, no runtime path, no data, no flag. Nothing to compensate.",
+  "monitoringPlan": "The test runs inside npm run test:dependency-free and therefore in CI, so removing a rule again fails the build. No runtime metric applies: no server path changed.",
+  "securityNotes": "Read-only presentation. No credential, personal data, permission, tenant scope, endpoint or input handling is involved; the change adds text-size and colour declarations and nothing else.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-15T14:51:43.930Z",
+  "updatedAt": "2026-10-15T17:50:21.134Z"
+}
