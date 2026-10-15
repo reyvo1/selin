@@ -836,7 +836,7 @@ Closed by `T360-20261015-150000`. Local: `test:dependency-free` **1878/1878** (+
 gate, which code cannot close. `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING` —
 all unchanged.
 
-## 2026-10-15 — A-17: controller granularity hid 34 unreachable endpoints, all of them behind a reachable sibling
+## 2026-10-15 — A-17 CLOSED — controller granularity hid 34 unreachable endpoints, all behind a reachable sibling
 
 `config/f1-backend-ui-audit.json` answers one question per controller: is *any* route of this
 controller called by a UI app? It sets `routeStrings.some(...)` against the UI's callsites with a raw
@@ -904,9 +904,16 @@ Telegram and Digiflazz providers and nothing else, which is what makes `NODE_PRO
 rather than a guess.
 
 `npm run audit:endpoint:coverage` is chained into `npm run audit:full:repo`, so both heavy GitHub
-workflows execute it. `npm run test:dependency-free` **1886/1886** (+8), lint, `workflow:validate`
-(56), `validate:repo` (1232 files / 202 Prisma models), `audit:full:repo` — all PASS.
+workflows execute it. Local: `test:dependency-free` **1886/1886** (+8), lint, `workflow:validate`
+(56), `validate:repo` (1234 files / 202 Prisma models), `audit:full:repo` — all PASS.
 
-`productReady=false`, `currentPhase=P5`, `humanStage20=PENDING` — unchanged. A-17 closes the guard,
-not the gaps: the 8 `UI_GAP` entries remain open work on separate screens, and `audit:A-07` remains
-the human visual gate.
+Closed by `T360-20261015-164416`. CI on `44231ed`: Workflow Governance `38712544190` (28s), Full
+System Simulation `38712544100` (7m59s), Full Automated UAT `38712544099` (7m43s) — all success. The
+simulation job log records the gate executing rather than merely being scheduled:
+`audit:endpoint:coverage` reporting `controllers 46 (36 ALL_REACHED, 9 MIXED, 1 NONE_REACHED)`,
+`routes 532 across 428 distinct paths`, `flagged endpoints …: 34`, `baseline agreed: 34`, beside
+`Product completeness audit PASS … 17 post-audit findings` and `# tests 1886 / # pass 1886 / # fail 0`.
+
+`productReady=false`, `currentPhase=P5`, `humanStage20=PENDING` — unchanged. **Findings: 16 of 17
+`RUNTIME_VERIFIED`.** The one remaining is `audit:A-07` (HIGH), the human visual gate. A-17 closes the
+guard, not the gaps: the 8 `UI_GAP` entries remain open work on separate screens.

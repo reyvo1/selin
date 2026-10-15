@@ -1,9 +1,9 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
-## 2026-10-15 — A-17: endpoint coverage is now measured per endpoint (VERIFICATION)
+## 2026-10-15 — A-17 CLOSED; controller granularity hid 34 unreachable endpoints (CLOSED)
 
-- Active work item: `T360-20261015-164416` (A-17, `bug`, W0 `audit`, MEDIUM), **VERIFICATION**.
-- **A-17 (MEDIUM) raised.** `config/f1-backend-ui-audit.json` decides exposure per **controller**:
+- Active work item: none. Last closed: `T360-20261015-164416` (A-17).
+- **A-17 (MEDIUM) → `RUNTIME_VERIFIED`.** Raised and closed in the same session. `config/f1-backend-ui-audit.json` decides exposure per **controller**:
   is *any* route of it called? It reports **45 of 46** as `EXPOSED_OR_PARTIAL` with a `uiApps`
   list. That verdict is not false — it is too coarse to be a gate, because it cannot name *which*
   endpoint is missing. A controller with one dead endpoint and thirty live ones is
@@ -42,12 +42,20 @@
   `handoff/release-evidence/T360-20261015-164416-a-17-endpoint-coverage-is-measured-at-controller-granularity.md`.
 - Canonical matrix: 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING,
   1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
-- Findings: **15 of 17 `RUNTIME_VERIFIED`**. The two remaining are `audit:A-07` (HIGH, the human
-  gate) and `audit:A-17` itself.
+- Findings: **16 of 17 `RUNTIME_VERIFIED`**. The one remaining is `audit:A-07` (HIGH) — the human
+  gate, which code cannot close.
 - Local: `test:dependency-free` **1886/1886** (+8), lint, `workflow:validate` (56),
-  `validate:repo` (1232 files / 202 Prisma models), `audit:full:repo` (now including
-  `audit:endpoint:coverage`) — all PASS. CI identifiers are recorded in the follow-up
-  `docs(A-17)` commit.
+  `validate:repo` (1234 files / 202 Prisma models), `audit:full:repo` (now including
+  `audit:endpoint:coverage`) — all PASS.
+- CI on `44231ed`: Workflow Governance `38712544190` (28s), Full System Simulation
+  `38712544100` (7m59s), Full Automated UAT `38712544099` (7m43s) — all success. The
+  simulation job log shows `audit:endpoint:coverage` reporting 46 controllers / 532 routes /
+  34 flagged / baseline agreed 34, beside 1886/1886 tests and 17 findings.
+- **Next: the 8 `UI_GAP` entries are open work, not a control gap.** `branch-transfer` detail and
+  departure, digital-services transaction detail, bulk `offline-transactions`,
+  `platform/automation-jobs/:id`, and the `scan`/`submit`/`discard` steps of the mobile opname
+  draft — each already has a reachable sibling, so the screen is live and one step of it is not
+  wired. A-07 still requires a human accepting the runtime presentation.
 
 ## 2026-10-15 — A-16 CLOSED; the A-14 phrasing list was defeated (CLOSED)
 

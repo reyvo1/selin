@@ -152,6 +152,10 @@ just found. Three of the 8 `UI_GAP` entries are `@Roles`-guarded, so that shortc
 
 | Evidence | Meaning |
 | --- | --- |
+| `source-commit:44231edd493851de23f47a5ed45fb4177b5aa349` | The commit carrying the rule, the ledger, the controls and this document |
+| `38712544190` | Workflow Governance on that commit (28s) |
+| `38712544100` | Full System Simulation on that commit (7m59s) |
+| `38712544099` | Full Automated UAT on that commit (7m43s) |
 | `scripts/lib/frontend-endpoint-coverage.mjs` | The derived rule |
 | `scripts/audit-frontend-endpoint-coverage.mjs` | Report writer and baseline gate |
 | `config/frontend-endpoint-coverage-baseline.json` | The reviewed ledger of 34 |
@@ -162,9 +166,9 @@ just found. Three of the 8 `UI_GAP` entries are `@Roles`-guarded, so that shortc
 | `work-items/completed/T360-20261015-164416-a-17-endpoint-coverage-is-measured-at-controller-granularity.json` | The work item |
 | `handoff/release-evidence/T360-20261015-164416-a-17-endpoint-coverage-is-measured-at-controller-granularity.md` | This document |
 
-CI run identifiers are recorded in the follow-up `docs(A-17)` commit on the same change, which is the
-same two-commit shape A-16 used: the fix lands, the workflows run on that exact source, and the run
-numbers are written back afterwards rather than predicted.
+CI was run on the fix commit rather than predicted, which is the same two-commit shape A-16 used:
+`44231ed` landed, the three workflows ran against that exact source, and the run numbers and the
+verbatim gate output were written back afterwards in this document.
 
 ## Acceptance criteria
 
@@ -179,7 +183,8 @@ numbers are written back afterwards rather than predicted.
 | A bare interpolation cannot certify unrelated endpoints | Pass — pinned on the `domain-workspaces.ts:122` shape; 11 endpoints covered before the fix |
 | Removing a ledger entry re-surfaces the endpoint | Pass |
 | A `@Roles` endpoint cannot be filed as protocol | Pass — derived from the decorator |
-| The audit runs in CI | Pass — chained into `npm run audit:full:repo`, executed by both heavy workflows |
+| The audit runs in CI | Pass — chained into `npm run audit:full:repo`, executed by both heavy workflows; the Full System Simulation job log shows it reporting 46 / 532 / 34 agreed |
+| All three workflows green on the fix commit | Pass — `38712544190` (28s), `38712544100` (7m59s), `38712544099` (7m43s) on `44231ed` |
 | `productReady`, `currentPhase`, `humanStage20` untouched | Pass |
 
 ## Local verification
@@ -192,6 +197,26 @@ numbers are written back afterwards rather than predicted.
 | `npm run workflow:validate` | 56 work items, 8 waves |
 | `npm run validate:repo` | 1232 files, 202 Prisma models |
 | `npm run audit:full:repo` | PASS — full repository 1233 files / 532 API handlers / 514 UI elements, product completeness **17 findings**, **endpoint coverage 34 agreed with 34**, admin contextual 70/70, canonical ownership 9 domains, P5 visual |
+
+## CI verification
+
+The three workflows ran on `44231ed` and all three are green. The gate was not merely scheduled —
+the Full System Simulation job log records it executing, quoted verbatim:
+
+```
+> toko360-platform@0.5.3 audit:endpoint:coverage
+> node scripts/audit-frontend-endpoint-coverage.mjs
+Frontend endpoint coverage written: handoff/quality/frontend-endpoint-coverage-latest.json
+  controllers 46 (36 ALL_REACHED, 9 MIXED, 1 NONE_REACHED)
+  routes 532 across 428 distinct paths
+  flagged endpoints (unreachable with a reachable sibling): 34
+  baseline agreed: 34 entries reviewed in config/frontend-endpoint-coverage-baseline.json
+```
+
+The same job log records `Product completeness audit PASS: 48 features, 12 legacy phases, 17
+post-audit findings` immediately before it, and `# tests 1886 / # pass 1886 / # fail 0` after it.
+Artifacts `toko360-tested-runtime-44231ed…` and `toko360-full-system-evidence-44231ed…` are attached
+to that run.
 
 ## Product state
 
