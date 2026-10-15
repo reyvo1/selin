@@ -1,0 +1,59 @@
+{
+  "id": "T360-20261015-045528",
+  "title": "A-13: close the stale Windows-launcher clutter finding with a measurement gate",
+  "type": "bug",
+  "module": "workflow",
+  "wave": "W0",
+  "phase": "IMPLEMENTATION",
+  "risk": "LOW",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20261014-140446"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "LOW",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "A-13 (MEDIUM, PARTIAL) is canonical in config/product-completeness.json. It closes only when a dependency-free test proves the Ubuntu workflow carries zero Windows-first launchers; editing the status string alone is forbidden.",
+    "The finding has been PARTIAL since the 957-file audit, but the launchers it describes were removed in an earlier wave and nobody re-measured and closed it. That is the A-14 class of defect - a status that lags the evidence - and must not be closed by assertion.",
+    "Measured 2026-10-14 before intake: zero tracked .bat, .cmd, .ps1 or .vbs files anywhere in git ls-files; zero of the 123 package.json scripts invoke cmd.exe, powershell, notepad or a .bat/.cmd target; the only docs/ line matching a Windows command is the A-13 acceptance criterion itself, which states the goal rather than instructing a Windows path.",
+    "The Windows code that remains in scripts/*.mjs is correctly platform-guarded cross-platform developer support, gated on process.platform === win32 or an isWindows constant, and is a no-op on Ubuntu. It is not operator clutter and must not be deleted; the rule forbids Windows-first operator paths, not the existence of win32 branches.",
+    "The Ubuntu operator path is npm/Node/Bash, already stated in docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md sections 8 and the P6 launcher-removal bullet. This work item converts that prose claim into a failing gate.",
+    "No business logic, API contract, permission, tenant or branch authority, schema, runtime path or gate predicate may change, and no existing assertion may be weakened."
+  ],
+  "acceptanceCriteria": [
+    "A dependency-free test fails if any tracked file matches an extension that is a Windows-first launcher (.bat, .cmd, .ps1, .vbs) or if any package.json script invokes cmd.exe, powershell, notepad, or a .bat/.cmd target.",
+    "The same test passes today, proving the measurement is real and not aspirational.",
+    "The test allows win32 branches inside Node scripts, because platform-guarded developer support is not operator clutter; the assertion is about operator-facing launchers and npm entry points only.",
+    "docs/TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md keeps its Ubuntu-first statements; no Windows-first operator instruction is reintroduced.",
+    "audit:A-13 moves from PARTIAL to RUNTIME_VERIFIED with resolvable evidence, and the open-finding count drops from 3 to 2.",
+    "Both GitHub heavy workflows and Workflow Governance stay green on the exact commit."
+  ],
+  "testPlan": [
+    "node --test tests/ubuntu-workflow-windows-launchers.test.mjs - new control; a synthetic .cmd file and a synthetic windows-only npm script must each fail it",
+    "npm run test:dependency-free - full suite",
+    "npm run lint, npm run workflow:validate, npm run validate:repo, npm run audit:full:repo",
+    "GitHub exact-source Full Automated UAT and Full System Simulation - green with productionTouched false"
+  ],
+  "migrationPlan": "No schema migration. Only one dependency-free test changes; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the commit. The launcher gate disappears and A-13 returns to PARTIAL; nothing else changes, no data is written and no runtime path is affected. The prior green commit remains a valid checkpoint.",
+  "monitoringPlan": "The test runs inside test:dependency-free on every local run and on both heavy workflows, so a reintroduced Windows launcher fails the build rather than quietly re-cluttering the Ubuntu path.",
+  "securityNotes": "No secret, token, database URL, credential or personal data appears in this work item or in any file it edits, and none may be introduced. The platform-guarded win32 branches that remain are developer convenience only and are unreachable on Ubuntu.",
+  "documentation": [
+    "docs/PROJECT-STATE.md",
+    "handoff/CURRENT-WORK.md",
+    "handoff/release-evidence/T360-20261015-045528-a-13-windows-launcher-clutter.md"
+  ],
+  "createdAt": "2026-10-15T04:55:28.820Z",
+  "updatedAt": "2026-10-15T04:55:30.248Z",
+  "releaseEvidence": []
+}
