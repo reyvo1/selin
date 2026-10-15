@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { collectMountFailures, collectSubviewFailures } from './lib/admin-contextual-mount.mjs';
 
 const root = process.cwd();
 const domainFile = path.join(root, 'apps/admin/app/domain-workspaces.ts');
@@ -42,6 +43,19 @@ for (const row of mapping.rows) {
 }
 for (const key of expected) if (!mapped.has(key)) fail(`missing contextual mapping ${key}`);
 for (const key of mapped.keys()) if (!expected.includes(key)) fail(`stale contextual mapping ${key}`);
+
+// A-15: presence is not reachability. Every check above proves the map agrees
+// with the routing source; none of them prove the page actually renders what
+// the map names. It did not once already - the map claimed inventory-control/
+// overview was rendered by a component called InventoryLedger, and that
+// identifier existed in no file in the repository while the view shipped as an
+// inline panel under OperationsView, and every gate stayed green. The per-view
+// reachability tests that would have caught it are hand-written one view at a
+// time, so a view that silently unmounts is only caught if somebody happened
+// to write a test for that view.
+const mountFailures = collectMountFailures(mapping, pageSource);
+for (const message of mountFailures) fail(message);
+for (const message of collectSubviewFailures(mapping, pageSource)) fail(message);
 
 for (const key of ['master-data/catalog','master-data/customers']) if (!mapped.has(key)) fail(`Master Data semantic route missing: ${key}`);
 const masterDataSource = fs.readFileSync(path.join(root, 'apps/admin/app/modules/master-data.tsx'), 'utf8');

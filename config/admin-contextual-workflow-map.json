@@ -118,7 +118,7 @@
     {
       "workspace": "inventory-control",
       "view": "overview",
-      "renderer": "OperationsView:overview+InventoryLedger",
+      "renderer": "OperationsView:overview",
       "status": "SOURCE_IMPLEMENTED",
       "sourceFile": "apps/admin/app/page.tsx"
     },

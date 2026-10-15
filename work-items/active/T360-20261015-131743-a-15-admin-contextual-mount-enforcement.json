@@ -1,0 +1,59 @@
+{
+  "id": "T360-20261015-131743",
+  "title": "A-15: enforce that every mapped Admin contextual view actually mounts",
+  "type": "bug",
+  "module": "admin",
+  "wave": "W0",
+  "phase": "IMPLEMENTATION",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [
+    "T360-20261015-045528"
+  ],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "LOW",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "A-15 is canonical in config/product-completeness.json postAuditFindings; closure requires the phase exit criteria and runtime evidence, not marker presence. The finding says the UI audit proves handler presence, not workflow completeness, and it is closed only when a mapped contextual view can no longer stop mounting while every gate stays green.",
+    "Measured 2026-10-14: all 70 rows in config/admin-contextual-workflow-map.json carry status SOURCE_IMPLEMENTED, and audit-admin-contextual-workflows.mjs only checks that each renderer name appears in apps/admin/app/page.tsx. Presence in source is not a mounted workflow. The single counterexample is R2HrConfiguration, which was defined but never rendered so /people/attendance and /people/compliance both displayed the payroll lifecycle and all ten panels were unreachable while every gate stayed green.",
+    "The fix is enforcement, not more evidence: the existing per-view reachability tests are hand-written one view at a time, so a view that silently unmounts is only caught if somebody happened to write a test for that view.",
+    "New invariant: every row in config/admin-contextual-workflow-map.json must map to a renderer that the audit can prove is mounted, not merely referenced. Reachability is part of completeness; a SOURCE_IMPLEMENTED row whose renderer is never mounted must fail the audit.",
+    "All data remains tenant isolated by company and branch. The admin contextual map is per-company configuration; this work item does not change tenant or branch authority, does not change any mutation, and does not introduce an idempotency key because nothing is written to business data.",
+    "No business logic, API contract, permission, tenant or branch authority, schema, runtime path or gate predicate may be weakened to make this pass. productReady, currentPhase and humanStage20 stay untouched."
+  ],
+  "acceptanceCriteria": [
+    "The audit fails if any row in config/admin-contextual-workflow-map.json has a renderer that is not actually mounted in its sourceFile, rather than only present in it.",
+    "A dependency-free test proves the negative case: a row whose renderer is absent from the mount site fails, and the same row present at the mount site passes.",
+    "The 70 existing rows still pass, so the new invariant reproduces the repository instead of demanding an escape hatch.",
+    "tests/hr-r2-configuration-reachability.test.mjs still passes, so the hand-written counterexample class remains covered.",
+    "productReady, currentPhase and humanStage20 stay untouched, and the finding status moves to RUNTIME_VERIFIED only with runtime evidence.",
+    "Both GitHub heavy workflows and Workflow Governance stay green on the exact commit."
+  ],
+  "testPlan": [
+    "node --test tests/admin-contextual-mount-enforcement.test.mjs",
+    "node --test tests/hr-r2-configuration-reachability.test.mjs",
+    "npm run audit:admin:contextual",
+    "npm run test:dependency-free",
+    "GitHub exact-source Full Automated UAT and Full System Simulation"
+  ],
+  "migrationPlan": "No schema migration. Only the audit script, one dependency-free test, and the finding evidence change; no database object is added, altered or dropped.",
+  "rollbackPlan": "Revert the commit. The audit returns to presence-only checking and the mount-enforcement test disappears; nothing else changes and no data is written. The prior green commit remains a valid checkpoint.",
+  "monitoringPlan": "The mount-enforcement control runs inside the dependency-free suite on every local run and on both heavy workflows, so a view that silently unmounts fails the build rather than quietly degrading the operator surface.",
+  "securityNotes": "No secret, token, credential or personal data appears in any file this work item edits, and none may be introduced. Tenant and branch authority are unchanged; this is an audit-strength change only.",
+  "documentation": [
+    "docs/PROJECT-STATE.md",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-15T05:17:43.000Z",
+  "updatedAt": "2026-10-15T05:17:51.468Z",
+  "releaseEvidence": []
+}
