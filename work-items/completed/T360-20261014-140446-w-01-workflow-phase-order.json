@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "workflow",
   "wave": "W0",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -53,6 +53,8 @@
     "handoff/release-evidence/T360-20261014-140446-w-01-workflow-phase-order.md"
   ],
   "createdAt": "2026-10-14T14:04:46.848Z",
-  "updatedAt": "2026-10-14T14:18:33.198Z",
-  "releaseEvidence": []
+  "updatedAt": "2026-10-15T04:37:08.654Z",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261014-140446-w-01-workflow-phase-order.md"
+  ]
 }

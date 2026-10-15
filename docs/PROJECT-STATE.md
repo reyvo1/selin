@@ -709,3 +709,41 @@ whose `releaseEvidence` check never ran, and the item's `releaseEvidence` array 
 backfilled after close. Same class as A-02: a gate that can be bypassed by skipping the step
 that would have enforced it. A separate work item must make `commandAdvance` require
 `nextOrder === currentOrder + 1` (BLOCKED excepted) so no phase can be skipped.
+
+---
+
+## 2026-10-14 — W-01 CLOSED — workflow:advance cannot skip a phase
+
+`T360-20261014-140446` (`bug`, W0 `workflow`, `MEDIUM`, dependency `T360-20261014-131512`) is
+CLOSED. This is a new process finding, not one of the original 15 post-audit findings; it was
+discovered while closing A-14 and is closed on its own merit.
+
+**The defect was demonstrated live.** `commandAdvance` only rejected a phase whose order was
+*lower* than the current one, so an item at `STAGING` could jump to `RELEASED`, skipping
+`RELEASE_READY` and its `releaseEvidence` check. A-14 took exactly that jump; the check never
+ran and the item's evidence array had to be backfilled after close.
+
+**Rule, derived from the policy file.** A non-`BLOCKED` advance must land on the immediate
+successor in `config/workflow-policy.json` `phaseOrder`. `BLOCKED` stays reachable from any
+phase and stays a dead end, matching the documented manual path for a blocked item. The error
+names the phase that was skipped over, so the operator learns the missing step rather than
+just a rejection.
+
+**Control.** `tests/workflow-phase-order.test.mjs` drives the real CLI against a scratch copy
+of the repository — no committed work item is mutated. Negative: `STAGING → RELEASED` rejected
+(naming `RELEASE_READY`), `RELEASE_READY → STAGING` rejected, `BLOCKED → any phase` rejected.
+Positive: `STAGING → RELEASE_READY` succeeds once the evidence file resolves, `any phase →
+BLOCKED` succeeds. The `RELEASE_READY` gate is now reachable on every path to `CLOSED`.
+
+**Closed.** Process finding W-01 → fixed; evidence =
+`source-commit:25183b4` + `logs_38579364527.zip` + `logs_38579364562.zip` +
+`tests/workflow-phase-order.test.mjs` +
+`handoff/release-evidence/T360-20261014-140446-w-01-workflow-phase-order.md`. Exact-source
+GitHub on `25183b4`: Workflow Governance `38579364606`, Automated UAT `38579364527`, Full
+System Simulation `38579364562` — all success.
+
+**Open findings unchanged: 3 of 15** — A-07 (HIGH, requires human Stage-20 acceptance), A-13,
+A-15 (MEDIUM). Canonical matrix unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
+16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`,
+`humanStage20=PENDING`. Local: `test:dependency-free` **1861/1861** (+2), lint,
+`workflow:validate` (52), `audit:full:repo` (7) — all PASS.

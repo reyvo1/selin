@@ -1,5 +1,33 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-14 — W-01 CLOSED; 3 findings left (CLOSED)
+
+- Active work item: none. Last closed: `T360-20261014-140446` (W-01, process finding).
+- **W-01 fixed.** `workflow:advance` only rejected a phase whose order was *lower* than the
+  current one, so an item could jump `STAGING → RELEASED` and skip `RELEASE_READY` and its
+  `releaseEvidence` check. Demonstrated live while closing A-14. The rule is now derived from
+  `config/workflow-policy.json` `phaseOrder`: a non-`BLOCKED` advance must land on the
+  immediate successor. `BLOCKED` stays reachable from any phase and stays a dead end.
+- Control: `tests/workflow-phase-order.test.mjs` drives the real CLI against a scratch copy of
+  the repository (no committed work item mutated). Negative and positive cases both proven.
+- Evidence: `source-commit:25183b4`, `logs_38579364527.zip`, `logs_38579364562.zip`,
+  `tests/workflow-phase-order.test.mjs`,
+  `handoff/release-evidence/T360-20261014-140446-w-01-workflow-phase-order.md`.
+- CI on `25183b4`: Governance `38579364606`, UAT `38579364527`, Simulation `38579364562` —
+  all success.
+- **Open findings: A-07 HIGH (needs human Stage-20 acceptance), A-13 MEDIUM (PARTIAL),
+  A-15 MEDIUM.** All CRITICAL findings are closed.
+- Canonical matrix unchanged: 48 features = 27 FOUNDATION, 3 PARTIAL,
+  16 IMPLEMENTED_RUNTIME_PENDING, 2 RUNTIME_VERIFIED; `productReady=false`,
+  `currentPhase=P5`, `humanStage20=PENDING`.
+- Local: `test:dependency-free` 1861/1861 (+2), lint, `workflow:validate` (52),
+  `validate:repo`, `audit:full:repo` (7) — all PASS.
+- **Next in evidence order:** A-15 (UI audit proves handler presence, not workflow
+  completeness — needs runtime/browser evidence before closure) → then A-13 (Ubuntu workflow
+  remains cluttered with Windows-first launchers; currently measured: zero `.bat`/`.cmd`/`.ps1`
+  files tracked, so the finding may already be substantially resolved — measure before acting).
+- **Human gate remains untouched and postponed by request:** P5 cannot close until a human
+  accepts the runtime presentation (rejected twice: V1, V2; PENDING for V4).
 ## 2026-10-14 — A-14 CLOSED; 3 findings left; workflow phase-skip hole found (CLOSED)
 
 - Active work item: none. Last closed: `T360-20261014-131512` (A-14).
