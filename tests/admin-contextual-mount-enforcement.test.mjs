@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { collectMountFailures, collectSubviewFailures } from '../scripts/lib/admin-contextual-mount.mjs';
 
@@ -85,6 +88,53 @@ test('a callsite with a dynamic mode is treated as reachable', () => {
   const row = broken.rows.find((r) => r.workspace === 'people' && r.view === 'attendance');
   assert.ok(row, 'people/attendance must still be mapped');
   assert.deepEqual(collectSubviewFailures(broken, page), [], 'a dynamic mode callsite must be treated as reachable');
+});
+
+test('the audit itself fails closed when the gate reports a failure', () => {
+  // The gate is wired into audit-admin-contextual-workflows.mjs, and a gate wired into an audit is
+  // only worth what the audit does with it. This copies the repository layout the audit reads into
+  // a scratch directory, plants the same phantom renderer A-15 was raised on, and runs the real
+  // audit against it. The wiring is proven end to end rather than by reading it - A-02's lesson:
+  // a check that cannot be observed failing is a check that may already be failing silently.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 't360-a15-'));
+  const repo = new URL('../', import.meta.url);
+  const copy = (rel) => {
+    const dest = path.join(tmp, rel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(repo.pathname, rel), dest);
+  };
+  try {
+    [
+      'scripts/audit-admin-contextual-workflows.mjs',
+      'scripts/lib/admin-contextual-mount.mjs',
+      'config/admin-contextual-workflow-map.json',
+      'apps/admin/app/page.tsx',
+      'apps/admin/app/domain-workspaces.ts',
+      'apps/admin/app/app-shell.tsx',
+      'apps/admin/app/modules/master-data.tsx',
+      'scripts/browser-uat.mjs',
+    ].forEach(copy);
+
+    // The audit validates every mode contract in apps/admin/app/modules, so those come along too.
+    const modules = path.join(repo.pathname, 'apps/admin/app/modules');
+    for (const name of fs.readdirSync(modules)) copy(path.join('apps/admin/app/modules', name));
+
+    const mapPath = path.join(tmp, 'config/admin-contextual-workflow-map.json');
+    const broken = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
+    broken.rows.find((r) => r.workspace === 'inventory-control' && r.view === 'overview').renderer =
+      'OperationsView:overview+InventoryLedger';
+    fs.writeFileSync(mapPath, JSON.stringify(broken, null, 2));
+
+    const result = spawnSync(process.execPath, ['scripts/audit-admin-contextual-workflows.mjs'], {
+      cwd: tmp,
+      encoding: 'utf8',
+    });
+    assert.notEqual(result.status, 0, `the audit must fail on a phantom renderer:\n${result.stdout}\n${result.stderr}`);
+    assert.match(`${result.stdout}${result.stderr}`, /InventoryLedger/);
+    assert.match(`${result.stdout}${result.stderr}`, /never mounted as JSX/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test('the real repository has no mount failures', () => {

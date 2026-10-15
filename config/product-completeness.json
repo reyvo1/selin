@@ -981,8 +981,18 @@
       "title": "UI audit proves handler presence, not workflow completeness",
       "severity": "MEDIUM",
       "targetPhase": "P0",
-      "status": "IMPLEMENTED_RUNTIME_PENDING",
-      "notes": "P0/P1 add canonical completeness and 61-view contextual audits; runtime/browser/human workflow evidence remains required before closure."
+      "status": "RUNTIME_VERIFIED",
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. Closed 2026-10-15 by T360-20261015-131743. The gap was still live at intake: config/admin-contextual-workflow-map.json claimed inventory-control/overview was rendered by a component called InventoryLedger and that identifier appears in no file in the repository, while the work shipped under OperationsView plus an inline ledger section - the same shape as the R2HrConfiguration instance that raised the finding, found by the same method. Rule: a mapped Admin contextual view must be mounted, not merely present. scripts/lib/admin-contextual-mount.mjs derives both checks from the map and the page rather than a list of known-good names: a renderer must appear as a JSX element in the page, and a subview must be bound as a mode by a callsite that mounts it. Both checks are wired into audit-admin-contextual-workflows.mjs and fail the audit, proven end to end by running the real audit against a scratch copy carrying the phantom renderer. Three shapes are honoured rather than assumed away: a mode-less renderer is self-routing and is not asked for a mode union, a dynamic mode such as activeDomainView?.key is treated as reachable, and commerceSection folds into commerce/<section>. The subview union is recomputed per row rather than cached per component, because a cache would make the verdict depend on row order.",
+      "evidence": [
+        "source-commit:ef47455",
+        "logs_38684782158.zip",
+        "logs_38684782278.zip",
+        "scripts/lib/admin-contextual-mount.mjs",
+        "tests/admin-contextual-mount-enforcement.test.mjs",
+        "tests/hr-r2-configuration-reachability.test.mjs",
+        "config/admin-contextual-workflow-map.json",
+        "handoff/release-evidence/T360-20261015-131743-a-15-admin-contextual-mount-enforcement.md"
+      ]
     }
   ],
   "phaseOrder": [
