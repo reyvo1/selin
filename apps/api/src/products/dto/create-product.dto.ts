@@ -1,11 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsHttpImageUrl } from '../../common/validation/is-http-image-url';
 
 export class CreateProductDto {
   @ApiProperty({ example: 'SKU-001' }) @IsString() sku!: string;
   @ApiPropertyOptional({ example: '899000000001' }) @IsOptional() @IsString() barcode?: string;
   @ApiProperty({ example: 'Produk Contoh' }) @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
+  @ApiPropertyOptional({ description: 'URL foto produk (http/https, tanpa basic-auth, tanpa query token). Presentasi saja: tidak memengaruhi harga, pajak, stok, atau jurnal.' })
+  @IsOptional() @IsHttpImageUrl() imageUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() categoryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() brandCode?: string;
   @ApiProperty({ example: 'BATANG', description: 'Base unit aktif dari master UNIT perusahaan. Gunakan unit fisik terkecil yang benar-benar distok.' }) @IsString() @MaxLength(60) unit!: string;

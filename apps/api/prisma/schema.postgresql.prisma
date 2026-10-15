@@ -464,6 +464,10 @@ model Product {
   barcode            String?               @unique
   name               String
   description        String?
+  // A product photo is the primary recognition cue on a shelf, a till screen and a storefront card.
+  // Nullable on purpose: it is a presentation attribute, not business data, so an existing catalog
+  // stays valid and every surface keeps its current fallback when it is absent.
+  imageUrl           String?
   unit               String
   costPrice          Decimal               @db.Decimal(18, 2)
   salePrice          Decimal               @db.Decimal(18, 2)

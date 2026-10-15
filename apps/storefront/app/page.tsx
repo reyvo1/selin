@@ -2,6 +2,7 @@
 
 import { Search, Minus, Plus, PackageSearch, ShoppingBag, ArrowRight, Heart, CircleCheck } from 'lucide-react';
 import { StorefrontShell, type StorefrontView } from './storefront-shell';
+import { ProductPhoto } from './product-photo';
 export type { StorefrontView } from './storefront-shell';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -50,6 +51,7 @@ type Product = {
   id: string;
   sku: string;
   name: string;
+  imageUrl?: string | null;
   description?: string | null;
   unit: string;
   salePrice: string | number;
@@ -672,7 +674,7 @@ export function StorefrontApp({ initialView = 'home' }: { initialView?: Storefro
       <section>
         <div className="sectionTitle"><div><span className="eyebrow">PILIHAN TOKO</span><h2>Produk untuk mulai belanja</h2></div><button type="button" className="textAction" onClick={() => navigate('catalog')}>Lihat semua <ArrowRight size={15} /></button></div>
         <div className="productGrid compactGrid">
-          {products.slice(0, 3).map((product) => { const option = defaultSellingOption(product); const stock = maxUnitQuantity(product, option.quantityFactor); return <article className="productCard" key={product.id}><div className="productImage" aria-hidden="true">{product.name.slice(0,1).toUpperCase()}</div><div className="body"><small>{product.sku}</small><h3>{product.name}</h3><div className="priceRow"><strong>{rupiah(option.unitPrice)}</strong><span>Stok {stock} {option.unitCode}</span></div><button type="button" onClick={() => openProduct(product)}>Lihat produk</button></div></article>; })}
+          {products.slice(0, 3).map((product) => { const option = defaultSellingOption(product); const stock = maxUnitQuantity(product, option.quantityFactor); return <article className="productCard" key={product.id}><ProductPhoto product={product} /><div className="body"><small>{product.sku}</small><h3>{product.name}</h3><div className="priceRow"><strong>{rupiah(option.unitPrice)}</strong><span>Stok {stock} {option.unitCode}</span></div><button type="button" onClick={() => openProduct(product)}>Lihat produk</button></div></article>; })}
           {catalogCursor && <div className="flex items-center justify-center"><button type="button" className="secondary compact" onClick={() => navigate('catalog')}>Jelajahi katalog lengkap <ArrowRight size={15}/></button></div>}
           {!loading && !products.length && <div className="emptyState"><h4>Katalog belum tersedia</h4><p>Produk akan tampil setelah cabang mengaktifkan katalog.</p></div>}
         </div>
@@ -695,7 +697,7 @@ export function StorefrontApp({ initialView = 'home' }: { initialView?: Storefro
             const option = defaultSellingOption(product);
             const stock = maxUnitQuantity(product, option.quantityFactor);
             return <article className="productCard" key={product.id}>
-              <div className="productImage" aria-hidden="true">{product.name.slice(0, 1).toUpperCase()}</div>
+              <ProductPhoto product={product} />
               <div className="body"><small>{product.sku}</small><h3>{product.name}</h3><p>{product.description?.trim() || 'Detail produk belum tersedia.'}</p><div className="priceRow"><strong>{rupiah(option.unitPrice)}</strong><span>Stok {stock} {option.unitCode}</span></div><div className="cardActions"><button type="button" className="secondary" onClick={() => openProduct(product)}>Lihat detail</button><button disabled={stock <= 0} onClick={() => add(product, option)}>{stock > 0 ? `Tambah ${option.unitCode}` : 'Stok habis'}</button></div><button type="button" className="favoriteAction secondary" onClick={() => void toggleFavorite(product.id)}><Heart size={15} fill={favoriteIds.includes(product.id) ? 'currentColor' : 'none'} />{favoriteIds.includes(product.id) ? 'Favorit' : 'Simpan favorit'}</button></div>
             </article>;
           })}
@@ -712,7 +714,7 @@ export function StorefrontApp({ initialView = 'home' }: { initialView?: Storefro
       <section>
         <div className="sectionTitle"><div><span className="eyebrow">DETAIL PRODUK</span><h2>{selectedProduct?.name ?? 'Pilih produk dari katalog'}</h2></div><button type="button" className="secondary compact" onClick={() => navigate('catalog')}>Kembali ke katalog</button></div>
         {selectedProduct ? <div className="productDetail">
-          <div className="productDetailVisual" aria-hidden="true">{selectedProduct.name.slice(0,1).toUpperCase()}</div>
+          <ProductPhoto product={selectedProduct} variant="detail" />
           <div className="productDetailBody">
             <span className="productSku">{selectedProduct.sku}</span>
             <h3>{selectedProduct.name}</h3>
