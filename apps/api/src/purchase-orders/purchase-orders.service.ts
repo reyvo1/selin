@@ -81,6 +81,88 @@ export class PurchaseOrdersService {
     return row;
   }
 
+
+  /**
+   * Cancel a purchase order that was raised in error.
+   *
+   * This is the one lifecycle transition a PO was missing. `PurchaseOrderStatus.CANCELLED` existed in
+   * the enum and the goods-receipt guard reads it, but nothing in the codebase ever wrote it, so a PO
+   * raised against the wrong supplier or the wrong quantity could only be left standing — the
+   * receiving guard at goods-receipts.service.ts had a branch that could never fire.
+   *
+   * What this deliberately does NOT do is edit the order. A PO is created APPROVED and nothing moves
+   * it back to a draft, because its quantities are what a supplier is paid against. The editable
+   * document is the PurchaseRequest, which carries a real DRAFT stage and its own edit guard. Adding
+   * a PATCH here would either be dead code or would let someone rewrite a committed commitment, so
+   * the question "the PO is wrong" is answered with a reversal, not an edit.
+   *
+   * Fail-closed rules, each of which is a real state this can be called in:
+   *
+   *   - Anything already received cannot be cancelled. Un-receiving stock is a return, not a status
+   *     change, and silently flipping a PO while confirmed receipts exist would leave the ledger
+   *     showing receipts against a cancelled commitment.
+   *   - A confirmed receipt cannot be undone by cancelling its parent. Same reason: the stock moved.
+   *   - Cancelling twice returns the same row rather than erroring, so a retried request from a flaky
+   *     connection cannot fail a purchase workflow that actually succeeded.
+   */
+  async cancel(id: string, user: AuthUser, reason: string | undefined, idempotencyKey?: string) {
+    const scope = this.requireTenantScope(user);
+    const trimmedReason = reason?.trim();
+    const scopeKey = idempotencyKey ? 'purchase-order:cancel' : null;
+    return serializableTx(this.prisma, async (tx) => {
+      if (scopeKey) {
+        const gate = await beginIdempotent(tx, { companyId: scope.companyId, scope: scopeKey, key: idempotencyKey!, payload: { id, reason: trimmedReason ?? null } });
+        if (gate.replay && gate.status === 'COMPLETED') return gate.response as never;
+      }
+      const order = await tx.purchaseOrder.findFirst({
+        where: {
+          id,
+          warehouse: { branchId: scope.branchId, branch: { companyId: scope.companyId } },
+          supplier: { companyId: scope.companyId },
+        },
+        include: { goodsReceipts: { select: { operationalStatus: true } } },
+      });
+      if (!order) {
+        // Returns `never`, so this is both the refusal and the control-flow exit. The audit record it
+        // writes is what makes a cross-tenant probe visible rather than a silent 403.
+        return this.denyTenantAccess(user, scope, 'PurchaseOrder', id);
+      }
+      if (order.status === 'CANCELLED') {
+        // Already there. Returning the row keeps a retry idempotent without hiding a real refusal.
+        return order;
+      }
+      if (order.status === 'PARTIALLY_RECEIVED' || order.status === 'RECEIVED') {
+        throw new BadRequestException(`PO berstatus ${order.status}. Barang yang sudah diterima tidak dapat dibatalkan; gunakan retur atau reversal.`);
+      }
+      const posted = order.goodsReceipts.filter((receipt) => ['CONFIRMED', 'PARTIALLY_ACCEPTED'].includes(receipt.operationalStatus));
+      if (posted.length > 0) {
+        throw new BadRequestException(`PO memiliki ${posted.length} penerimaan yang sudah diposting. Batalkan lewat retur atau reversal, bukan dengan mengubah status PO.`);
+      }
+      // updateMany with the status in the WHERE clause is the concurrency guard: two operators racing
+      // to cancel cannot both read APPROVED and both write. The second one updates zero rows.
+      const claimed = await tx.purchaseOrder.updateMany({
+        where: { id: order.id, status: 'APPROVED' },
+        data: { status: 'CANCELLED', notes: trimmedReason ? `${order.notes ? `${order.notes}\n` : ''}Dibatalkan: ${trimmedReason}` : order.notes },
+      });
+      if (claimed.count === 0) {
+        throw new BadRequestException('Status PO berubah saat pembatalan diproses. Muat ulang dan coba lagi.');
+      }
+      const updated = await tx.purchaseOrder.findUnique({ where: { id: order.id }, include: { supplier: true, warehouse: true, items: { include: { product: true } } } });
+      await tx.auditLog.create({
+        data: {
+          companyId: scope.companyId,
+          userId: user.sub,
+          action: 'CANCEL_PURCHASE_ORDER',
+          entityType: 'PurchaseOrder',
+          entityId: order.id,
+          payload: { number: order.number, previousStatus: order.status, reason: trimmedReason ?? null, branchId: scope.branchId },
+        },
+      });
+      if (scopeKey) await completeIdempotent(tx, { companyId: scope.companyId, scope: scopeKey, key: idempotencyKey!, resourceType: 'PurchaseOrder', resourceId: order.id, response: updated });
+      return updated;
+    });
+  }
+
   async create(dto: CreatePurchaseOrderDto, user: AuthUser) {
     const scope = this.requireTenantScope(user);
     if (!dto.items.length) throw new BadRequestException('Purchase order harus memiliki minimal satu barang.');

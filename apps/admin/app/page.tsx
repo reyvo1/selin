@@ -69,7 +69,7 @@ type Product = { id: string; sku: string; name: string; unit: string; costPrice:
 type Supplier = { id: string; code: string; name: string; phone?: string | null; email?: string | null; address?: string | null; paymentTermDays?: number; isActive: boolean };
 type Warehouse = { id: string; code: string; name: string; branch: { name: string } };
 type POItem = { id: string; productId: string; variantId?: string | null; productUnitId?: string | null; unitCode?: string | null; unitQuantity?: number | null; quantityFactor: number; orderedQty: number; receivedQty: number; unitCost: string | number; purchaseUnitCost?: string | number | null; product: Product };
-type PurchaseOrder = { id: string; number: string; status: string; supplier: Supplier; warehouse: Warehouse; total: string | number; items: POItem[] };
+type PurchaseOrder = { id: string; number: string; status: string; orderDate: string; supplier: Supplier; warehouse: Warehouse; total: string | number; items: POItem[] };
 type PurchaseRequest = { id: string; number: string; status: string; reason?: string | null; neededBy?: string | null; supplier?: Supplier | null; warehouse: Warehouse; purchaseOrderId?: string | null; items: Array<{ id: string; quantity: number; estimatedUnitCost: string | number; product: Product }> };
 type Receipt = { id: string; number: string; receivedAt: string; operationalStatus: string; inspectionId?: string | null; supplier: Supplier; purchaseOrder: { number: string }; items: Array<{ acceptedQty: number; quantityDamaged: number; product: Product }> };
 type Inventory = { id: string; quantity: number; reserved: number; available: number; product: Product & { minStock: number }; warehouse: Warehouse };
@@ -115,6 +115,9 @@ export default function AdminPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  /** The PO awaiting a typed-out cancellation. Null means no confirmation is armed. */
+  const [cancelPurchaseOrderTarget, setCancelPurchaseOrderTarget] = useState<PurchaseOrder | null>(null);
+  const [cancelPurchaseOrderTyped, setCancelPurchaseOrderTyped] = useState('');
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [inventories, setInventories] = useState<Inventory[]>([]);
@@ -333,6 +336,23 @@ export default function AdminPage() {
     } catch (error) { notify(error instanceof Error ? error.message : 'Gagal membuat purchase request.', 'error'); }
   }
 
+  /**
+   * Cancel a purchase order, with the reason going into the audit trail.
+   *
+   * The confirmation names the order, because a PO is a commitment to a supplier and "Batal" on a list
+   * of numbers is an easy thing to click on the wrong row. A rejected call is shown verbatim rather
+   * than swallowed: the server refuses once anything has been received, and that message is the whole
+   * point of asking first.
+   */
+  async function cancelPurchaseOrder(orderRow: PurchaseOrder) {
+    try {
+      await request(`/purchase-orders/${orderRow.id}/cancel`, { method: 'POST', body: JSON.stringify({ reason: 'Dibatalkan dari daftar purchase order' }) });
+      setCancelPurchaseOrderTarget(null); setCancelPurchaseOrderTyped('');
+      notify('PO dibatalkan.');
+      await loadAll(token!);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'PO gagal dibatalkan.'); }
+  }
+
   async function purchaseRequestAction(requestRow: PurchaseRequest, action: 'submit' | 'approve' | 'reject' | 'convert' | 'cancel') {
     try {
       if (action === 'submit') await request(`/purchase-requests/${requestRow.id}/submit`, { method: 'POST', body: '{}' });
@@ -513,9 +533,27 @@ export default function AdminPage() {
                 {purchaseRequests.length ? <div className="table">{purchaseRequests.slice(0, 12).map((pr) => <div className="receipt" key={pr.id}><div><strong>{pr.number}</strong><small>{pr.warehouse.name} · {pr.supplier?.name ?? 'Supplier belum ditentukan'} · {pr.status}</small><small>{pr.items.map((item) => `${item.product.name} × ${item.quantity}`).join(', ')}</small></div><div className="rowActions">{pr.status === 'DRAFT' && <><button type="button" className="secondary" disabled={!canRootAction('purchase.create', purchasingRoles)} onClick={() => void purchaseRequestAction(pr, 'cancel')}>Batal</button><button type="button" disabled={!canRootAction('purchase.create', purchasingRoles)} onClick={() => void purchaseRequestAction(pr, 'submit')}>Ajukan</button></>}{pr.status === 'PENDING_APPROVAL' && <><button type="button" className="secondary" disabled={!canRootAction('purchase.approve', purchasingRoles)} onClick={() => void purchaseRequestAction(pr, 'reject')}>Tolak</button><button type="button" disabled={!canRootAction('purchase.approve', purchasingRoles)} onClick={() => void purchaseRequestAction(pr, 'approve')}>Setujui</button></>}{pr.status === 'APPROVED' && <><button type="button" className="secondary" disabled={!canRootAction('purchase.create', purchasingRoles)} onClick={() => void purchaseRequestAction(pr, 'cancel')}>Batal</button><button type="button" disabled={!canRootAction('purchase.create', purchasingRoles)} onClick={() => void purchaseRequestAction(pr, 'convert')}>Buat PO</button></>}{pr.status === 'CONVERTED' && <span className="okText">PO dibuat</span>}</div></div>)}</div> : <div className="emptyState"><h4>Belum ada purchase request</h4><p>Buat kebutuhan pembelian terlebih dahulu; PO hanya dibuat setelah approval.</p></div>}
               </div>
             </section>}
+            {activeDomainView?.key === 'orders' && <section className="panel" style={{ gridColumn: '1 / -1' }}>
+              <div className="panelTitle"><div><span className="eyebrow">PEMBELIAN</span><h2>Purchase order</h2></div><span>{orders.filter((row) => row.status === 'APPROVED').length} menunggu · {orders.length} total</span></div>
+              {orders.length ? <div className="table">{orders.map((po) => <div className="receipt" key={po.id}>
+                <div><strong>{po.number}</strong><small>{po.supplier.name} · {po.warehouse.name} · {new Date(po.orderDate).toLocaleDateString('id-ID')}</small><small>{po.items.length} baris · {po.items.reduce((sum, item) => sum + Number(item.orderedQty), 0)} unit dasar · Rp {Number(po.total).toLocaleString('id-ID')}</small></div>
+                <div className="rowActions"><span className={po.status === 'CANCELLED' ? 'mutedInline' : 'okText'}>{po.status === 'PARTIALLY_RECEIVED' ? 'DITERIMA SEBAGIAN' : po.status === 'RECEIVED' ? 'DITERIMA' : po.status === 'CANCELLED' ? 'DIBATALKAN' : 'MENUNGGU'}</span>{po.status !== 'CANCELLED' && po.status !== 'RECEIVED' && po.status !== 'PARTIALLY_RECEIVED' && <button type="button" className="secondary" disabled={!canRootAction('purchase.cancel', purchasingRoles)} onClick={() => { setCancelPurchaseOrderTarget(po); setCancelPurchaseOrderTyped(''); }}>Batal</button>}</div>
+              </div>)}</div> : <div className="emptyState"><h4>Belum ada purchase order</h4><p>PO dibuat dari purchase request yang disetujui, atau langsung dari form di samping.</p></div>}
+            </section>}
+
             {(activeDomainView?.key === 'supplier' || activeDomainView?.key === 'orders') && <section className="grid2">
               {activeDomainView?.key === 'supplier' && <div className="panel"><form onSubmit={addSupplier}><div className="panelTitle"><div><span className="eyebrow">MASTER DATA</span><h2>Supplier lifecycle</h2></div><span>{suppliers.filter((row) => row.isActive).length} aktif</span></div><label>Kode<input required value={supplierForm.code} onChange={(e) => setSupplierForm({ ...supplierForm, code: e.target.value })} /></label><label>Nama<input required value={supplierForm.name} onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })} /></label><label>Telepon<input value={supplierForm.phone} onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })} /></label><button disabled={!canRootAction('supplier.create', purchasingRoles)}>Simpan supplier</button></form><div className="table sectionBlock">{suppliers.slice(0,20).map((supplier) => <div className="receipt" key={supplier.id}><div><strong>{supplier.code} · {supplier.name}</strong><small>{supplier.phone || '-'} · {supplier.isActive ? 'ACTIVE' : 'INACTIVE'}</small></div><div className="rowActions"><button type="button" className="secondary" disabled={!canRootAction('supplier.update', purchasingRoles)} onClick={() => setSupplierEdit({ id: supplier.id, code: supplier.code, name: supplier.name, phone: supplier.phone ?? '' })}>Edit</button><button type="button" className="secondary" disabled={!canRootAction('supplier.update', purchasingRoles)} onClick={() => void updateSupplier(supplier, { isActive: !supplier.isActive })}>{supplier.isActive ? 'Nonaktifkan' : 'Aktifkan'}</button></div></div>)}</div>{supplierEdit && <form className="inlineEditor" onSubmit={submitSupplierEdit}><strong>Edit {supplierEdit.code}</strong><label>Nama<input required value={supplierEdit.name} onChange={(e) => setSupplierEdit({ ...supplierEdit, name: e.target.value })} /></label><label>Telepon<input value={supplierEdit.phone} onChange={(e) => setSupplierEdit({ ...supplierEdit, phone: e.target.value })} /></label><div className="rowActions"><button type="button" className="secondary" disabled={!canRootAction('supplier.update', purchasingRoles)} onClick={() => setSupplierEdit(null)}>Batal</button><button disabled={!canRootAction('supplier.update', purchasingRoles)}>Simpan perubahan</button></div></form>}</div>}
               {activeDomainView?.key === 'orders' && <form className="panel" onSubmit={addPO}><div className="panelTitle"><div><span className="eyebrow">PEMBELIAN</span><h2>Buat purchase order</h2></div></div><label>Supplier<select required value={poForm.supplierId} onChange={(e) => setPoForm({ ...poForm, supplierId: e.target.value })}>{suppliers.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Gudang<select required value={poForm.warehouseId} onChange={(e) => setPoForm({ ...poForm, warehouseId: e.target.value })}>{warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Produk<select required value={poForm.productId} onChange={(e) => { const product = products.find((p) => p.id === e.target.value); const defaultUnit = product?.units?.find((u) => u.isDefaultPurchase) ?? product?.units?.[0]; setPoForm({ ...poForm, productId: e.target.value, variantId: defaultUnit?.variantId ?? '', productUnitId: defaultUnit?.id ?? '', unitCost: Number(product?.costPrice ?? 0) * Number(defaultUnit?.quantityFactor ?? 1) }); }}>{products.map((item) => <option key={item.id} value={item.id}>{item.name} · base {item.unit}</option>)}</select></label><div className="inline"><label>Variant<select value={poForm.variantId} onChange={(e) => setPoForm({ ...poForm, variantId: e.target.value, productUnitId: '' })}><option value="">Produk dasar</option>{(products.find((p) => p.id === poForm.productId)?.variants ?? []).map((variant) => <option key={variant.id} value={variant.id}>{variant.code} · {variant.name}</option>)}</select></label><label>Unit pembelian<select value={poForm.productUnitId} onChange={(e) => { const product = products.find((p) => p.id === poForm.productId); const unit = product?.units?.find((u) => u.id === e.target.value); setPoForm({ ...poForm, productUnitId: e.target.value, variantId: unit?.variantId ?? poForm.variantId, unitCost: Number(product?.costPrice ?? 0) * Number(unit?.quantityFactor ?? 1) }); }}><option value="">{products.find((p) => p.id === poForm.productId)?.unit ?? 'BASE'} · base unit</option>{(products.find((p) => p.id === poForm.productId)?.units ?? []).filter((u) => !poForm.variantId || u.variantId === poForm.variantId).map((unit) => <option key={unit.id} value={unit.id}>{unit.unitCode} · isi {unit.quantityFactor}</option>)}</select></label></div><div className="inline"><label>Jumlah unit beli<input type="number" min="1" value={poForm.orderedQty} onChange={(e) => setPoForm({ ...poForm, orderedQty: Number(e.target.value) })} /></label><label>Harga per unit beli<input type="number" min="0" value={poForm.unitCost} onChange={(e) => setPoForm({ ...poForm, unitCost: Number(e.target.value) })} /></label></div><button disabled={!canRootAction('purchase.create', purchasingRoles)}>Buat PO</button></form>}
+            </section>}
+
+            {cancelPurchaseOrderTarget && <section className="panel highlight" style={{ gridColumn: '1 / -1' }}>
+              <div className="panelTitle"><div><span className="eyebrow">PEMBATALIAN</span><h2>Batalkan PO {cancelPurchaseOrderTarget.number}</h2></div><span>{cancelPurchaseOrderTarget.supplier.name}</span></div>
+              <p>Setelah dibatalkan, PO ini tidak dapat menerima barang lagi dan tidak muncul lagi di pilihan penerimaan. Tindakan ini dicatat pada audit trail dengan nama Anda.</p>
+              <p>PO yang sudah menerima barang akan ditolak server. Kasus itu harus diselesaikan lewat retur atau reversal, bukan dengan mengubah status.</p>
+              <form onSubmit={(e) => { e.preventDefault(); void cancelPurchaseOrder(cancelPurchaseOrderTarget); }}>
+                <label>Ketik BATAL untuk mengonfirmasi<input required autoFocus value={cancelPurchaseOrderTyped} onChange={(e) => setCancelPurchaseOrderTyped(e.target.value)} placeholder="BATAL"/></label>
+                <div className="actionRow"><button type="button" className="secondary" onClick={() => { setCancelPurchaseOrderTarget(null); setCancelPurchaseOrderTyped(''); }}>Kembali</button><button type="submit" disabled={cancelPurchaseOrderTyped.trim().toUpperCase() !== 'BATAL'}>Batalkan PO</button></div>
+              </form>
             </section>}
 
             {activeDomainView?.key === 'receipts' && <section className="panel highlight">
