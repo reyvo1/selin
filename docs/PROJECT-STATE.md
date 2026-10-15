@@ -835,3 +835,78 @@ Closed by `T360-20261015-150000`. Local: `test:dependency-free` **1878/1878** (+
 **Findings: 15 of 16 `RUNTIME_VERIFIED`.** The one remaining is `audit:A-07` (HIGH) — the human
 gate, which code cannot close. `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING` —
 all unchanged.
+
+## 2026-10-15 — A-17: controller granularity hid 34 unreachable endpoints, all of them behind a reachable sibling
+
+`config/f1-backend-ui-audit.json` answers one question per controller: is *any* route of this
+controller called by a UI app? It sets `routeStrings.some(...)` against the UI's callsites with a raw
+`.includes()`, and writes one label plus a `uiApps` list. Today that reports **45 of 46 controllers
+as `EXPOSED_OR_PARTIAL`** and only `edge-sync.controller.ts` as `HIDDEN_OR_API_ONLY`.
+
+The verdict is not false. It is too coarse to be a gate. A controller with one dead endpoint and
+thirty live ones is indistinguishable from a controller that is fully wired, and nothing between
+intake and release could name the difference — which is the defect, stated as precisely as the
+evidence allows.
+
+Measured at endpoint granularity on this tree:
+
+| | |
+| --- | --- |
+| Controllers | **46** — 36 `ALL_REACHED`, 9 `MIXED`, 1 `NONE_REACHED` |
+| Routes | **532** across **428** distinct paths |
+| Reachable | **495** |
+| Flagged (unreachable, with a reachable sibling) | **34** |
+
+`scripts/audit-full-repository.mjs` runs first in the same chain and independently reports **532 API
+handlers**; two counts derived by different code from the same tree agree. The 3 routes that are
+unreachable but *not* flagged are `edge-sync`'s three — no sibling there is reached, so an API-only
+surface contributes nothing by design.
+
+The 34 split **22 `NODE_PROTOCOL`, 8 `UI_GAP`, 2 `SUPERSEDED`, 1 `DEVICE_INGEST`,
+1 `PROVIDER_CALLBACK`**. The 8 gaps are `branch-transfer` detail and departure, digital-services
+transaction detail, bulk `offline-transactions`, `platform/automation-jobs/:id`, and the
+`scan`/`submit`/`discard` steps of the mobile opname draft. In every one the surrounding workflow is
+open and in use — settle and refund work, the opname draft opens and renders its discrepancy — while
+one step of it is unreachable. That is precisely the shape a controller-granularity verdict cannot
+see, and it is the reason `UI_GAP` entries are recorded as open work rather than as exceptions.
+
+**Two extractor defects would each have invalidated the finding on their own**, and both are pinned
+as regression cases:
+
+- A bare interpolation token was allowed to match as **prefix and suffix**. The single line
+  ``return `${workspace.route}/${view.key}`;`` at `apps/admin/app/domain-workspaces.ts:122` yields
+  exactly one token, `/:p`, and under two-way leniency that one token covered **11 unrelated
+  endpoints** across `branch-continuity`, `edge-sync` and `platform`. Fixed: a `:p` token segment
+  covers a `:p` route segment and nothing else.
+- A path assembled from a ternary on one line was not read. `hr-payroll.tsx` builds the approver
+  path from `${kind==='tax'?'/payroll/tax-rule-sets':'/payroll/social-security-rule-sets'}`, and
+  exact matching reported **both** approvers unreachable while a user was clicking them. Fixed:
+  coverage is per line over a contiguous run of segments, so the literal half becomes its own token.
+
+Four more were removed before the number could be trusted: a quote-pairing regex that drifted parity
+and missed every `/auth/2fa/*` call, a missing `api<T>(...)` type-parameter group that hid **68**
+call sites, a `^\/(assets|_next|...)` filter colliding with the `/assets` **API namespace**, and
+`collectRoutes` returning declarations without verdicts — which printed **0 reachable routes beside
+36 fully-reached controllers**.
+
+The gate is a human-edited ledger, `config/frontend-endpoint-coverage-baseline.json`, and it fails in
+**both** directions: a new dead sibling and a stale entry are both non-zero exits, as is a reason
+shorter than 40 characters, because an exception with no stated basis is not a review. The
+anti-silencing rule is derived rather than listed — an endpoint behind `@Roles` is human-facing by
+construction and may only ever be `UI_GAP`, read from the decorator, so relabeling a missing screen
+as node protocol fails the gate instead of clearing it. Three of the 8 gaps are `@Roles`-guarded, so
+that shortcut is closed.
+
+Scope follows the in-repo clients. `apps/customer-mobile` was assumed to be an empty scaffold and is
+not: it is a Flutter application whose three Dart files call `/platform/manifest` and
+`/api/v1/products`, so `.dart` is scanned and those two paths are covered. `apps/worker` reaches the
+Telegram and Digiflazz providers and nothing else, which is what makes `NODE_PROTOCOL` a measurement
+rather than a guess.
+
+`npm run audit:endpoint:coverage` is chained into `npm run audit:full:repo`, so both heavy GitHub
+workflows execute it. `npm run test:dependency-free` **1886/1886** (+8), lint, `workflow:validate`
+(56), `validate:repo` (1232 files / 202 Prisma models), `audit:full:repo` — all PASS.
+
+`productReady=false`, `currentPhase=P5`, `humanStage20=PENDING` — unchanged. A-17 closes the guard,
+not the gaps: the 8 `UI_GAP` entries remain open work on separate screens, and `audit:A-07` remains
+the human visual gate.

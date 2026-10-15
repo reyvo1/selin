@@ -20,8 +20,10 @@ test('P0 establishes one canonical product completeness authority', () => {
   assert.ok(matrix.features.length >= 30);
   assert.equal(matrix.legacyFunctionalPhases.length, 12);
   // 15 post-audit findings (A-01..A-15) plus A-16, raised when the A-14
-  // curated-phrasing guard was found to miss a matrix distribution claim.
-  assert.equal(matrix.postAuditFindings.length, 16);
+  // curated-phrasing guard was found to miss a matrix distribution claim,
+  // plus A-17, raised when coverage was found to be measured per controller
+  // rather than per endpoint.
+  assert.equal(matrix.postAuditFindings.length, 17);
 });
 
 test('P0 forbids marker-only closure and requires human UI acceptance', () => {

@@ -1,0 +1,59 @@
+{
+  "id": "T360-20261015-164416",
+  "title": "a 17: endpoint coverage is measured at controller granularity, so an unreachable endpoint hides behind a reachable sibling",
+  "type": "bug",
+  "module": "governance",
+  "wave": "W0",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261015-164416-a-17-endpoint-coverage-is-measured-at-controller-granularity.md"
+  ],
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "An endpoint is unreachable when no line in any UI application source covers its normalized path, while at least one sibling endpoint on the same controller IS covered. An API-only controller, where no route is covered, is an intentional surface and flags nothing.",
+    "Path normalization rewrites every parameter segment to :p and every interpolated segment to :p, so /items/:id and /items/${id} compare equal. Comparisons are then exact, prefix, suffix or assembled-segment: the segments of a call-site token must line up 1:1 with a contiguous run of route segments.",
+    "A token segment of :p may cover a route segment of :p and nothing else. It may not cover a literal, and a literal token segment may not cover a param. This is what stops one route-building line from certifying every endpoint that happens to share its prefix or suffix.",
+    "Coverage is per line, not per file. A path assembled from two literals on one line, as the payroll approver is, is reachable; a bare interpolation on one line, as at apps/admin/app/domain-workspaces.ts:122, reaches nothing but its own param segment.",
+    "Every flagged endpoint must be classified into a declared class with a written basis of at least 40 characters: UI_GAP, NODE_PROTOCOL, DEVICE_INGEST, PROVIDER_CALLBACK or SUPERSEDED. A class is an explanation of where the other side of the call lives, never an excuse to stop looking.",
+    "An endpoint behind @Roles is human-facing by construction and may only ever be classified UI_GAP. The rule is read from the decorator, so relabeling a missing screen as node protocol fails the gate instead of clearing it.",
+    "The reviewed set lives in config/frontend-endpoint-coverage-baseline.json and is edited by a human. The audit and the tests fail when the measured set differs from it, in either direction: a new dead sibling fails as surely as a stale entry does.",
+    "The 8 UI_GAP entries are open work awaiting UI, not accepted exceptions, and this is stated in the ledger itself so the file cannot be read as a waiver."
+  ],
+  "acceptanceCriteria": [
+    "Measured and stable on this tree: 46 controllers split 36 ALL_REACHED, 9 MIXED, 1 NONE_REACHED; 532 routes across 428 distinct paths; 495 reachable, 34 flagged, of which 8 are UI_GAP, 22 NODE_PROTOCOL, 2 SUPERSEDED, 1 DEVICE_INGEST and 1 PROVIDER_CALLBACK.",
+    "Every one of the 34 flagged endpoints sits inside a controller that config/f1-backend-ui-audit.json reports as EXPOSED_OR_PARTIAL with a uiApps list, which is the defect: the earlier verdict was not false, it was too coarse to name the endpoint.",
+    "config/frontend-endpoint-coverage-baseline.json holds exactly the 34 measured identities, each with a declared class and a basis of at least 40 characters, and scripts/audit-frontend-endpoint-coverage.mjs exits 0 against it.",
+    "tests/frontend-endpoint-coverage.test.mjs passes 8 of 8, covering the two-way set comparison, class and basis completeness, the @Roles rule, an API-only fixture that flags nothing, a mixed fixture that flags exactly the dead sibling, the assembled-ternary path that counts as reached, the bare interpolation that does not, and the removal of a ledger entry surfacing the endpoint again.",
+    "npm run audit:endpoint:coverage is chained into npm run audit:full:repo, so both heavy GitHub workflows execute it.",
+    "npm run test:dependency-free, npm run lint, npm run workflow:validate and npm run validate:repo all pass with the new files in place."
+  ],
+  "testPlan": [
+    "tests/frontend-endpoint-coverage.test.mjs: eight cases. The real corpus is asserted against the ledger in both directions so a new dead sibling and a stale entry both fail; synthetic fixtures written to a temp directory prove the API-only and mixed verdicts; the two extractor defects found while measuring are pinned as regression cases with the line that produced them named.",
+    "scripts/audit-frontend-endpoint-coverage.mjs: run directly, prints the controller spread and route totals and exits non-zero on any added, removed or under-justified ledger entry.",
+    "npm run audit:full:repo: exercises the audit in the same chain as the other post-audit controls, which is how CI reaches it.",
+    "npm run test:dependency-free and npm run lint over the whole suite, plus workflow:validate and validate:repo for governance."
+  ],
+  "migrationPlan": "No database change. The work adds source, config and test files only; no table, column, index or seed is touched.",
+  "rollbackPlan": "Revert the commit. The ledger, the audit script, the test and the package.json chain entry are additive and independent of runtime code, so nothing at runtime changes and there is no compensating operation to perform. Removing the audit from audit:full:repo and reverting the matrix finding restores the prior state exactly.",
+  "monitoringPlan": "The control is its own monitoring: it runs on every test:dependency-free invocation and inside audit:full:repo in both heavy GitHub workflows, so a regression fails CI rather than being observed later. handoff/quality/frontend-endpoint-coverage-latest.json is regenerated on each run and carries the controller spread and the flagged list for inspection; it is untracked report output by policy. No runtime metric is required, because no runtime behaviour changes.",
+  "securityNotes": "Read-only source analysis: no credential, token, personal data or environment value is read, and the report contains only method, path, controller file and guard class. The guard of each flagged endpoint is recorded because the @Roles rule depends on it, and that is decorator metadata already present in source. No endpoint is exposed, exempted or newly reachable by this work; the audit changes no permission, no tenant scope and no route registration.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-15T08:44:16.880Z",
+  "updatedAt": "2026-10-15T09:16:16.099Z"
+}

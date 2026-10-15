@@ -1010,6 +1010,23 @@
         "config/product-completeness.json",
         "handoff/release-evidence/T360-20261015-150000-a-16-matrix-distribution-currency.md"
       ]
+    },
+    {
+      "id": "audit:A-17",
+      "kind": "POST_AUDIT_FINDING",
+      "key": "A-17",
+      "title": "Endpoint coverage is measured at controller granularity, so an unreachable endpoint hides behind a reachable sibling",
+      "severity": "MEDIUM",
+      "targetPhase": "P0",
+      "status": "IMPLEMENTED_RUNTIME_PENDING",
+      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence. Measured 2026-10-15 under T360-20261015-164416. The predecessor control config/f1-backend-ui-audit.json decides exposure by asking whether ANY route of a controller is called, and it reported 45 of 46 controllers as EXPOSED_OR_PARTIAL with a uiApps list while never naming which endpoint; edge-sync was the only controller it called HIDDEN_OR_API_ONLY. Endpoint granularity now exists and the earlier verdict was not wrong, only too coarse: 46 controllers split 36 ALL_REACHED, 9 MIXED, 1 NONE_REACHED across 532 routes and 428 distinct paths, 495 routes are reachable and 34 are not, and every one of the 34 sits inside a controller the predecessor called EXPOSED_OR_PARTIAL. The 34 are classified rather than asserted: 22 NODE_PROTOCOL (branch-sync 9, branch-continuity 12, GET /sync/pull), 8 genuine UI gaps, 2 SUPERSEDED (GET /platform/modules, GET /platform/plugins), 1 DEVICE_INGEST (POST /attendance/devices/fingerprint/events), 1 PROVIDER_CALLBACK (POST /payments/providers/:integrationId/callback). Rule: an endpoint is unreachable when no UI source line covers its normalized path while a sibling on the same controller is reached. Coverage accepts exact, prefix, suffix and assembled-segment matches so the payroll approver built from a ternary on one line is counted as reached, and a bare interpolation token covers only its own param segment, so the single route-building line at apps/admin/app/domain-workspaces.ts:122 cannot certify eleven unrelated endpoints as reachable. Scope follows the in-repo clients: apps/admin, apps/pos, apps/storefront and apps/employee-portal are scanned, apps/customer-mobile is a Flutter app whose three Dart files call /platform/manifest and /api/v1/products, and apps/worker reaches Telegram and Digiflazz providers only so it carries no client for the node protocol it is not party to. config/frontend-endpoint-coverage-baseline.json is human-edited and the audit and the tests fail when the measured set differs from it in either direction; an endpoint behind @Roles may not be filed as anything but UI_GAP, derived from the decorator rather than listed, which is the control that stops the cheapest fix being to relabel whatever the audit just found. The 8 UI_GAP entries are recorded as open work, not exceptions.",
+      "evidence": [
+        "scripts/lib/frontend-endpoint-coverage.mjs",
+        "scripts/audit-frontend-endpoint-coverage.mjs",
+        "tests/frontend-endpoint-coverage.test.mjs",
+        "config/frontend-endpoint-coverage-baseline.json",
+        "config/f1-backend-ui-audit.json"
+      ]
     }
   ],
   "phaseOrder": [

@@ -1,5 +1,54 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-15 — A-17: endpoint coverage is now measured per endpoint (VERIFICATION)
+
+- Active work item: `T360-20261015-164416` (A-17, `bug`, W0 `audit`, MEDIUM), **VERIFICATION**.
+- **A-17 (MEDIUM) raised.** `config/f1-backend-ui-audit.json` decides exposure per **controller**:
+  is *any* route of it called? It reports **45 of 46** as `EXPOSED_OR_PARTIAL` with a `uiApps`
+  list. That verdict is not false — it is too coarse to be a gate, because it cannot name *which*
+  endpoint is missing. A controller with one dead endpoint and thirty live ones is
+  indistinguishable from one that is fully wired.
+- **Measured now: 46 controllers = 36 `ALL_REACHED`, 9 `MIXED`, 1 `NONE_REACHED`; 532 routes
+  across 428 distinct paths; 495 reachable, 34 flagged.** Every one of the 34 sits inside a
+  controller F1 calls `EXPOSED_OR_PARTIAL`. `scripts/audit-full-repository.mjs` independently
+  reports 532 API handlers, so two counts derived by different code agree.
+- **The 34 are classified, not asserted:** 22 `NODE_PROTOCOL`, **8 genuine `UI_GAP`**, 2
+  `SUPERSEDED`, 1 `DEVICE_INGEST`, 1 `PROVIDER_CALLBACK`. The 8 gaps are
+  `branch-transfer` detail + departure, digital-services transaction detail, bulk
+  `offline-transactions`, `platform/automation-jobs/:id`, and the `scan`/`submit`/`discard`
+  steps of the mobile opname draft — each beside a sibling the Admin UI *does* call, so the
+  screen is live and one step of it is not wired. **They are open work, not exceptions.**
+- **The rule is derived.** An endpoint is unreachable when no UI source line covers its normalized
+  path while a sibling on the same controller is reached; coverage is per line and matches exact,
+  prefix, suffix or assembled-segment, with `:p` covering only `:p`.
+- **Two extractor defects would each have invalidated the finding.** A bare `/:p` token was allowed
+  to match as prefix *and* suffix, so the single line `apps/admin/app/domain-workspaces.ts:122`
+  certified **11 unrelated endpoints** as reachable. And a path assembled from a ternary on one line
+  was not read at all, so `hr-payroll.tsx` reported **both** approvers unreachable while a user was
+  clicking them. Four more were removed (quote-pairing drift hiding every `/auth/2fa/*`, a missing
+  `api<T>(...)` group hiding **68** call sites, a filter colliding with the `/assets` API namespace,
+  and verdicts not attached to the returned routes — which printed **0 reachable beside 36
+  fully-reached controllers**).
+- **The ledger is human and the gate fails both ways.**
+  `config/frontend-endpoint-coverage-baseline.json` is edited by a person; the audit exits non-zero
+  when the measured set differs from it in either direction, and a reason under 40 characters also
+  fails. Anti-silencing control: an endpoint behind `@Roles` may only ever be `UI_GAP`, read from
+  the decorator rather than listed, so relabeling a missing screen as node protocol fails the gate
+  instead of clearing it.
+- Evidence: `scripts/lib/frontend-endpoint-coverage.mjs`,
+  `scripts/audit-frontend-endpoint-coverage.mjs`,
+  `config/frontend-endpoint-coverage-baseline.json`,
+  `tests/frontend-endpoint-coverage.test.mjs` (8 controls),
+  `handoff/release-evidence/T360-20261015-164416-a-17-endpoint-coverage-is-measured-at-controller-granularity.md`.
+- Canonical matrix: 48 features = 27 FOUNDATION, 3 PARTIAL, 17 IMPLEMENTED_RUNTIME_PENDING,
+  1 RUNTIME_VERIFIED; `productReady=false`, `currentPhase=P5`, `humanStage20=PENDING`.
+- Findings: **15 of 17 `RUNTIME_VERIFIED`**. The two remaining are `audit:A-07` (HIGH, the human
+  gate) and `audit:A-17` itself.
+- Local: `test:dependency-free` **1886/1886** (+8), lint, `workflow:validate` (56),
+  `validate:repo` (1232 files / 202 Prisma models), `audit:full:repo` (now including
+  `audit:endpoint:coverage`) — all PASS. CI identifiers are recorded in the follow-up
+  `docs(A-17)` commit.
+
 ## 2026-10-15 — A-16 CLOSED; the A-14 phrasing list was defeated (CLOSED)
 
 - Active work item: none. Last closed: `T360-20261015-150000` (A-16).
