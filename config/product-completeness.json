@@ -950,8 +950,12 @@
       "title": "Ubuntu workflow remains cluttered with Windows-first launchers",
       "severity": "MEDIUM",
       "targetPhase": "P6",
-      "status": "PARTIAL",
-      "notes": "Status is canonical after the 957-file audit; closure requires the phase exit criteria, not marker presence."
+      "status": "RUNTIME_VERIFIED",
+      "notes": "Measured 2026-10-14: zero tracked .bat/.cmd/.ps1/.vbs launchers, zero of 123 package.json scripts invoking a Windows shell. The launchers this finding described were removed before intake, so PARTIAL was a status lagging the evidence. Gate now exists and can fail.",
+      "evidence": [
+        "tests/ubuntu-workflow-windows-launchers.test.mjs",
+        "handoff/release-evidence/T360-20261015-045528-a-13-windows-launcher-clutter.md"
+      ]
     },
     {
       "id": "audit:A-14",
