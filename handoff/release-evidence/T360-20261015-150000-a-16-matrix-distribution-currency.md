@@ -50,10 +50,16 @@ red on the real defect, not on a synthetic case.
 
 | Evidence | Meaning |
 | --- | --- |
+| `source-commit:d2437b3` | Commit carrying the rule, the controls, the corrections and this document |
+| `38698096904` | Workflow Governance on that commit (33s) |
+| `38698096827` | Full System Simulation on that commit (8m23s) |
+| `38698096832` | Full Automated UAT on that commit (9m31s) |
 | `tests/status-doc-currency.test.mjs` | The derived rule and its controls |
+| `tests/product-completeness-p0.test.mjs` | Finding-count assertion moved 15 → 16 |
 | `docs/PROJECT-STATE.md` | Corrected distribution claims |
 | `handoff/CURRENT-WORK.md` | Corrected distribution claims |
-| `config/product-completeness.json` | Unchanged — the authority the rule reads |
+| `config/product-completeness.json` | `audit:A-16` registered; its notes carry the corrected measurements |
+| `work-items/completed/T360-20261015-150000-a-16-matrix-distribution-currency.json` | The work item |
 | `handoff/release-evidence/T360-20261015-150000-a-16-matrix-distribution-currency.md` | This document |
 
 ## Acceptance criteria
