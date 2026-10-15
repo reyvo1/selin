@@ -1,0 +1,73 @@
+{
+  "id": "T360-20261015-191020",
+  "title": "pos layout and cashier flow defects: split payment rows overlap, nine jsx classes have no css, modal actions are unstyled, and scanning outside the search box does not add an item",
+  "type": "bug",
+  "module": "pos-ui",
+  "wave": "W0",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "A recognised barcode scan COMMITS the scanned item to the cart. Filling the search box and waiting for a second Enter is not a scan: the global listener exists precisely so a cashier scanning with the cart focused gets an item, and the earlier behaviour left them pressing Enter on a surface they were not looking at.",
+    "The global listener and the search box resolve a code through ONE function. Two entry points that answer the same code differently are how a scan starts meaning one thing on one screen and another on the next, so both call scanExactBarcode and the cart is fed from exactly one place.",
+    "The global listener is registered once and therefore holds the first render's closure, where the catalog is empty. It must reach the live function through a ref that is refreshed on every render. Calling scanExactBarcode directly from the effect would resolve every real barcode against an empty catalog and report all of them unknown, which is a worse defect than the one being fixed and looks correct in review.",
+    "A code that matches nothing in the loaded catalog is left visible in the search box and reported, never dropped. The loaded catalog is paged and may not contain the product, so a silent drop would lose a sale the cashier had in hand.",
+    "A packaging barcode resolves to the printed unit and its quantityFactor, not to the base unit. Adding one carton as one base box draws wrong stock and charges the wrong price, so unit resolution is the part of a scan that may not be approximated.",
+    "A quantityFactor that is not a positive safe integer is refused, never rounded or truncated. Fractional stock cannot be posted, so the scan fails closed with an operator-facing message.",
+    "A packaging barcode is refused while offline, because its conversion factor exists only on the server. A base-unit scan carries no server authority and stays allowed, which is what keeps an offline till able to sell.",
+    "Where a product's own barcode is ALSO registered as a packaging barcode, the packaging entry wins. This is the pre-existing resolution order, it is pinned by a test rather than changed here, and changing it would alter which unit stock is drawn for existing master data. Raised for Finance as an open question, not settled in this work item.",
+    "A class name in the JSX is not a style. Every class used in the POS JSX must either have a rule in globals.css or be a utility the project's own Tailwind compiler generates; anything else ships as a browser default inside an otherwise styled till.",
+    "Styling a class by descendant selector alone is not styling it. `.chips button` left the chip token inert: it rendered correctly only because it happened to sit inside .chips, and moving the markup would have shipped raw buttons. The rule names the class.",
+    "ModalPortal renders into <body>, so no .posWorkspaceBody rule reaches a dialog. Dialog labels and actions carry their own rules, and the classless buttons that carry Setujui and Buat voucher are styled explicitly.",
+    ".summary>div is a label/value flex row, so the two structural blocks that are also direct children of it — the split-payment tender list and the discount-approval hint — must be excluded from that rule or their inner rows lay out horizontally across the cart."
+  ],
+  "acceptanceCriteria": [
+    "apps/pos/lib/barcode.ts exports matchBarcode(products, raw, { online }), a pure function returning matched with the resolved unit/factor/ids, unmatched, or unpostable with a reason. No React, no side effects, no messages.",
+    "apps/pos/app/page.tsx routes BOTH the global onScan handler and the search box Enter through scanExactBarcode, which returns 'added' | 'blocked' | 'unmatched' and feeds the cart from exactly one add(match.product, ...) call.",
+    "The onScan handler commits and falls back to the visible search box only on 'unmatched'; scanHandlerRef is refreshed by useEffect on every render and the page asserts both facts.",
+    "The reported styling defects are closed: .receiptHistory, .panelNote, .catalogFooter, .linkButton, .approvalHint, .formError, .voucherBox, .branchStockList and .muted have rules; .modalCard has label, input, h2, p and button:not([class]) rules; .summary>div excludes .splitPayments and .approvalHint.",
+    "The two gaps found while auditing rather than reported: .spin has a rule and globals.css defines @keyframes pos-spin, which the file previously contained zero of, so the offline-sync busy indicator moved for the first time; .formStack is styled; .chip is styled by class name and the two dark-theme .chips button overrides were retargeted to match.",
+    "tests/pos-surface-and-scan-commit.test.mjs passes 13 of 13, covering the scan decision executed against the real module, the commit wiring with four negative controls, and measured class coverage.",
+    "Class coverage is measured, not curated: JSX tokens are read with the TypeScript compiler and a token is accepted only if a rule exists in globals.css or the project's Tailwind compiler emits it. The gate fails closed if tailwindcss cannot be loaded, and rejects an extractor that finds fewer than 50 tokens so it cannot pass vacuously.",
+    "tests/functional-w1-pos-barcode-conversion.test.mjs passes 3 of 3, updated to assert the shared resolver and the conversion being read off the match, with negative controls for a dropped quantityFactor, a loosened integer guard and a screen that stops delegating.",
+    "npm run lint -w @toko360/pos (strict TypeScript, 21 files, noEmit/bundler preserved) exits 0, npm run workflow:validate passes 57 work items and npm run validate:repo passes 1236 files.",
+    "Local browser verification against a running stack in real Chrome: with document.activeElement on BODY, a 6 ms key burst then Enter moved the cart 0 -> 1 for a seeded barcode; the search box cleared; an unmatched code stayed visible; .splitPayments computes display:block while .summary>div remains flex.",
+    "NOT proven and therefore not claimed: uat:pre-github:local was not run and no GitHub workflow has run against this source; the modal dialogs were not opened in a browser; .receiptHistory and .branchStockList were never rendered; no human visual acceptance. The item is left at VERIFICATION and was not advanced to STAGING or closed.",
+    "Phase transitions were recorded one at a time with workflow:advance (INTAKE to ANALYSIS to DESIGN to IMPLEMENTATION to VERIFICATION) rather than written into the file, so the phase history is enforced by the tool and not asserted."
+  ],
+  "testPlan": [
+    "tests/pos-surface-and-scan-commit.test.mjs: the scan decision is EXECUTED against the real module through tests/helpers/import-ts.mjs, not grepped — base barcode at factor 1, packaging barcode resolving to its printed unit, whitespace trimming, unmatched, five refusal cases (0, -1, 1.5, NaN, Infinity) each asserting the reason, offline refusing packaging while allowing base, and the pinned packaging-over-base precedence.",
+    "The same file's commit detector reads the handler and returns the reason it would fail, then four negative controls feed it mutated sources: the pre-fix search-only handler, a ref never refreshed, a commit that swallows an unmatched code, and a screen that resolves outside matchBarcode.",
+    "The same file's coverage gate runs the real measurement over synthetic fixtures: a class nothing styles is reported with its file and line, a Tailwind utility in the same position is accepted, expression text is not mistaken for a class, @apply arguments and comment text are not mistaken for selectors, and Tailwind's escaped selectors match while a prefix match does not.",
+    "Three extractor defects were found and fixed while writing this gate, each now pinned: a regex reading className invented tokens from expression text, a regex escaping made '[1720px]' a character class so nine real utilities read as unstyled, and a template expression whose interpolated conditional contributed no classes. A fourth, a prefix match certifying text-sm from text-sm/6, was found by its own negative control.",
+    "tests/pos-barcode-scanner.test.mjs (16 cases, unchanged) still passes, including the scan-over-a-button case that the commit path now completes, and the assertion that a scan reaches the same search state a human typing does.",
+    "npm run lint -w @toko360/pos for strict TypeScript, npm run workflow:validate and npm run validate:repo for governance. The full npm run test:dependency-free suite and the browser/PostgreSQL UAT are NOT run in this session and remain outstanding.",
+    "Local browser probe (ad hoc, not committed): headless Chrome over CDP against the running API and POS, dispatching real Input.dispatchKeyEvent bursts at 6 ms with focus deliberately off the search input. 12 PASS, 1 NOT_RENDERED, 0 FAIL. The probe script lives in /tmp and is not part of the repository.",
+    "Credentials for that probe were the local demo seed defaults, held in memory only and never printed, written to the repository or placed in the evidence file."
+  ],
+  "migrationPlan": "No database change. No table, column, index, seed or migration is touched, and no schema is read or written. The only data-shaped input is the already-loaded product catalog in the browser, whose shape is unchanged.",
+  "rollbackPlan": "Revert the commit. The change is confined to the POS screen, the POS scanner library and the stylesheet: no posted transaction, journal, stock movement, payment or receipt is created by any of it, so there is no compensating operation to perform on any ledger. matchBarcode is a new pure export and scanExactBarcode keeps its name and single commit role, so reverting restores the previous behaviour exactly. If the new commit path were found to add an unintended item in the field, the one-line feature flag is not needed — reverting apps/pos/app/page.tsx alone restores the old search-only behaviour with no data to reconcile, because an item that was never added has nothing to undo.",
+  "monitoringPlan": "The controls are their own monitoring: both tests run inside npm run test:dependency-free and therefore in CI, so a regression fails the build rather than being found by a cashier. Neither change adds runtime instrumentation, because neither changes a server path — there is no new log line, metric or alert to watch. A local browser probe over CDP against a running stack additionally confirms the committed path on a real document: a fast key burst with focus on BODY moved the cart 0 -> 1. That probe is ad hoc and uncommitted; the durable control is the committed test, which runs in CI. Human visual acceptance on a real till, and a GitHub workflow run against this exact source, remain outstanding.",
+  "securityNotes": "No credential, token, personal data or environment value is read, written or logged, and none appears in the tests or the evidence. Tenant scope is untouched: the scan resolves against the catalog the POS already loaded under its own authenticated context, and no request, header or cache key is added or altered. No permission, role, route or guard is changed, and nothing here grants reachability of an endpoint. Scan input is a barcode string from the keyboard and is trimmed and matched exactly; it is never interpolated into a query, a path or a selector, and matchBarcode returns no message text of its own. The fallback path writes the scanned code into a controlled React input, which is the same handling a typed search receives. No sensitive-data classification, retention or audit-trail obligation is created by this work.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-15T11:10:20.619Z",
+  "updatedAt": "2026-10-15T22:20:00.000Z",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261015-191020-pos-layout-and-cashier-flow-defects.md"
+  ]
+}
