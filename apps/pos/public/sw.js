@@ -19,12 +19,23 @@ self.addEventListener('fetch', (event) => {
   // Mutasi/API tidak boleh pernah dilayani dari cache service worker.
   if (url.pathname.startsWith('/api/')) return;
 
+  // The POS shell service worker is registered at '/', so its scope covers every other screen served
+  // from public/ — including /kiosk/ and /stock-count/. Caching whatever document was navigated to
+  // under the single key '/' meant that visiting /kiosk/ overwrote the cached POS shell with the kiosk
+  // HTML, and the offline fallback below then served the kiosk as the till. Only the shell itself is
+  // cached, and only under its own path; the device screens have their own caching rules and are left
+  // alone here.
+  const isDeviceScreen = url.pathname.startsWith('/kiosk') || url.pathname.startsWith('/stock-count');
+  if (isDeviceScreen) return;
+
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          void caches.open(CACHE).then((cache) => cache.put('/', copy));
+          if (response.ok && url.pathname === '/') {
+            const copy = response.clone();
+            void caches.open(CACHE).then((cache) => cache.put('/', copy));
+          }
           return response;
         })
         .catch(async () => (await caches.match(request)) || (await caches.match('/')) || Response.error()),

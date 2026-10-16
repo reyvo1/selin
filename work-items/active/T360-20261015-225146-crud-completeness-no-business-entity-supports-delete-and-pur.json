@@ -1,0 +1,59 @@
+{
+  "id": "T360-20261015-225146",
+  "title": "crud completeness: a purchase order could not be stopped and could not be seen, while its draft document could",
+  "type": "feature",
+  "module": "procurement",
+  "wave": "W2",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "LOW",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "LOW",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "A commitment that can be raised must be withdrawable. PurchaseOrderStatus.CANCELLED existed in the enum and the goods-receipt guard read it, but nothing in the codebase ever wrote it, so a PO raised against the wrong supplier could only be left standing and the guard branch at goods-receipts.service.ts could never fire.",
+    "A purchase order is NOT editable and must not be made editable. It is created APPROVED and nothing moves it back to a draft, because its quantities are what a supplier is paid against. The editable document is the PurchaseRequest, which carries a real DRAFT stage and its own edit guard. Adding a PATCH would be either dead code or a way to rewrite a commitment an inspection or receipt already points at.",
+    "A goods receipt is NOT editable and must not be made editable. It is created directly into inspection, and its lines are referenced by the inspection record.",
+    "Cancelling fails closed on anything already received. Un-receiving stock is a return, not a status change; flipping a PO while confirmed receipts exist would leave the ledger showing receipts against a cancelled commitment.",
+    "Cancelling twice returns the row rather than erroring, so a retry from a flaky connection cannot fail a purchase workflow that actually succeeded.",
+    "The claim is conditional on the current status in the WHERE clause, so two operators racing to cancel cannot both read APPROVED and both write; the loser updates zero rows and is told to reload.",
+    "Cancelling requires its own permission, purchase.cancel, granted to the same roles that can raise a PO. A commitment you may make you must be able to withdraw.",
+    "Native browser confirm is forbidden on operator surfaces, so the confirmation is the repository's established type-to-confirm: the operator types BATAL, exactly as API key rotation requires ROTATE.",
+    "An operator who can create a PO must be able to see it. The admin could create one and never see it again, because no purchase-order list existed."
+  ],
+  "acceptanceCriteria": [
+    "POST /purchase-orders/:id/cancel exists behind @Permissions('purchase.cancel'), accepts an Idempotency-Key header, and is audited as CANCEL_PURCHASE_ORDER with the order number, previous status and reason.",
+    "The service refuses a PO that is PARTIALLY_RECEIVED or RECEIVED, and refuses one that has a CONFIRMED or PARTIALLY_ACCEPTED receipt, naming returns and reversal as the correct route.",
+    "Retrying the same cancel with the same idempotency key returns the same order; cancelling an already-cancelled order returns 201 rather than an error.",
+    "A cashier receives 403 and the PO is left untouched at APPROVED.",
+    "No PATCH route exists on purchase-orders or goods-receipts, and a test asserts their absence so it cannot be added by someone 'fixing' the gap.",
+    "The admin shows a purchase-order list with status, line count, base quantity and total, plus a Batal action gated on purchase.cancel and confirmed by typing BATAL.",
+    "Runtime probe: 10 of 10. PO created APPROVED, cancelled to CANCELLED, retry replayed to the same number, second cancel non-erroring, cashier 403 with status untouched, PATCH route 404.",
+    "tests/operator-surface-completeness.test.mjs passes 10 of 10, npm run lint passes across all six workspaces, and the full dependency-free suite is green."
+  ],
+  "testPlan": [
+    "tests/operator-surface-completeness.test.mjs: asserts the route, the permission, the idempotency header, each refusal, the conditional claim, the audit action, the seed grant, the admin wiring, and the absence of PATCH on both committed documents.",
+    "Ad hoc runtime probe (not committed): real HTTP against the running stack, 10 of 10, covering the happy path, idempotent retry, repeat cancel, a refused role, and the absence of PATCH.",
+    "The refusal branches for a RECEIVED PO and for a PO with a posted receipt are asserted at source only; no runtime test drives a PO all the way to RECEIVED, because that needs a confirmed inspection.",
+    "Hard delete is NOT implemented for any business entity, and the test pins that decision rather than leaving it as an accident. It is documented here as an architectural constraint: inventory movements are append-only, journals and posted receipts are immutable, and a business document that has been acted on is reversed by a new document, never erased. Only three @Delete handlers exist in the whole API and all three act on non-financial rows (an integration mapping, a customer address, a customer favourite)."
+  ],
+  "migrationPlan": "No database change. PurchaseOrderStatus.CANCELLED already existed in the enum; this work makes an existing value reachable rather than adding a schema change. The purchase.cancel permission is a seed row, which is additive and idempotent under the existing upsert-based seed.",
+  "rollbackPlan": "Revert the commit and drop the seeded permission row if it must be. No schema change means no destructive step. Nothing is compensated: a cancellation writes only a status and an audit row, never a journal, stock movement or payment, so an incorrect cancellation is itself reversed by cancelling is not possible — it is corrected by raising a new purchase order, and the audit trail shows exactly what happened and who did it.",
+  "monitoringPlan": "The test runs inside npm run test:dependency-free and therefore in CI. The meaningful runtime signal is the CANCEL_PURCHASE_ORDER audit action, which is already queryable: a business reviewing procurement can see which commitments were withdrawn, by whom and when, without any new instrumentation. No new metric or alert is warranted for a transition that is expected to be rare and is always audited.",
+  "securityNotes": "The cancellation is tenant-scoped through the existing warehouse.branch.companyId predicate and, on a miss, goes through denyTenantAccess, which writes a TENANT_ACCESS_DENIED audit row rather than returning a bare 403 — so a cross-tenant probe is visible instead of silent. It is permission-guarded with a new purchase.cancel rather than relying on the role list alone, and the runtime probe confirms a cashier is refused with 403 and that the refusal changed nothing. The confirmation is in-app and type-to-confirm, which the repository forbids in favour of native window.confirm for good reason: a native dialog blocks the UI, cannot be styled to the operator's theme, and is not reachable by an automated test. No financial record is created, modified or deleted by this path.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-15T15:14:06.000Z",
+  "updatedAt": "2026-10-15T17:50:24.681Z"
+}

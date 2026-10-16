@@ -26,6 +26,7 @@ type HealthRow = {
 type Health = { nodes: HealthRow[]; generatedAt: string };
 type DeadLetter = { id: string; eventId: string; eventType: string; aggregateType: string; aggregateId: string; attempts: number; lastError?: string | null; deadLetteredAt?: string | null };
 type PeerRow = { id: string; peerNodeId: string; direction: 'PUSH' | 'PULL' | 'BIDIRECTIONAL'; isActive: boolean; lastSyncAt?: string | null; lastError?: string | null };
+type TransferSyncState = { transferId: string; departureRecordedAt?: string | null; arrivalAcknowledgedAt?: string | null; destinationQuantity?: number | null; state?: string; version?: number; updatedAt?: string };
 type PendingTransfer = { transferId: string; state: 'AWAITING_DESTINATION' | 'CONVERGED' | 'DISCREPANT' | 'ABANDONED'; sourceQuantity: number; destinationQuantity?: number | null; destinationNodeId?: string | null; destinationState?: string; discrepancyReason?: string | null; updatedAt: string };
 type ContinuityBranch = { nodeId: string; code: string; name: string; role: string; state: 'UNKNOWN' | 'ONLINE' | 'DEGRADED' | 'OFFLINE' | 'SUSPENDED'; lastSeenAt?: string | null; lastSyncAt?: string | null; pending: number; deadLettered: number; unresolvedConflicts: number; reason?: string | null };
 type Consolidated = { branches: ContinuityBranch[]; totalPending: number; totalDeadLettered: number; generatedAt: string };
@@ -59,6 +60,7 @@ export default function BranchSyncView({ token }: { token: string }) {
   const [capabilities, setCapabilities] = useState<CapabilityRow[]>([]);
   const [transfers, setTransfers] = useState<PendingTransfer[]>([]);
   const [abandon, setAbandon] = useState<PendingTransfer | null>(null);
+  const [syncDetail, setSyncDetail] = useState<TransferSyncState | null>(null);
   const [abandonReason, setAbandonReason] = useState('');
   // Received quantities live in state keyed by transfer, not in a DOM lookup: reading the input back
   // through querySelector couples the handler to markup and silently posts 0 if the selector misses.
@@ -82,6 +84,50 @@ export default function BranchSyncView({ token }: { token: string }) {
   }
   // Acknowledging arrival records what was physically counted. It does not post inventory — that stays
   // with the existing receive flow — so the panel says so rather than implying the goods are booked in.
+  /**
+   * Open the sync state of one transfer.
+   *
+   * The panel let an operator acknowledge arrival, record a departure and abandon a leg, but never
+   * showed the recorded state of a single transfer. When two branches disagreed — the whole reason
+   * this screen exists — the operator could see the pending list and act, yet had no way to read what
+   * the server actually believes about one transfer. Acting without that is guesswork.
+   *
+   * A 404 here is information, not a failure: the endpoint answers "no departure recorded for this
+   * transfer", which is exactly what an operator needs to know before choosing departure or arrival.
+   */
+  async function openSyncDetail(transferId: string) {
+    setBusy(true);
+    try {
+      setSyncDetail(await req<TransferSyncState>(token, `/branch-transfer/transfers/${transferId}`));
+    } catch (err) {
+      setSyncDetail(null);
+      setMsg(err instanceof Error ? err.message : 'Gagal membaca status sinkronisasi transfer');
+    } finally { setBusy(false); }
+  }
+
+  /**
+   * Record that the goods physically left the source branch.
+   *
+   * The panel could acknowledge arrival and abandon a transfer but never record the departure, so the
+   * first leg of a transfer between branches had no operator control at all — the only things an
+   * operator could do were the second step and giving up. The service already guarded this correctly:
+   * it refuses anything not SHIPPED or PARTIALLY_RECEIVED, because recording a departure earlier
+   * would claim goods are in the van while they are still on the shelf.
+   *
+   * Like arrival, this records a fact about the physical world. It does not post inventory; that
+   * stays behind receiveTransfer under `inventory.transfer`, which this permission deliberately does
+   * not carry.
+   */
+  async function recordDeparture(transferId: string) {
+    setBusy(true);
+    try {
+      await req(token, `/branch-transfer/transfers/${transferId}/departure`, { method: 'POST' });
+      await loadContinuity();
+      setMsg(`Keberangkatan transfer ${transferId} dicatat. Barang sudah di jalan; stok tetap belum diposting.`);
+    } catch (err) { setMsg(err instanceof Error ? err.message : 'Gagal mencatat keberangkatan'); }
+    finally { setBusy(false); }
+  }
+
   async function ackArrival(transferId: string, receivedQuantity: number) {
     setBusy(true);
     try {
@@ -329,12 +375,29 @@ export default function BranchSyncView({ token }: { token: string }) {
                   void ackArrival(t.transferId, Number(el?.value ?? 0));
                 }}>Konfirmasi</button>
                 <button type="button" className="secondary" disabled={busy} onClick={() => { setAbandon(t); setAbandonReason(''); }}>Batalkan</button>
+                <button type="button" className="secondary" disabled={busy} onClick={() => { void recordDeparture(t.transferId); }}>Catat keberangkatan</button>
+                <button type="button" className="secondary" disabled={busy} onClick={() => { void openSyncDetail(t.transferId); }}>Rincian status</button>
               </div>
             : <span key={`${t.transferId}-none`}>-</span>,
         ])}
         empty="Tidak ada transfer lintas cabang yang menunggu"
       />
     </Panel>
+
+    {syncDetail && <Panel eyebrow="SYNC STATE" title={`Status transfer ${syncDetail.transferId.slice(0, 8)}`} badge="CATATAN SERVER">
+      <p className="sectionHelp">Yang tercatat di server untuk transfer ini. Membandingkan ini dengan daftar di atas adalah cara memastikan dua cabang tidak berbeda pendapat.</p>
+      <Table
+        head={['Kolom', 'Nilai']}
+        rows={[
+          ['Keberangkatan dicatat', syncDetail.departureRecordedAt ? new Date(syncDetail.departureRecordedAt).toLocaleString('id-ID') : 'belum'],
+          ['Kedatangan dikonfirmasi', syncDetail.arrivalAcknowledgedAt ? new Date(syncDetail.arrivalAcknowledgedAt).toLocaleString('id-ID') : 'belum'],
+          ['Jumlah diterima', syncDetail.destinationQuantity ?? 'belum'],
+          ['State', syncDetail.state ?? '—'],
+          ['Versi', syncDetail.version ?? '—'],
+        ]}
+      />
+      <div className="actionRow"><button type="button" className="secondary" onClick={() => setSyncDetail(null)}>Tutup</button></div>
+    </Panel>}
 
     {abandon && <Panel eyebrow="ABANDON TRANSFER" title={`Batalkan ${abandon.transferId.slice(0, 8)}`} badge="WAJIB BERALASAN">
       <form className="formStack" onSubmit={confirmAbandon}>

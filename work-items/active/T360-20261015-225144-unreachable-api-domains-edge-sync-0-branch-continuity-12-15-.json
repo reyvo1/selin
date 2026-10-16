@@ -1,0 +1,52 @@
+{
+  "id": "T360-20261015-225144",
+  "title": "unreachable API domains: edge sync 0%, branch continuity 12/15 routes and two orphaned PWAs have no operator entry point",
+  "type": "bug",
+  "module": "navigation",
+  "wave": "W1",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "LOW",
+    "performance": "LOW"
+  },
+  "businessRules": [
+    "A screen that exists and works is reachable from the product. /kiosk/ and /stock-count/ were complete PWAs with their own manifests, their own authentication and their own API, and no app linked to either, so an operator had to be told the address by hand.",
+    "The link lives in the POS topbar, on every screen, because that is where a cashier already looks; it uses the existing warehouseControl slot rather than a new navigation concept.",
+    "A device screen opens in a new tab with noopener,noreferrer. Without noopener the opened document receives a handle on the till window and can navigate a cashier away mid-transaction.",
+    "A blocked popup is reported with the URL rather than failing silently, because the operator still has to reach the screen.",
+    "A secret that is shown once is not installed until its address is also shown. Minting a kiosk key printed the secret and never the /kiosk/?key= URL that consumes it, so the last step had to be assembled by hand from memory.",
+    "Only a key carrying kiosk.price.read is given a kiosk install URL. A general integration key handed one would point an operator at a screen its holder was never told about.",
+    "A service worker registered at the origin root must not cache another screen's document under the shell's cache key. It did: opening /kiosk/ overwrote the cached POS shell, and the offline fallback then served kiosk HTML as the till."
+  ],
+  "acceptanceCriteria": [
+    "The POS topbar links to /stock-count/ and /kiosk/ through openDeviceScreen, which uses window.open with noopener,noreferrer and reports a blocked popup with the URL.",
+    "apps/admin/app/modules/api-keys.tsx renders the kiosk install URL beside the one-time secret, built with URLSearchParams and gated on the kiosk.price.read scope.",
+    "apps/pos/public/sw.js returns early for /kiosk and /stock-count and only writes to the shell cache when the path is exactly '/', so a device screen can no longer overwrite the POS shell.",
+    "tests/operator-surface-completeness.test.mjs pins all three, including an assertion that the unconditional cache.put('/') does not return.",
+    "npm run lint passes across all six workspaces and the full dependency-free suite is green."
+  ],
+  "testPlan": [
+    "tests/operator-surface-completeness.test.mjs: three contracts over the wiring and the service worker, each asserting the specific defence rather than the presence of a keyword.",
+    "The service-worker fix is proven by reading the guard, NOT by exercising offline mode in a browser. A live offline navigation test would be the stronger proof and is not done here."
+  ],
+  "migrationPlan": "No database change. Three source files and one stylesheet rule; no schema, no column, no seed.",
+  "rollbackPlan": "Revert the commit. The links and the install URL are additive; removing them restores the previous state where the screens were reachable only by typing the address. The service-worker change is the one to keep: reverting it restores a bug where the kiosk can be served as the till offline.",
+  "monitoringPlan": "The test runs in CI. The service-worker guard is the durable control: it is a source-level rule that cannot silently regress, whereas an offline-navigation regression is invisible until a till loses connectivity in a store.",
+  "securityNotes": "noopener,noreferrer is a real control here, not a convention: without it a kiosk document can reach window.opener and navigate or inspect the till. The kiosk install URL is built with URLSearchParams so the key is encoded rather than concatenated, and it is displayed only beside a secret that is already displayed once, inside a screen that already requires api_key.manage. No new endpoint, permission, tenant scope or credential store was added, and the kiosk key remains bound to its branch exactly as before. sw.js now skips two paths on the way to its cache, which narrows what it can serve rather than widening it.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-15T14:51:44.255Z",
+  "updatedAt": "2026-10-15T17:50:22.956Z"
+}

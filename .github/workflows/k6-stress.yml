@@ -1,0 +1,184 @@
+name: k6 Stress
+
+# Deliberately dispatch-only. There is no `push` and no `pull_request` trigger.
+#
+# A load run is destructive against the machine it runs on. The first time this harness was run it
+# pointed at a laptop with 10 virtual users over 75 seconds and froze it — not because 10 users is a
+# lot, but because a laptop is also running the editor, the browser and the operator's work. So the
+# heavy profile lives here, on a disposable runner, and has to be asked for by name. Nothing in an
+# ordinary push can start it.
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Scenario to run'
+        required: true
+        default: 'read'
+        type: choice
+        options:
+          - read
+          - write
+      vus:
+        description: 'Concurrent virtual users (write scenario defaults to 3)'
+        required: true
+        default: '25'
+      ramp:
+        description: 'Ramp-up duration'
+        required: true
+        default: '2m'
+      duration:
+        description: 'Steady-state duration'
+        required: true
+        default: '5m'
+      base_url:
+        description: 'API base URL. A hosted staging or a dedicated load host — never production.'
+        required: true
+        default: 'https://staging-api.example.com/api/v1'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two load runs against one target measure each other's load.
+  group: k6-stress-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # k6 from the official binary. No npm wrapper: a load generator should not be a dependency of
+      # the thing it measures, and a version bump should be a deliberate line in this file.
+      - name: Install k6
+        run: |
+          set -euo pipefail
+          # Pinned, and visible in the diff, because the load generator's own overhead is part of what
+          # it reports. A float upgrade should be a deliberate edit here, not a resolution at run time.
+          K6_VERSION="v1.0.0"
+          curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" \
+            | tar -xz
+          sudo install -m 0755 "k6-${K6_VERSION}-linux-amd64/k6" /usr/local/bin/k6
+          k6 version
+
+      - run: npm ci
+
+      # No database is prepared here. This run measures an existing deployment; it never builds one.
+      # Preparing a schema would mean measuring a freshly-pushed empty database, which tells you
+      # nothing about production behaviour and risks the target in the other direction.
+
+      - name: Refuse a production-shaped target before anything connects
+        run: |
+          set -euo pipefail
+          HOST=$(node -e "console.log(new URL(process.argv[1]).hostname)" "${{ inputs.base_url }}")
+          echo "target host: ${HOST}"
+          if printf '%s' "${HOST}" | grep -Eq '(^|[.-])(prod|production|live)([.-]|$)|(^|\.)toko360\.com$'; then
+            echo "::error::refusing to load test ${HOST}; it looks like production"
+            exit 1
+          fi
+          if [ -z "${{ vars.K6_STRESS_ALLOWED_HOST }}" ]; then
+            echo "::error::repository variable K6_STRESS_ALLOWED_HOST is not set."
+            echo "Set it to the exact hostname this stress run is permitted to hit. An unset variable"
+            echo "means nobody has authorised a target, which is not the same as any host being fine."
+            exit 1
+          fi
+          if [ "${HOST}" != "${{ vars.K6_STRESS_ALLOWED_HOST }}" ]; then
+            echo "::error::${HOST} is not the approved stress target (${{ vars.K6_STRESS_ALLOWED_HOST }})"
+            exit 1
+          fi
+
+      - name: Read stress
+        if: inputs.scenario == 'read'
+        env:
+          K6_STRESS_TOKEN: ${{ secrets.K6_STRESS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${K6_STRESS_TOKEN}" ]; then
+            echo "::error::secret K6_STRESS_READ_TOKEN is not configured. An unauthenticated run measures"
+            echo "the auth guard before the query, which is not a performance result."
+            exit 1
+          fi
+          npm run test:load:k6 -- \
+            --base-url "${{ inputs.base_url }}" \
+            --allow-nonproduction --allow-heavy \
+            --vus "${{ inputs.vus }}" \
+            --ramp "${{ inputs.ramp }}" \
+            --duration "${{ inputs.duration }}"
+
+      # The write scenario is a SEPARATE job so that choosing it is an explicit act in the Actions UI
+      # rather than a consequence of the read one. It creates real sales, journals and stock movements
+      # on whatever host is approved, and it needs its own credential because a read role must not be
+      # able to write.
+      - name: Write stress
+        if: inputs.scenario == 'write'
+        env:
+          K6_STRESS_TOKEN: ${{ secrets.K6_STRESS_WRITE_TOKEN }}
+          K6_STRESS_SKU: ${{ vars.K6_STRESS_SKU }}
+          K6_STRESS_CUSTOMER_ID: ${{ vars.K6_STRESS_CUSTOMER_ID }}
+          K6_STRESS_WAREHOUSE_ID: ${{ vars.K6_STRESS_WAREHOUSE_ID }}
+        run: |
+          set -euo pipefail
+          for required in K6_STRESS_TOKEN K6_STRESS_SKU K6_STRESS_WAREHOUSE_ID; do
+            if [ -z "${!required}" ]; then
+              echo "::error::${required} is not configured. Guessing a SKU or a warehouse would post against"
+              echo "whatever happens to be first, so this stops instead."
+              exit 1
+            fi
+          done
+          echo "::warning::this creates real sales, journals and stock movements on ${{ inputs.base_url }}"
+          npm run test:load:k6:write -- \
+            --base-url "${{ inputs.base_url }}" \
+            --allow-nonproduction --allow-heavy --allow-writes \
+            --vus "${{ inputs.vus }}" \
+            --ramp "${{ inputs.ramp }}" \
+            --duration "${{ inputs.duration }}"
+
+      - name: Publish stress evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-stress-evidence
+          path: handoff/quality/k6-*.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Carry the measured numbers into the job summary
+        if: always()
+        run: |
+          set -euo pipefail
+          FILE=$(ls handoff/quality/k6-*.json 2>/dev/null | head -1 || true)
+          if [ -z "${FILE}" ]; then
+            echo "No stress evidence was produced."
+            exit 1
+          fi
+          node -e "
+            const d = require('./${FILE}');
+            const rows = [
+              ['scenario', d.scenario], ['status', d.status], ['profile', JSON.stringify(d.profile)],
+              ['requests', d.requests], ['iterations', d.iterations],
+              ['p95 ms', Math.round(d.durationP95Ms || 0)], ['p99 ms', Math.round(d.durationP99Ms || 0)],
+              ['error rate', d.httpReqFailedRate], ['checks', d.checksRate],
+            ];
+            let out = '| | |\\n|---|---|\\n';
+            for (const [k, v] of rows) out += \`| \${k} | \${v} |\\n\`;
+            if (d.thresholdFailures.length) out += \`\\n**Broken thresholds**\\n\n\` + d.thresholdFailures.map(t => \`- \${t}\`).join('\\n') + '\\n';
+            process.stdout.write(out);
+          " >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail when the stress run did not pass
+        if: always()
+        run: |
+          set -euo pipefail
+          FILE=$(ls handoff/quality/k6-*.json 2>/dev/null | head -1 || true)
+          [ -n "${FILE}" ] || { echo "::error::no evidence file; a run that produced nothing is not a pass"; exit 1; }
+          STATUS=$(node -e "console.log(require('./${FILE}').status)")
+          if [ "${STATUS}" != "PASS" ]; then
+            echo "::error::stress run status ${STATUS}"
+            exit 1
+          fi

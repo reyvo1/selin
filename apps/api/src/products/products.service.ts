@@ -396,6 +396,9 @@ export class ProductsService {
           ...(dto.sku != null ? { sku: dto.sku.trim() } : {}),
           ...(dto.name != null ? { name: dto.name } : {}),
           ...(dto.description !== undefined ? { description: dto.description || null } : {}),
+          // An empty string means "remove the photo". The validator already refused anything that
+          // is not a plain http(s) URL, so this branch only ever stores text or null.
+          ...(dto.imageUrl !== undefined ? { imageUrl: dto.imageUrl?.trim() || null } : {}),
           ...(dto.unit !== undefined ? { unit: nextUnit } : {}),
           ...(dto.barcode !== undefined ? { barcode: dto.barcode || null } : {}),
           ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId || null } : {}),

@@ -2,23 +2,24 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { clearPosTokens, posAuthFetch, storePosTokens } from './auth-fetch';
-import { Search, ScanBarcode, ShoppingCart, Trash2, Minus, Plus, CreditCard, UserRound, Coins, PackageSearch, Wifi, WifiOff, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Store, X, Package, WalletCards } from 'lucide-react';
+import { Search, ScanBarcode, ShoppingCart, Trash2, Minus, Plus, CreditCard, UserRound, Coins, PackageSearch, Wifi, WifiOff, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Store, X, WalletCards, ClipboardList } from 'lucide-react';
 import { PosShell, PosWorkspace } from './pos-shell';
 import { ModalPortal, useEscapeToClose, useModalFocus } from './modal-portal';
 import { T360ThemeToggle } from './theme-client';
 import { calculateOfflineQuote, getOrCreateDeviceCode, loadOfflineQueue, loadOfflineSnapshot, nextOfflineSequence, OfflineQueueItem, OfflineTaxCode, OfflineTenderMethod, reservedOfflineQuantity, persistOfflineSnapshot, saveOfflineQueue } from '../lib/offline';
 import { asCatalogFetcher, loadCatalog, loadCatalogPage, searchCatalog } from '../lib/catalog';
 import { isOfflineStoreAvailable } from '../lib/offline-store';
-import { createBarcodeListener, fuzzyRank } from '../lib/barcode';
+import { createBarcodeListener, fuzzyRank, matchBarcode } from '../lib/barcode';
 import { planPickup, pickupVoucherLines, type CrossBranchStock, type PickupQuote } from '../lib/click-collect';
 import { useSupervisorApproval } from '../lib/supervisor';
 import { openRawBtReceipt } from '../lib/printing';
 import StaffMemoWidget from './staff-memo';
+import { ProductMedia } from './product-media';
 import PpobOperatorWorkspace from './ppob-workspace';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
 type ProductVariant = { id: string; code: string; name: string; sku?: string | null; salePrice?: string | number | null; costPrice?: string | number | null; isDefault: boolean; isActive: boolean };
-type Product = { id: string; sku: string; barcode?: string | null; variants?: ProductVariant[]; units?: Array<{ id: string; variantId?: string | null; unitCode: string; quantityFactor: number; isDefaultSale: boolean; variant?: { id: string; code: string; name: string } | null }>; barcodes?: Array<{ code: string; variantId?: string | null; productUnitId?: string | null; unitCode?: string | null; quantityFactor?: string | number }>; name: string; unit: string; salePrice: string | number; effectiveSalePrice?: string | number; salesTaxCodeId?: string | null; categoryName?: string; inventories: Array<{ warehouseId: string; available: number }> };
+type Product = { id: string; sku: string; barcode?: string | null; imageUrl?: string | null; variants?: ProductVariant[]; units?: Array<{ id: string; variantId?: string | null; unitCode: string; quantityFactor: number; isDefaultSale: boolean; variant?: { id: string; code: string; name: string } | null }>; barcodes?: Array<{ code: string; variantId?: string | null; productUnitId?: string | null; unitCode?: string | null; quantityFactor?: string | number }>; name: string; unit: string; salePrice: string | number; effectiveSalePrice?: string | number; salesTaxCodeId?: string | null; categoryName?: string; inventories: Array<{ warehouseId: string; available: number }> };
 type Warehouse = { id: string; name: string; code: string };
 type CursorPage<T> = { items: T[]; pageInfo: { limit: number; nextCursor: string | null; hasMore: boolean } };
 type RuntimeManifest = { company?: { id: string; name: string }; branch?: { id: string; code?: string; name: string }; features: Record<string, { enabled: boolean }> };
@@ -214,6 +215,9 @@ export default function PosPage() {
   const [offlineMaxAgeMinutes, setOfflineMaxAgeMinutes] = useState(1440);
   const [offlineClockOffsetMs, setOfflineClockOffsetMs] = useState(0);
   const pendingPaymentRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  /** Latest `scanExactBarcode`, for the once-registered global listener. See the effect below. */
+  const scanHandlerRef = useRef<(raw: string) => 'added' | 'blocked' | 'unmatched'>(() => 'unmatched');
+  useEffect(() => { scanHandlerRef.current = scanExactBarcode; });
   const [workspace, setWorkspace] = useState<PosWorkspace>('SALE');
   const [ppobOpen, setPpobOpen] = useState(false);
   const [lastReceipt, setLastReceipt] = useState<{ number: string; total: number } | null>(null);
@@ -223,17 +227,30 @@ export default function PosPage() {
    *
    * Without this, a scan only worked when the search box happened to be focused — so scanning while
    * the cart had focus (the normal flow) did nothing, because the keystrokes fired the focused
-   * button instead. A recognised scan is routed into the same search state a human would type, so
-   * there is exactly one product-lookup path to reason about.
+   * button instead.
+   *
+   * A recognised scan COMMITS, it does not merely fill the box. Filling the box was the earlier
+   * behaviour and it was wrong: it left the cashier pressing Enter a second time on a surface that
+   * was not the one they were looking at, which is exactly the flow the listener was added to fix.
+   *
+   * The commit goes through `scanHandlerRef`, never through `scanExactBarcode` directly. This effect
+   * runs once with the first render's closure, where `products` is empty, so a direct call would
+   * resolve against an empty catalog and report every real barcode as unknown. The ref is refreshed
+   * on every render, so the listener always commits against the catalog on screen.
    */
   useEffect(() => {
     const listener = createBarcodeListener({
       onScan: (barcode) => {
-        setSearch(barcode);
-        // Drop any previous server answer so the effect re-queries: a scanned code may belong to a
-        // product this device never downloaded, which is the same silent gap as the un-walked cursor.
-        setServerMatches(null);
-        setMessage(`Kode dipindai: ${barcode}`);
+        if (scanHandlerRef.current(barcode) === 'unmatched') {
+          // Nothing matched the loaded catalog. Keep the code visible instead of dropping it: the
+          // product may simply be past the page this device walked, which is the same silent gap as
+          // the un-walked cursor, and a cashier who cannot see what they scanned cannot recover.
+          setSearch(barcode);
+          // Drop any previous server answer so the effect re-queries: a scanned code may belong to a
+          // product this device never downloaded, which is the same silent gap as the un-walked cursor.
+          setServerMatches(null);
+          setMessage(`Kode dipindai: ${barcode}`);
+        }
       },
     });
     return listener.start(window);
@@ -666,6 +683,22 @@ return () => { active = false; window.clearInterval(interval); window.removeEven
     } finally { setSyncBusy(false); }
   }
 
+  /**
+   * Open one of the standalone device screens that live under this app's public/ directory.
+   *
+   * Both were fully built and reachable by URL, but nothing in any app linked to them, so an operator
+   * had to be told the address by hand. They open in a new tab because each owns the full screen: a
+   * kiosk is a customer-facing display and a stock count is a long-running count on the same handset.
+   *
+   * `noopener,noreferrer` is required, not decorative. Without `noopener` the opened document gets a
+   * handle on this window's `window.opener` and can navigate a cashier's till away mid-transaction.
+   */
+  function openDeviceScreen(path: string) {
+    const url = new URL(path, window.location.origin).toString();
+    const opened = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!opened) setMessage('Popup diblokir browser. Buka secara manual: ' + url);
+  }
+
   function cacheShiftState(nextShift: CashierShift | null): boolean {
     try {
       const snapshot = loadOfflineSnapshot<Product, Warehouse, CustomerOption, CashierShift, RuntimeManifest>();
@@ -708,28 +741,32 @@ return () => { active = false; window.clearInterval(interval); window.removeEven
         : [...current, { product, quantity: nextQuantity, unitCode, quantityFactor: factor, ...(productUnitId ? { productUnitId } : {}), ...(variantId ? { variantId } : {}), ...(barcodeCode ? { barcodeCode } : {}) }];
     });
   }
-  function scanExactBarcode(raw: string) {
+  /**
+   * The one commit path for a scanned code, shared by the search box and the global listener.
+   *
+   * Returns what it did rather than a bare boolean, because the two callers need to branch on it:
+   * the search box has nothing to fall back to, while the global listener keeps the code visible
+   * when nothing matched. Two entry points returning one verdict is the point — a second commit
+   * path is how a scanner ends up filling a box instead of adding a row.
+   */
+  function scanExactBarcode(raw: string): 'added' | 'blocked' | 'unmatched' {
     const code = raw.trim();
-    if (!code) return false;
-    for (const product of products) {
-      const alternate = product.barcodes?.find((item) => item.code === code);
-      if (product.barcode !== code && !alternate) continue;
-      const factor = Number(alternate?.quantityFactor ?? 1);
-      if (!Number.isSafeInteger(factor) || factor <= 0) {
-        setMessage(`Barcode ${code} memakai quantityFactor ${factor} yang tidak dapat diposting sebagai stok integer. Perbaiki konversi unit master data.`);
-        return true;
-      }
-      if (!apiOnline && (factor !== 1 || Boolean(alternate))) {
-        setMessage('Scan barcode unit/kemasan membutuhkan server online agar konversi dan harga diverifikasi. Gunakan produk base unit saat offline.');
-        return true;
-      }
-      add(product, 1, { unitCode: alternate?.unitCode ?? product.unit, quantityFactor: factor, productUnitId: alternate?.productUnitId ?? undefined, variantId: alternate?.variantId ?? undefined, barcodeCode: code });
-      setSearch('');
-      setMessage(factor > 1 ? `${product.name}: 1 ${alternate?.unitCode ?? 'kemasan'} = ${factor} ${product.unit}. Harga dikonfirmasi server.` : '');
-      return true;
+    if (!code) return 'unmatched';
+    const match = matchBarcode(products, code, { online: apiOnline });
+    if (match.status === 'unpostable') {
+      setMessage(match.reason === 'quantity-factor'
+        ? `Barcode ${code} memakai quantityFactor ${match.quantityFactor} yang tidak dapat diposting sebagai stok integer. Perbaiki konversi unit master data.`
+        : 'Scan barcode unit/kemasan membutuhkan server online agar konversi dan harga diverifikasi. Gunakan produk base unit saat offline.');
+      return 'blocked';
     }
-    setMessage(`Barcode ${code} tidak ditemukan pada katalog aktif.`);
-    return true;
+    if (match.status === 'unmatched') {
+      setMessage(`Barcode ${code} tidak ditemukan pada katalog aktif.`);
+      return 'unmatched';
+    }
+    add(match.product, 1, { unitCode: match.unitCode, quantityFactor: match.quantityFactor, productUnitId: match.productUnitId, variantId: match.variantId, barcodeCode: match.barcodeCode });
+    setSearch('');
+    setMessage(match.quantityFactor > 1 ? `${match.product.name}: 1 ${match.unitCode} = ${match.quantityFactor} ${match.product.unit}. Harga dikonfirmasi server.` : '');
+    return 'added';
   }
   function change(lineKey: string, quantity: number) {
     setCart((current) => {
@@ -1030,7 +1067,7 @@ return () => { active = false; window.clearInterval(interval); window.removeEven
     conflictCount={pendingSaleReturns.length}
     companyName={manifest?.company?.name ?? 'Toko360'}
     branchName={manifest?.branch?.name ?? manifest?.branch?.code ?? 'Cabang aktif'}
-    warehouseControl={<><label>Gudang/toko<select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setCart([]); }}>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>{ownedOfflineQueue.length > 0 && <button className="syncButton" disabled={!apiOnline || syncBusy} onClick={() => void syncOfflineQueue(token, hasOfflineConflict)}><RefreshCw size={14} className={syncBusy ? 'spin' : ''} /> {syncBusy ? 'SYNC...' : 'SYNC'}</button>}<button className="logout" onClick={() => void logout()}>Keluar</button></>}
+    warehouseControl={<><label>Gudang/toko<select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setCart([]); }}>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>{ownedOfflineQueue.length > 0 && <button className="syncButton" disabled={!apiOnline || syncBusy} onClick={() => void syncOfflineQueue(token, hasOfflineConflict)}><RefreshCw size={14} className={syncBusy ? 'spin' : ''} /> {syncBusy ? 'SYNC...' : 'SYNC'}</button>}<button className="deviceLink" type="button" onClick={() => openDeviceScreen('/stock-count/')}><ClipboardList size={14} /> Hitung stok</button><button className="deviceLink" type="button" onClick={() => openDeviceScreen('/kiosk/')}><ScanBarcode size={14} /> Cek harga</button><button className="logout" onClick={() => void logout()}>Keluar</button></>}
   >
     <StaffMemoWidget token={token} />
     {message && <div className={`notice ${(message.includes('berhasil') || message.includes('tersimpan')) ? 'toastLike success' : 'toastLike error'}`}>{(message.includes('berhasil') || message.includes('tersimpan')) ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {message}</div>}
@@ -1064,14 +1101,14 @@ return () => { active = false; window.clearInterval(interval); window.removeEven
 
 
     <div className="layout">
-      <section className="catalog"><div className="searchWrap"><Search size={15} className="searchIcon" /><input className="search" placeholder="Cari nama, SKU, atau scan barcode..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void scanExactBarcode(search); } }} autoFocus /></div>
+      <section className="catalog"><div className="searchWrap"><Search size={15} className="searchIcon" /><input className="search" placeholder="Cari nama, SKU, atau scan barcode..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); scanExactBarcode(search); } }} autoFocus /></div>
         <div className="chips">{categories.slice(0, 8).map((cat) => <button key={cat} className={cat === category ? 'chip active' : 'chip'} onClick={() => setCategory(cat)}>{cat}</button>)}</div>
         <div className="products">
           {!catalogReady && <div className="emptyState"><div className="emptyIcon"><PackageSearch size={28} strokeWidth={1.6} /></div><h4>Memuat katalog…</h4><p>Menyiapkan produk dan stok terminal.</p></div>}
           {catalogReady && !products.length && <div className="emptyState"><div className="emptyIcon"><PackageSearch size={28} strokeWidth={1.6} /></div><h4>Katalog belum tersedia</h4><p>Belum ada produk aktif untuk terminal ini atau data gagal dimuat.</p></div>}
           {products.length > 0 && !visibleProducts.length && <div className="emptyState"><div className="emptyIcon"><PackageSearch size={28} strokeWidth={1.6} /></div><h4>Tidak ada produk cocok</h4><p>Coba kata kunci lain atau ganti kategori.</p></div>}
           {(catalogHasMore || serverSearchBusy) && <div className="catalogFooter" role="status">{serverSearchBusy ? 'Mencari di server…' : `Menampilkan ${products.length} produk. Katalog belum lengkap.`}{catalogHasMore && <button type="button" className="secondary" onClick={() => void loadMoreCatalog()} disabled={catalogLoadingMore}>{catalogLoadingMore ? 'MEMUAT…' : 'Muat lagi katalog'}</button>}</div>}
-          {visibleProducts.map((product) => { const variants = activeVariants(product); const variant = shownVariant(product, variantChoice[product.id]); const units = variantUnits(product, variant); return <div className="product" key={product.id}><button className="productMain" onClick={() => add(product, 1, variant ? { variantId: variant.id } : undefined)} disabled={available(product) <= 0}><div className="productIcon" aria-hidden="true"><Package size={24} strokeWidth={1.7} /></div><strong>{product.name}</strong><small>{product.sku} · stok {available(product)} {product.unit}</small><span>{money(variantPrice(product, variant))}</span></button>{variants.length > 1 && <label className="variantPick"><span className="srOnly">Jenis {product.name}</span><select aria-label={`Jenis ${product.name}`} value={variant?.id ?? ''} onChange={(event) => setVariantChoice((current) => ({ ...current, [product.id]: event.target.value }))}>{variants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{apiOnline && units.length > 0 && <div className="unitActions">{units.map((unit) => <button type="button" key={unit.id} onClick={() => add(product,1,{unitCode:unit.unitCode,quantityFactor:unit.quantityFactor,productUnitId:unit.id,variantId:(unit.variantId ?? variant?.id) ?? undefined})}>{unit.unitCode} × {unit.quantityFactor}</button>)}</div>}</div>; })}
+          {visibleProducts.map((product) => { const variants = activeVariants(product); const variant = shownVariant(product, variantChoice[product.id]); const units = variantUnits(product, variant); return <div className="product" key={product.id}><button className="productMain" onClick={() => add(product, 1, variant ? { variantId: variant.id } : undefined)} disabled={available(product) <= 0}><ProductMedia product={product} /><strong>{product.name}</strong><small>{product.sku} · stok {available(product)} {product.unit}</small><span>{money(variantPrice(product, variant))}</span></button>{variants.length > 1 && <label className="variantPick"><span className="srOnly">Jenis {product.name}</span><select aria-label={`Jenis ${product.name}`} value={variant?.id ?? ''} onChange={(event) => setVariantChoice((current) => ({ ...current, [product.id]: event.target.value }))}>{variants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}{apiOnline && units.length > 0 && <div className="unitActions">{units.map((unit) => <button type="button" key={unit.id} onClick={() => add(product,1,{unitCode:unit.unitCode,quantityFactor:unit.quantityFactor,productUnitId:unit.id,variantId:(unit.variantId ?? variant?.id) ?? undefined})}>{unit.unitCode} × {unit.quantityFactor}</button>)}</div>}</div>; })}
         </div>
       </section>
       <aside className="cart"><div className="cartTitle"><div><span>TRANSAKSI</span><h2><ShoppingCart size={17} style={{verticalAlign:'-3px'}} /> Keranjang kasir</h2></div><div className="rowActions"><button className="clear" disabled={!cart.length} onClick={holdCart}>HOLD</button><button className="clear" onClick={() => setCart([])}><Trash2 size={14} /> Kosongkan</button></div></div>

@@ -247,6 +247,42 @@
     }).catch(function (error) { say(error.message, 'bad'); });
   }
 
+  /**
+   * Discard the draft.
+   *
+   * The server has had POST /mobile-ops/drafts/:id/discard since the route existed, audited as
+   * MOBILE_OPNAME_DRAFT_DISCARDED and refusing anything not OPEN — but this screen never called it.
+   * The only ways out of a count were submitting it or walking away, so a count taken in the wrong
+   * warehouse or on the wrong handset stayed OPEN on the server forever, and re-opening it resumed
+   * the same bad count.
+   *
+   * A reason is required because the server requires one and it lands in the audit trail. The
+   * confirmation is a <dialog> with a real input rather than a native window.confirm, for the same
+   * reason the admin does it: a native prompt cannot be styled and cannot be tested.
+   */
+  function discardDraft() {
+    if (!draft) return;
+    $('discard-confirm').showModal();
+  }
+
+  function performDiscard() {
+    if (!draft) return;
+    var reason = $('discard-reason').value.trim();
+    if (!reason) { say('Alasan pembuangan wajib diisi.', 'bad'); return; }
+    say('Membuang draft…');
+    return api('/mobile-ops/drafts/' + encodeURIComponent(draft.id) + '/discard', {
+      method: 'POST', body: { reason: reason },
+    }).then(function () {
+      say('Draft dibuang. Mulai hitungan baru bila masih diperlukan.', 'ok');
+      $('discard-reason').value = '';
+      $('discard-confirm').close();
+      draft = null;
+      lines = [];
+      renderLines();
+      $('card-review').classList.add('hide');
+    }).catch(function (error) { say(error.message, 'bad'); });
+  }
+
   function submitDraft() {
     if (!draft) return;
     var opnameId = $('opname').value.trim();
@@ -337,6 +373,9 @@
   $('code').addEventListener('keydown', function (event) { if (event.key === 'Enter') $('btn-scan').click(); });
   $('btn-review').addEventListener('click', review);
   $('btn-submit').addEventListener('click', submitDraft);
+  $('btn-discard').addEventListener('click', discardDraft);
+  $('btn-discard-cancel').addEventListener('click', function () { $('discard-confirm').close(); });
+  $('btn-discard-confirm').addEventListener('click', performDiscard);
   $('btn-submit-cancel').addEventListener('click', function () { $('submit-confirm').close(); });
   $('btn-submit-confirm').addEventListener('click', function () {
     var dialog = $('submit-confirm');

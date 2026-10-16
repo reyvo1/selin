@@ -42,6 +42,8 @@
     "diagnose:install": "node scripts/diagnose-install.mjs",
     "test:load": "node scripts/load-test.mjs",
     "test:load:health": "node scripts/load-test.mjs --url http://127.0.0.1:4000/api/v1/health --requests 500 --concurrency 25",
+    "test:load:k6": "node scripts/run-k6-stress.mjs --scenario read --allow-nonproduction",
+    "test:load:k6:write": "node scripts/run-k6-stress.mjs --scenario write --allow-nonproduction --allow-writes",
     "work:auto": "node scripts/start-work.mjs next",
     "work:custom": "node scripts/start-work.mjs custom",
     "work:resume": "node scripts/start-work.mjs resume",

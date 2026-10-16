@@ -10,11 +10,28 @@ type KeyRow={id:string;name:string;keyPrefix:string;scopes:string[];isActive:boo
 type BranchRow={id:string;code:string;name:string};
 async function req<T>(token:string,path:string,init?:RequestInit){const r=await authFetch(`${API}${path}`,token,{...init,headers:{'Content-Type':'application/json',...(init?.headers??{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(`HTTP ${r.status}: ${Array.isArray(d.message)?d.message.join(', '):d.message??'Request gagal'}`);return d as T;}
 
+/**
+ * Where a freshly minted kiosk key is actually used.
+ *
+ * The screen was already fully built at /kiosk/ and the preset filled the right scope, but nothing
+ * told the operator the address, so the last step had to be done by hand from memory. A secret that
+ * is shown once and a URL that is never shown is a key that stays uninstalled.
+ */
+function kioskInstallUrl(secret: string, branchId: string): string {
+  if (typeof window === 'undefined') return `/kiosk/?key=${encodeURIComponent(secret)}`;
+  const url = new URL('/kiosk/', window.location.origin);
+  url.searchParams.set('key', secret);
+  if (branchId) url.searchParams.set('branch', branchId);
+  return url.toString();
+}
+
 export default function ApiKeysView({token}:{token:string}){
   const [rows,setRows]=useState<KeyRow[]>([]);
   const [name,setName]=useState('');
   const [scopes,setScopes]=useState('product.view,inventory.view');
   const [secret,setSecret]=useState('');
+  /** Kept only long enough to render the kiosk install URL; cleared with the secret itself. */
+  const [kioskSecret,setKioskSecret]=useState('');
   const [secretLabel,setSecretLabel]=useState('');
   const [msg,setMsg]=useState('');
   // POST-1D. A kiosk is a device in a specific branch, so issuing one asks two questions a generic
@@ -31,7 +48,9 @@ export default function ApiKeysView({token}:{token:string}){
   // /master-data/branches is the real listing; a bare /branches does not exist and 404s, which
   // left the pin selector silently empty — an operator would conclude pinning was unavailable.
   useEffect(()=>{void req<BranchRow[]>(token,'/master-data/branches').then(setBranches).catch((error)=>{setBranches([]);setMsg(error instanceof Error?`Daftar cabang gagal dimuat: ${error.message}`:'Daftar cabang gagal dimuat.');});},[token]);
-  async function create(e:FormEvent){e.preventDefault();setBusy(true);try{const row=await req<KeyRow>(token,'/api-keys',{method:'POST',body:JSON.stringify({name,scopes:scopes.split(',').map(x=>x.trim()).filter(Boolean),...(branchId?{branchId}:{}),...(locationLabel.trim()?{locationLabel:locationLabel.trim()}:{})})});setSecret(row.apiKey??'');setSecretLabel(`Key baru · ${row.keyPrefix}`);setName('');setBranchId('');setLocationLabel('');await load();setMsg('API key dibuat. Simpan secret sebelum meninggalkan halaman.');}catch(e){setMsg(e instanceof Error?e.message:'Gagal membuat key');}finally{setBusy(false);}}
+  async function create(e:FormEvent){e.preventDefault();setBusy(true);try{const row=await req<KeyRow>(token,'/api-keys',{method:'POST',body:JSON.stringify({name,scopes:scopes.split(',').map(x=>x.trim()).filter(Boolean),...(branchId?{branchId}:{}),...(locationLabel.trim()?{locationLabel:locationLabel.trim()}:{})})});setSecret(row.apiKey??'');setSecretLabel(`Key baru · ${row.keyPrefix}`);// Only a key that can actually reach the kiosk gets the install URL; a general integration key
+// carrying the kiosk scope by accident is the one case where showing it would mislead.
+if((row.apiKey??'')&&scopes.split(',').map(x=>x.trim()).includes('kiosk.price.read'))setKioskSecret(row.apiKey??'');setName('');setBranchId('');setLocationLabel('');await load();setMsg('API key dibuat. Simpan secret sebelum meninggalkan halaman.');}catch(e){setMsg(e instanceof Error?e.message:'Gagal membuat key');}finally{setBusy(false);}}
   async function revoke(id:string){setBusy(true);try{await req(token,`/api-keys/${id}/revoke`,{method:'PATCH'});await load();setMsg('API key dicabut.');}catch(e){setMsg(e instanceof Error?e.message:'Gagal revoke');}finally{setBusy(false);}}
   async function rotate(e:FormEvent){e.preventDefault();if(!rotateTarget)return;setBusy(true);try{const row=await req<KeyRow>(token,`/api-keys/${rotateTarget.id}/rotate`,{method:'POST',body:'{}'});setSecret(row.apiKey??'');setSecretLabel(`Rotasi ${rotateTarget.name} · ${row.keyPrefix}`);setRotateTarget(null);setRotateConfirmation('');await load();setMsg('API key dirotasi. Secret lama langsung tidak berlaku.');}catch(error){setMsg(error instanceof Error?error.message:'Gagal rotate key');}finally{setBusy(false);}}
   return <section className="stack">
@@ -42,7 +61,7 @@ export default function ApiKeysView({token}:{token:string}){
         <label>Lokasi perangkat (opsional)<input value={locationLabel} onChange={e=>setLocationLabel(e.target.value)} placeholder="mis. kios pintu masuk"/></label>
         <div className="actionRow"><button type="button" className="secondary" onClick={()=>{setName('Kios cek harga');setScopes('kiosk.price.read');setLocationLabel('kios pintu masuk');}}>Preset kios</button></div>
         {canAll('api_key.manage')&&<button disabled={busy}>Buat API key</button>}</form>
-      {secret&&<div className="notice"><strong>SECRET SEKALI TAMPIL — {secretLabel}</strong><br/><code className="secretCode">{secret}</code><div className="actionRow"><button type="button" className="secondary" onClick={()=>{setSecret('');setSecretLabel('');}}>Saya sudah menyimpan secret</button></div></div>}
+      {secret&&<div className="notice"><strong>SECRET SEKALI TAMPIL — {secretLabel}</strong><br/><code className="secretCode">{secret}</code>{kioskSecret&&<div className="kioskInstall"><strong>Alamat layar kios</strong><p>Perangkat ini memasang kuncinya sendiri saat dibuka dengan alamat berikut. Gunakan persis alamat ini — kuncinya hanya terpasang sekali per origin per perangkat.</p><code className="secretCode">{kioskInstallUrl(kioskSecret,branchId)}</code></div>}<div className="actionRow"><button type="button" className="secondary" onClick={()=>{setSecret('');setSecretLabel('');setKioskSecret('');}}>Saya sudah menyimpan secret</button></div></div>}
       <Table head={['Nama','Prefix / Last use','Scopes','Status','Aksi']} rows={rows.map(k=>[<strong key={`${k.id}-name`}>{k.name}</strong>,<span key={`${k.id}-usage`}><code>{k.keyPrefix}</code><small>{k.lastUsedAt?`last ${new Date(k.lastUsedAt).toLocaleString('id-ID')}`:'belum digunakan'}{k.expiresAt?` · exp ${new Date(k.expiresAt).toLocaleDateString('id-ID')}`:''}</small></span>,<span key={`${k.id}-scopes`}><small>{k.scopes.join(', ')}</small>{k.branchId&&<small> · pin {branches.find(b=>b.id===k.branchId)?.code??k.branchId}</small>}{k.locationLabel&&<small> · {k.locationLabel}</small>}</span>,<StatusChip key={`${k.id}-status`} status={k.isActive?'ACTIVE':'INACTIVE'}/>,k.isActive?(canAll('api_key.manage')?<div className="actionRow" key={`${k.id}-actions`}><button type="button" className="secondary" disabled={busy} onClick={()=>{setRotateTarget(k);setRotateConfirmation('');}}>Rotate</button><button type="button" className="secondary" disabled={busy} onClick={()=>void revoke(k.id)}>Revoke</button></div>:'-'):'-'])} empty="Belum ada API key"/>
       <p className="sectionHelp">Pemakaian integrasi: header <code>x-api-key</code>. Untuk perusahaan multi-cabang tambahkan <code>x-toko360-branch-id</code>. Scope mengikuti permission domain.action.</p>
       <p className="sectionHelp"><strong>Perangkat kios:</strong> gunakan preset kios. Kunci yang dipin ke satu cabang <em>menolak</em> header cabang yang berbeda — inilah yang mencegah layar di kasir 2, atau perangkat mana pun yang diklik, untuk membaca harga cabang lain. Kios hanya bisa membaca: scopenya <code>kiosk.price.read</code> dan tidak memberi akses tulis apa pun.</p>

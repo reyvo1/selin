@@ -48,6 +48,38 @@ test('build gate generates schema-specific PostgreSQL Prisma Client before TypeS
 });
 
 test('PR CI does not test/build against an ungenerated or SQLite-generated Prisma Client', () => {
-  assert.match(ci, /Generate PostgreSQL Prisma Client for repository tests[\s\S]*npm run db:postgres:generate[\s\S]*npm test/);
+  // The ordering here is the whole point, so it is measured on the SEQUENCE rather than on
+  // co-occurrence. The previous assertion was `/postgres:generate[\s\S]*npm test/`, which any file
+  // satisfies as long as both appear anywhere in that order — including the broken ordering this very
+  // job shipped with. `npm test` instantiates PrismaClient through the SQLite URL in .env, so it needs
+  // the SQLite client, and the step before it leaves the PostgreSQL one active. Found the first time
+  // ci.yml ever ran: 92 tests failing on a clean checkout with "the URL must start with the protocol
+  // postgresql://" — the same defect run-build-gate.mjs was already repaired for on 2026-10-01.
+  const job = ci.slice(ci.indexOf('Repository and local-profile tests'), ci.indexOf('sqlite-integration:'));
+  const postgresGenerate = job.indexOf('npm run db:postgres:generate');
+  const sqliteRestore = job.indexOf('Restore SQLite Prisma Client for the test suite');
+  const testRun = job.indexOf('- run: npm test');
+  assert.ok(postgresGenerate > 0, 'the PostgreSQL Client must still be generated for repository checks');
+  assert.ok(sqliteRestore > postgresGenerate, 'the SQLite Client must be restored after the PostgreSQL one');
+  assert.ok(testRun > sqliteRestore, 'and the suite must run against the restored SQLite Client, not the PostgreSQL one');
+
+  // Same clean-checkout class of problem, different artefact. `tests/post1c-telegram-polling.test.mjs`
+  // imports apps/worker/dist/telegram-polling.js. On a laptop `dist/` always exists from an earlier
+  // build, so the failure is invisible until CI runs it on a fresh checkout — which is what happened
+  // the first time this job executed.
+  const workerBuild = job.indexOf('npm run build -w @toko360/worker');
+  assert.ok(workerBuild > sqliteRestore, 'the worker must be built before the suite, or the Telegram transport test cannot resolve apps/worker/dist');
+  assert.ok(testRun > workerBuild, 'and the suite must run after that build');
+
+  // The negative control. Without the restore step the job still mentions generate and test in that
+  // order, which is exactly what the old co-occurrence assertion accepted, so this proves the control
+  // would fail the broken workflow rather than merely describing it.
+  const withoutRestore = job.replace(/Restore SQLite Prisma Client for the test suite[\s\S]*?npm run db:local:generate/, '');
+  assert.equal(withoutRestore.indexOf('Restore SQLite Prisma Client'), -1, 'the control must have removed the restore step');
+  assert.ok(
+    withoutRestore.indexOf('- run: npm test') > withoutRestore.indexOf('npm run db:postgres:generate'),
+    'control fixture is wrong: with the restore gone, npm test must follow the PostgreSQL generate directly — the broken order the old assertion accepted',
+  );
+
   assert.match(ci, /npm run db:local:prepare[\s\S]*npm run test:db:smoke[\s\S]*Restore PostgreSQL Prisma Client for production build typing[\s\S]*npm run db:postgres:generate[\s\S]*npm run build/);
 });

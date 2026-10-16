@@ -31,14 +31,21 @@ html[data-t360-theme='dark']{background:#07111f;color-scheme:dark} body{margin:0
   .searchIcon{@apply pointer-events-none absolute left-3.5 text-slate-400;}
   .search{@apply h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-teal-400 focus:ring-4 focus:ring-teal-100;}
   .chips{@apply mb-3 flex flex-wrap gap-2;}
-  .chips button{@apply min-h-9 rounded-full border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-600 shadow-sm transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700;}
-  .chips button.active{@apply border-teal-600 bg-teal-600 text-white;}
+  .chip{@apply min-h-9 rounded-full border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-600 shadow-sm transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700;}
+  .chip.active{@apply border-teal-600 bg-teal-600 text-white;}
   .products{@apply grid min-w-0 grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-4;}
   .product{@apply relative flex min-h-[150px] min-w-0 flex-col justify-between overflow-hidden rounded-[22px] border border-slate-200 bg-white p-3.5 text-left shadow-[0_10px_28px_rgba(15,23,42,.05)] transition hover:-translate-y-1 hover:border-teal-200 hover:shadow-[0_18px_38px_rgba(15,118,110,.12)];}
   .product::after{content:"";@apply pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-teal-500 via-cyan-400 to-sky-500 opacity-0 transition-opacity;}
   .product:hover::after{@apply opacity-100;}
   .productMain{@apply flex min-w-0 items-start gap-3;}
   .productIcon{@apply grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-700 ring-1 ring-teal-100;}
+  /* The photo is the card's visual anchor, so it gets a fixed 4:3 box and `cover` rather than the
+     intrinsic size: a portrait shot and a landscape shot then occupy the same height and the grid
+     keeps its rhythm instead of stepping as each image reports its own dimensions. The `width`/`height`
+     attributes on the element reserve that box before the bytes arrive, which is what stops the rows
+     below from being shoved down on every load. */
+  .productMedia{position:relative;width:100%;aspect-ratio:4/3;overflow:hidden;border-radius:14px;background:linear-gradient(135deg,var(--pos-surface-muted,#f8fafc),var(--pos-surface,#fff));}
+  .productMedia>img{display:block;width:100%;height:100%;object-fit:cover}
   .product strong{@apply block truncate text-xs font-semibold text-slate-950;}
   .product small{@apply mt-1 block text-[9px] leading-4 text-slate-500;}
   .unitActions{@apply mt-3 flex flex-wrap gap-1.5;}
@@ -60,7 +67,11 @@ html[data-t360-theme='dark']{background:#07111f;color-scheme:dark} body{margin:0
   .item strong{@apply text-xs font-semibold text-slate-900;}
   .qty,.rowActions{@apply mt-2 flex flex-wrap items-center gap-2;}
   .summary{@apply mt-4 space-y-2 rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-3 text-xs text-slate-600;}
-  .summary>div{@apply flex items-center justify-between gap-3;}
+  /* Label/value rows are `display:flex`, but `.summary` also contains two structural blocks that
+     must stay stacked: the split-payment tender list and the discount-approval hint. They are
+     direct children of `.summary`, so without the `:not()` they inherited the row layout and their
+     inner rows were laid out horizontally — the tender controls overlapped the cart. */
+  .summary>div:not(.splitPayments):not(.approvalHint){@apply flex items-center justify-between gap-3;}
   .grand{@apply border-t border-slate-200 pt-2 text-base font-bold text-slate-950;}
 
   .paymentModeHeader{@apply mt-4 flex flex-wrap items-center justify-between gap-2;}
@@ -85,6 +96,16 @@ html[data-t360-theme='dark']{background:#07111f;color-scheme:dark} body{margin:0
   .offlinePanel.conflict{@apply border-rose-200 bg-rose-50;}
   .syncEmpty,.emptyState{@apply grid min-h-36 place-items-center rounded-[22px] border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500;}
   .emptyIcon{@apply mx-auto mb-2 grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-400 shadow-sm;}
+  /* The empty-state box was sized and coloured but its TEXT was never styled: every <h4> and <p>
+     inside it rendered at the browser default size and margin, which is what made these read as
+     large blank panels rather than as a message. The three inner structures in use are h4+p,
+     <span> alone, and strong+small, so all three are typed here. */
+  .syncEmpty h4,.emptyState h4{margin:.2rem 0 0;font-size:13px;font-weight:800;letter-spacing:-.01em;color:var(--pos-text);}
+  .syncEmpty p,.emptyState p,.syncEmpty span,.syncEmpty small,.emptyState small{margin:.35rem 0 0;font-size:11px;line-height:1.6;color:var(--pos-text-subtle);}
+  .syncEmpty strong,.emptyState strong{display:block;font-size:12px;font-weight:800;color:var(--pos-text);}
+  /* One line of text does not need a 144px box. The min-height now applies only to states that carry
+     an icon, so a single sentence stops reserving the space of a whole panel. */
+  .syncEmpty:not(:has(.emptyIcon)):not(:has(>div)){@apply min-h-0 py-3;}
   .heldList{@apply mt-3 space-y-2;}
   .heldItem{@apply flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3;}
   /* `items-start` + a scrollable overlay instead of `place-items-center`.
@@ -139,14 +160,76 @@ html[data-t360-theme='dark']{background:#07111f;color-scheme:dark} body{margin:0
 :focus-visible{outline:2px solid #0f766e;outline-offset:2px}
 
 /* P5 V4.11 ROOT PRESENTATION AUTHORITY — one layer, no override accretion. */
+.deviceLink{display:inline-flex;min-height:40px;align-items:center;justify-content:center;gap:.4rem;border:1px solid #cbd5e1;border-radius:12px;background:#fff;padding:.5rem .7rem;color:#475569;font-size:11px;font-weight:700;line-height:1;white-space:nowrap;box-shadow:0 6px 18px rgba(15,23,42,.06)}
+.deviceLink:hover{border-color:#0f766e;color:#0f766e}
 .logout,.syncButton{display:inline-flex;min-height:40px;align-items:center;justify-content:center;gap:.5rem;border:1px solid #cbd5e1;border-radius:12px;background:#fff;padding:.6rem .85rem;color:var(--pos-text-muted);font-size:11px;font-weight:700;box-shadow:0 4px 14px rgba(15,23,42,.06)}
 .syncButton{border-color:var(--pos-accent);background:#f0fdfa;color:var(--pos-accent)}.shiftClose{display:inline-flex;min-height:44px;align-items:center;justify-content:center;border:1px solid #fecdd3;border-radius:12px;background:#fff1f2;padding:.65rem 1rem;color:#be123c;font-size:12px;font-weight:800}.redeem{margin-top:.75rem;display:flex;min-width:0;flex-wrap:wrap;align-items:center;gap:.5rem;border:1px solid #fde68a;border-radius:16px;background:#fffbeb;padding:.75rem;color:#92400e;font-size:11px;font-weight:700}.redeem input{margin-left:auto;width:7rem;border-color:#fde68a;background:#fff;text-align:right}.receiptReady{margin-bottom:1rem;display:flex;min-width:0;flex-direction:column;gap:.75rem;border:1px solid #a7f3d0;border-radius:20px;background:#ecfdf5;padding:1rem;color:#064e3b;box-shadow:0 12px 28px rgba(5,150,105,.10)}.receiptReady strong{display:block;font-size:12px;font-weight:800}.receiptReady small{display:block;margin-top:.25rem;color:#047857;font-size:10px;line-height:1.5}
 
 .posWorkspaceBody form,.login>form{min-width:0}.posWorkspaceBody form:not(.inlineForm),.login>form{display:grid;gap:.8rem;align-content:start}.posWorkspaceBody label:not(.redeem),.login>form label{display:grid;min-width:0;gap:.38rem;align-content:start;color:var(--pos-text-subtle);font-size:11px;font-weight:700;line-height:1.35}.posWorkspaceBody label:not(.redeem)>input,.posWorkspaceBody label:not(.redeem)>select,.posWorkspaceBody label:not(.redeem)>textarea,.login>form label>input,.login>form label>select,.login>form label>textarea{width:100%;max-width:100%;margin:0}.posWorkspaceBody button:not([class]),.login>form button:not([class]){display:inline-flex;min-height:40px;width:max-content;max-width:100%;align-items:center;justify-content:center;gap:.45rem;border:1px solid #0f766e;border-radius:12px;background:linear-gradient(90deg,#0f766e,#0e7490);padding:.62rem .95rem;color:#fff;font-size:12px;font-weight:700;line-height:1;box-shadow:0 10px 24px rgba(15,118,110,.16)}.posWorkspaceBody button:not([class]):disabled,.login>form button:not([class]):disabled{cursor:not-allowed;opacity:.55;box-shadow:none}.layout{align-items:start}.layout>*,.catalog,.cart{height:auto;align-self:start}.login>form>button{justify-self:start}.shiftControlGrid{display:grid;grid-template-columns:repeat(1,minmax(0,1fr));gap:1rem;align-items:start}.shiftControlGrid>.shiftPanel{margin-top:0;height:auto;align-self:start}.shiftRecapGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}.shiftRecapGrid>div{min-width:0;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc;padding:.85rem}.shiftRecapGrid span,.shiftRecapGrid small{display:block;color:var(--pos-text-subtle);font-size:10px;line-height:1.45}.shiftRecapGrid strong{display:block;margin:.25rem 0;color:var(--pos-text);font-size:13px}.cashMovementList{display:flex;flex-direction:column;gap:.55rem}
+
+/* POS surfaces whose class existed in the JSX but had no rule anywhere in this file. Without these
+   they rendered as raw browser defaults inside an otherwise styled shell: an unstyled <ul> with
+   bullets, a <pre> that overflowed its card, and helper text at body size.
+   Colours come from the --pos-* semantic tokens rather than Tailwind literals, so the dark theme
+   picks them up without a second copy of every rule. */
+.receiptHistory{margin:1rem 0 0;border:1px solid var(--pos-border);border-radius:24px;background:var(--pos-surface);padding:1rem;color:var(--pos-text);box-shadow:0 12px 32px rgba(15,23,42,.05)}
+.receiptHistory h3{margin:0;font-size:13px;font-weight:800;letter-spacing:-.01em}
+.receiptHistory ul{margin:.75rem 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:.5rem}
+.receiptHistory li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.75rem;border:1px solid var(--pos-border);border-radius:12px;background:rgba(127,127,127,.06);padding:.7rem .8rem}
+.receiptHistory li>span{min-width:0;flex:1 1 auto}
+.receiptHistory li strong{display:block;font-size:12px;font-weight:700;overflow-wrap:anywhere}
+.receiptHistory li small{display:block;margin-top:.2rem;font-size:10px;color:var(--pos-text-subtle)}
+.panelNote{margin:.35rem 0 0;font-size:11px;line-height:1.6;color:var(--pos-text-subtle)}
+/* Rendered INSIDE .products, i.e. as a grid cell: without col-span-full it sat in one cell beside
+   the product cards instead of reading as a footer under them. */
+.catalogFooter{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.75rem;margin-top:.25rem;border:1px dashed var(--pos-border);border-radius:16px;padding:.7rem 1rem;font-size:11px;text-align:center;color:var(--pos-text-subtle)}
+/* Inline text affordance — "Minta persetujuan", "Ambil di cabang lain". A bare <button> only
+   inherits cursor:pointer, so it looked like plain text until hovered. */
+.linkButton{display:inline-flex;align-items:center;gap:.3rem;border:0;background:none;padding:0;font:inherit;font-size:10px;font-weight:700;color:var(--pos-accent);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.linkButton:hover{color:var(--pos-text)}
+.linkButton:disabled{opacity:.55;cursor:not-allowed}
+.approvalHint{display:flex;flex-wrap:wrap;align-items:flex-start;gap:.5rem;margin-top:.5rem;border:1px solid #fcd34d;border-radius:12px;background:#fffbeb;padding:.6rem .7rem;font-size:10px;line-height:1.5;color:#92400e}
+.formError{margin:.5rem 0 0;border:1px solid #fecaca;border-radius:12px;background:#fef2f2;padding:.55rem .7rem;font-size:11px;line-height:1.5;color:#be123c}
+.voucherBox{display:block;max-width:100%;margin:.75rem 0 0;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #99f6e4;border-radius:16px;background:#f0fdfa;padding:.8rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.6;color:#134e4a}
+.branchStockList{max-height:16rem;margin:.75rem 0 0;padding:0;list-style:none;overflow-y:auto;display:flex;flex-direction:column;gap:.5rem}
+.branchStockList li{display:flex;align-items:center;justify-content:space-between;gap:.75rem;border:1px solid var(--pos-border);border-radius:12px;background:rgba(127,127,127,.06);padding:.7rem .8rem;font-size:12px}
+.branchStockList li>span{min-width:0;flex:1 1 auto}
+.branchStockList li strong{display:block;font-size:12px;font-weight:700;overflow-wrap:anywhere}
+.branchStockList li small{display:block;margin-top:.15rem;font-size:10px;color:var(--pos-text-subtle)}
+.muted{font-size:11px;line-height:1.5;color:var(--pos-text-subtle)}
+
+/* `.spin` is the offline-queue sync icon's busy state. There were no @keyframes in this file at
+   all, so the class carried no animation and the icon sat still through a sync that can take
+   minutes — the one moment an operator most needs to see that something is happening. The
+   reduced-motion block above already neutralises the animation rather than needing a media query
+   of its own here. */
+@keyframes pos-spin{to{transform:rotate(360deg)}}
+.spin{animation:pos-spin .9s linear infinite;transform-origin:50% 50%}
+
+/* `.formStack` is the PPOB cash-capture form. Its SPACING already works: `.posWorkspaceBody
+   form:not(.inlineForm)` sets the grid and its gap, and that selector outranks anything a bare
+   `.formStack` could say, so no gap is declared here. An earlier version of this rule did declare
+   one and it was dead code that read as though it did something.
+
+   What was genuinely missing is the heading. `h2` has no rule of its own in this file, so the form
+   title rendered at the browser default size and margin inside an otherwise styled panel. */
+.formStack>h2{margin:0;font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--pos-text)}
+
+/* ModalPortal renders into <body>, so none of the .posWorkspaceBody rules above reach it: the
+   supervisor PIN and Click & Collect dialogs shipped with browser-default labels and classless
+   action buttons (the ones that carry "Setujui" and "Buat voucher"). Mirror the form treatment
+   here so a dialog is not visually raw on a busy till. */
+.modalCard label{display:grid;min-width:0;gap:.38rem;align-content:start;color:var(--pos-text-subtle);font-size:11px;font-weight:700;line-height:1.35}
+.modalCard label>input,.modalCard label>select,.modalCard label>textarea{width:100%;max-width:100%;margin:0}
+.modalCard button:not([class]){display:inline-flex;min-height:40px;width:max-content;max-width:100%;align-items:center;justify-content:center;gap:.45rem;border:1px solid #0f766e;border-radius:12px;background:linear-gradient(90deg,#0f766e,#0e7490);padding:.62rem .95rem;color:#fff;font-size:12px;font-weight:700;line-height:1;box-shadow:0 10px 24px rgba(15,118,110,.16)}
+.modalCard button:not([class]):disabled{cursor:not-allowed;opacity:.55;box-shadow:none}
+.modalCard h2{margin:0;color:var(--pos-text);font-size:17px;font-weight:800;letter-spacing:-.01em;line-height:1.3}
+.modalCard p{margin:.4rem 0 0;font-size:12px;line-height:1.6;color:var(--pos-text-subtle)}
+
 .posThemeToggle,.loginThemeToggle{display:grid;place-items:center;height:40px;width:40px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#475569;box-shadow:0 6px 18px rgba(15,23,42,.06)}.loginThemeToggle{position:fixed;right:18px;top:18px;z-index:120;height:42px;width:42px;border-radius:14px}
 html[data-t360-theme='dark'] .login,html[data-theme='dark'] .login{background:radial-gradient(circle at 20% 0%,rgba(20,184,166,.14),transparent 35%),#07111f;color:var(--pos-text)}
 
-.posV4[data-theme='dark']{background:radial-gradient(circle at 12% 0%,rgba(45,212,191,.10),transparent 28%),linear-gradient(180deg,#07111f 0%,#0b1220 100%);color:var(--pos-text);color-scheme:dark}.posV4[data-theme='dark']>header{background:rgba(7,17,31,.94);border-color:#223047}.posV4[data-theme='dark'] .posTopbarActions,.posV4[data-theme='dark'] .posWorkspaceNav{background:#0e1a2c;border-color:#2a3a53;box-shadow:none}.posV4[data-theme='dark'] .posWorkspaceNav button{color:var(--pos-text-subtle)}.posV4[data-theme='dark'] .posWorkspaceNav button:hover{background:#142238;color:#f8fafc}.posV4[data-theme='dark'] .posWorkspaceNav button.active{background:#123049;color:var(--pos-accent);border-color:var(--pos-accent);box-shadow:none}.posV4[data-theme='dark'] .posWorkspaceSurface,.posV4[data-theme='dark'] .catalog,.posV4[data-theme='dark'] .cart,.posV4[data-theme='dark'] .product,.posV4[data-theme='dark'] .shiftPanel,.posV4[data-theme='dark'] .returnPanel,.posV4[data-theme='dark'] .offlinePanel,.posV4[data-theme='dark'] .heldPanel,.posV4[data-theme='dark'] .modalCard,.posV4[data-theme='dark'] .heldItem,.posV4[data-theme='dark'] .item,.posV4[data-theme='dark'] .shiftIdentity{background:#0f1a2a;border-color:#2a3a53;color:var(--pos-text);box-shadow:0 18px 42px rgba(2,8,23,.28)}.posV4[data-theme='dark'] .productIcon,.posV4[data-theme='dark'] .emptyIcon{background:#13273a;border-color:#28415a;color:#5eead4}.posV4[data-theme='dark'] .product strong,.posV4[data-theme='dark'] .cartTitle h2,.posV4[data-theme='dark'] .posWorkspaceHeader h2,.posV4[data-theme='dark'] .shiftRecapGrid strong{color:#f8fafc}.posV4[data-theme='dark'] .product small,.posV4[data-theme='dark'] .posWorkspaceHeader p,.posV4[data-theme='dark'] .shiftRecapGrid span,.posV4[data-theme='dark'] .shiftRecapGrid small{color:var(--pos-text-subtle)}.posV4[data-theme='dark'] input,.posV4[data-theme='dark'] select,.posV4[data-theme='dark'] textarea,.posV4[data-theme='dark'] .search,.posV4[data-theme='dark'] .posTopbarActions select,.posV4[data-theme='dark'] .posTopbarActions button,.posV4[data-theme='dark'] .logout,.posV4[data-theme='dark'] .syncButton,.posV4[data-theme='dark'] .posThemeToggle{background:#0b1422;border-color:var(--pos-text-muted);color:#e2e8f0;color-scheme:dark}.posV4[data-theme='dark'] .chips button{background:#111e30;border-color:var(--pos-text-muted);color:#cbd5e1}.posV4[data-theme='dark'] .chips button.active{background:#0f766e;border-color:#14b8a6;color:#fff}.posV4[data-theme='dark'] .syncEmpty,.posV4[data-theme='dark'] .emptyState,.posV4[data-theme='dark'] .returnItems label,.posV4[data-theme='dark'] .shiftRecapGrid>div{background:#0b1422;border-color:var(--pos-text-muted);color:var(--pos-text-subtle)}.posV4[data-theme='dark'] .modalActions,.posV4[data-theme='dark'] .cartTitle,.posV4[data-theme='dark'] .posWorkspaceHeader{border-color:#223047}
+.posV4[data-theme='dark']{background:radial-gradient(circle at 12% 0%,rgba(45,212,191,.10),transparent 28%),linear-gradient(180deg,#07111f 0%,#0b1220 100%);color:var(--pos-text);color-scheme:dark}.posV4[data-theme='dark']>header{background:rgba(7,17,31,.94);border-color:#223047}.posV4[data-theme='dark'] .posTopbarActions,.posV4[data-theme='dark'] .posWorkspaceNav{background:#0e1a2c;border-color:#2a3a53;box-shadow:none}.posV4[data-theme='dark'] .posWorkspaceNav button{color:var(--pos-text-subtle)}.posV4[data-theme='dark'] .posWorkspaceNav button:hover{background:#142238;color:#f8fafc}.posV4[data-theme='dark'] .posWorkspaceNav button.active{background:#123049;color:var(--pos-accent);border-color:var(--pos-accent);box-shadow:none}.posV4[data-theme='dark'] .posWorkspaceSurface,.posV4[data-theme='dark'] .catalog,.posV4[data-theme='dark'] .cart,.posV4[data-theme='dark'] .product,.posV4[data-theme='dark'] .shiftPanel,.posV4[data-theme='dark'] .returnPanel,.posV4[data-theme='dark'] .offlinePanel,.posV4[data-theme='dark'] .heldPanel,.posV4[data-theme='dark'] .modalCard,.posV4[data-theme='dark'] .heldItem,.posV4[data-theme='dark'] .item,.posV4[data-theme='dark'] .shiftIdentity{background:#0f1a2a;border-color:#2a3a53;color:var(--pos-text);box-shadow:0 18px 42px rgba(2,8,23,.28)}.posV4[data-theme='dark'] .productIcon,.posV4[data-theme='dark'] .emptyIcon{background:#13273a;border-color:#28415a;color:#5eead4}.posV4[data-theme='dark'] .productMedia{background:#13273a}.posV4[data-theme='dark'] .product strong,.posV4[data-theme='dark'] .cartTitle h2,.posV4[data-theme='dark'] .posWorkspaceHeader h2,.posV4[data-theme='dark'] .shiftRecapGrid strong{color:#f8fafc}.posV4[data-theme='dark'] .product small,.posV4[data-theme='dark'] .posWorkspaceHeader p,.posV4[data-theme='dark'] .shiftRecapGrid span,.posV4[data-theme='dark'] .shiftRecapGrid small{color:var(--pos-text-subtle)}.posV4[data-theme='dark'] input,.posV4[data-theme='dark'] select,.posV4[data-theme='dark'] textarea,.posV4[data-theme='dark'] .search,.posV4[data-theme='dark'] .posTopbarActions select,.posV4[data-theme='dark'] .posTopbarActions button,.posV4[data-theme='dark'] .deviceLink{background:#0b1422;border-color:#223047;color:#cbd5e1}.posV4[data-theme='dark'] .logout,.posV4[data-theme='dark'] .syncButton,.posV4[data-theme='dark'] .posThemeToggle{background:#0b1422;border-color:var(--pos-text-muted);color:#e2e8f0;color-scheme:dark}.posV4[data-theme='dark'] .chip{background:#111e30;border-color:var(--pos-text-muted);color:#cbd5e1}.posV4[data-theme='dark'] .chip.active{background:#0f766e;border-color:#14b8a6;color:#fff}.posV4[data-theme='dark'] .syncEmpty,.posV4[data-theme='dark'] .emptyState,.posV4[data-theme='dark'] .returnItems label,.posV4[data-theme='dark'] .shiftRecapGrid>div{background:#0b1422;border-color:var(--pos-text-muted);color:var(--pos-text-subtle)}.posV4[data-theme='dark'] .modalActions,.posV4[data-theme='dark'] .cartTitle,.posV4[data-theme='dark'] .posWorkspaceHeader{border-color:#223047}
 html[data-t360-theme='dark'] .login{background:radial-gradient(circle at 20% 0%,rgba(20,184,166,.14),transparent 35%),#07111f;color:var(--pos-text)}html[data-t360-theme='dark'] .login>form,html[data-t360-theme='dark'] .login>.card{background:#0f1a2a;border-color:#2a3a53;color:var(--pos-text)}/* The login screen renders as <main class="login">, outside .posV4, so the tokens had no scope
    there and every var() in the form fell back to the literal declared in whatever rule won. Scope
    the same tokens to the login root. */

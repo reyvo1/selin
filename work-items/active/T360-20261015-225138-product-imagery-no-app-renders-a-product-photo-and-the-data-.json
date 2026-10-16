@@ -1,0 +1,68 @@
+{
+  "id": "T360-20261015-225138",
+  "title": "product imagery: no app renders a product photo and the data model cannot hold one",
+  "type": "feature",
+  "module": "catalog",
+  "wave": "W0",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "openai",
+  "featureFlag": "",
+  "releaseEvidence": [
+    "handoff/release-evidence/T360-20261015-225138-product-imagery.md"
+  ],
+  "dependencies": [],
+  "impacts": {
+    "database": "LOW",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "LOW",
+    "performance": "LOW"
+  },
+  "businessRules": [
+    "A product photo is presentation data, not business data. No price, tax rule, stock movement, journal or receipt reads Product.imageUrl, and no calculation changes whether it is present or absent.",
+    "The column is nullable and no existing row is backfilled. A catalogue that has never been photographed stays exactly as it is, and no row acquires a photo it never had.",
+    "Only a plain http/https URL may be stored. javascript:, data:, blob:, file: and vbscript: are refused because the value is rendered directly into an <img src> on pages every cashier and every shopper can see.",
+    "Credentials in the authority are refused. A product card is public, so a URL that only works for whoever typed it is a broken image for everyone else and puts a secret in the DOM.",
+    "A query string is refused. That is where a signed, expiring CDN token lives: it breaks the moment the card is cached and it publishes a credential to anyone who opens the inspector. Path segments that merely look like signatures are still accepted.",
+    "The validator never fetches the URL. It is a pure text check, so it cannot be used to make the API reach an internal host.",
+    "An empty photo clears it rather than failing the save. An untouched optional text field submits an empty string, and turning that into a validation error gives an operator a red message they cannot act on.",
+    "Every surface falls back. A missing photo, a dead URL, or an unreachable host renders exactly what was rendered before this feature existed, so a photo can never leave a hole in a grid or make an item unsellable.",
+    "The photo occupies a fixed-ratio box with explicit width and height. Without the reserved box the rows below are shoved down as each image resolves, which is a visible re-flow that reads as a broken page.",
+    "A product grid lazy-loads its photos. Photos are the heaviest element in a card, and a till that stalls while scrolling is a till that misses sales."
+  ],
+  "acceptanceCriteria": [
+    "Product.imageUrl String? exists in schema.prisma, schema.sqlite.prisma and schema.postgresql.prisma at line 470, and tests/prisma-schema-field-parity.test.mjs passes 4 of 4.",
+    "Migration T360-20261015-product-imagery adds one nullable TEXT column, is registered last in config/expand-migration-order.json, and passes npm run db:migrations:rehearse:sqlite.",
+    "apps/api/src/common/validation/is-http-image-url.ts exports isHttpImageUrl and an @IsHttpImageUrl decorator applied to CreateProductDto.imageUrl.",
+    "apps/pos/app/product-media.tsx renders the photo inside a 4:3 box with width, height, loading=lazy and decoding=async, falling back to the existing Package icon on a missing or failed photo.",
+    "apps/storefront/app/product-photo.tsx replaces the single-letter tile on the grid card, the compact card and the detail page, with the letter kept as the fallback.",
+    "apps/admin/app/modules/master-data.tsx exposes a URL foto produk field that loads the stored value back on edit and sends a trimmed value on save, so an edit cannot silently wipe a photo.",
+    "No surface is left rendering a bare initial: the only remaining slice(0, 1).toUpperCase() under apps/ is inside the storefront fallback component.",
+    "tests/product-imagery.test.mjs passes 11 of 11, including javascript:/data:/blob:/file:/vbscript: refusal, credential and query-string refusal, oversized and whitespace-bearing values, the three schemas, the DTO, and both halves of the service wiring.",
+    "Runtime verification in real Chrome against a running stack: 10 of 10. The API returns 400 for javascript: and for a signed query string, stores a valid URL, the POS card renders it at naturalWidth 200 inside aspect-ratio 4 / 3, the storefront card renders it, and unphotographed products still render the icon and the letter respectively.",
+    "npm run test:dependency-free passes 1911 of 1911, npm run lint passes across all six workspaces, npm run workflow:validate passes 61 work items and npm run validate:repo passes 1248 files."
+  ],
+  "testPlan": [
+    "tests/product-imagery.test.mjs: the validator is EXECUTED through tests/helpers/import-ts.mjs, not read. Hostile schemes, embedded credentials, query strings, whitespace, oversized values and non-string values are each asserted refused, with a positive control in the same case so the case cannot pass by rejecting everything.",
+    "The same file pins the render contract: each surface must go through a component with an onError fallback, and the two that carry a fixed-ratio box must set width and height. The letter-only assertion caught a real miss — the storefront compact card still rendered an initial, because it differed from the grid card by one space in a slice call.",
+    "The same file pins the wiring on both halves: create spreads the DTO and update maps fields explicitly. A field added to one and not the other is the classic half-wired feature that saves on create and does nothing on edit.",
+    "tests/f12r2-modern-visual-contract.test.mjs was retargeted, not weakened: its assertion that the product card uses the real Lucide Package icon rather than a character now checks the card surface as a whole, because the icon moved into product-media.tsx. The icon contract and the ProductMedia call are both still required.",
+    "Ad hoc browser probe (not committed): headless Chrome over CDP writes a photo with an Admin session and browses with the cashier session, because writing a product is an Admin action and the first run with the cashier token returned 403 and tested nothing. 10 of 10 PASS. The probe clears the photo afterwards so the local database is not left holding a dead localhost URL.",
+    "npm run db:migrations:rehearse:sqlite and npm run db:migrations:rehearse:postgres for migration safety. SQLite PASSED locally. PostgreSQL rehearsal PASSED on a real server on 2026-10-16, and independently inside the GitHub container PostgreSQL integration job on PR #1.",
+    "scripts/run-local-postgres-gates.sh now runs unattended. It originally hardcoded the postgres role, which forced either an interactive password prompt or sudo -u postgres; it now connects over the unix socket as the invoking OS user, refuses early with the CREATE ROLE command if that role does not exist, refuses a production-like scratch database name, and reports PASS only from what it observed. Both gates reported PASS: the migration applies on PostgreSQL and schema.postgresql.prisma prepares against a real server."
+  ],
+  "migrationPlan": "Expand-only, one nullable column, no backfill and no default. SQLite: ALTER TABLE \"Product\" ADD COLUMN \"imageUrl\" TEXT. PostgreSQL: the same with IF NOT EXISTS, which is the documented engine asymmetry for this migration family because SQLite's ADD COLUMN has no IF NOT EXISTS in the supported engine versions. No row is read, rewritten or backfilled; no index is created because the column never appears in a WHERE, JOIN or ORDER BY, so no existing query plan changes. Registered last in config/expand-migration-order.json and rehearsed against SQLite locally. PostgreSQL rehearsal is pending CI and is listed as such rather than claimed.",
+  "rollbackPlan": "Deploy the previous application version and leave the nullable column in place. Do not drop columns during incident rollback: the column carries no data any other column depends on, so leaving it costs nothing, and dropping it would require a table reconstruction on SQLite. Nothing at runtime needs disabling, because no previous behaviour is gated behind a flag: an absent photo renders the icon or the letter exactly as before this change. No compensating operation exists or is needed, because the feature creates no transaction, journal, stock movement or receipt.",
+  "monitoringPlan": "The controls are their own monitoring: tests/product-imagery.test.mjs runs inside npm run test:dependency-free and therefore in CI, so a regression in the validator, the wiring or the fallback fails the build rather than reaching a till. The imageUrl column is nullable and read-only after write, so it needs no metric, log or alert, and no runtime path changes behaviour based on it. The one thing worth watching in the field is photo quality and aspect ratio, which is a content problem rather than a code one; that is why the box is fixed-ratio with object-fit cover, so an odd-shaped photo degrades to a crop instead of breaking the grid.",
+  "securityNotes": "imageUrl is the one product field whose value reaches markup rather than a calculation, so it is treated as untrusted input at every step. Only http/https is accepted; javascript:, data:, blob:, file: and vbscript: are refused, which closes the script-vector and inline-SVG cases. Embedded credentials and query strings are refused, so a card cannot publish a secret or an expiring signed URL to the public storefront. Whitespace, angle brackets and quotes inside the value are refused, closing the attribute-breakout shape. The length is capped at 2048 characters. The validator is a pure text check and never fetches the URL, so it cannot be used to probe internal hosts from the API. No tenant, permission or scope is changed: the column lives on a row already fetched through the existing company-scoped product query, and writing a product remains an Admin/Owner action exactly as before, which the runtime probe confirmed by getting 403 from the cashier session. No credential, token or personal data is logged, and the demo credentials used by the probe were held in memory only and never written to the repository or to evidence.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-15T15:13:38.000Z",
+  "updatedAt": "2026-10-16T04:20:00.000Z"
+}

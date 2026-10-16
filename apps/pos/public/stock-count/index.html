@@ -29,6 +29,11 @@
   button.secondary { background:#1e293b; border:1px solid var(--line); }
   button:disabled { opacity:.45; }
   button.ghost { background:transparent; border:1px solid var(--line); color:var(--fg); }
+  /* A destructive action on a counting device must not look like every other button on the screen.
+     The submit dialog's confirm button is the same blue as everything else, so discarding a draft
+     would have read as an ordinary action on a device held at arm's length. */
+  button.danger { background:#7f1d1d; border:1px solid #ef4444; }
+  button.danger:hover { background:#991b1b; }
   .row { display:flex; gap:8px; align-items:center; }
   .row > * { flex:1; }
   .line { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
@@ -116,6 +121,7 @@
       </div>
       <div id="lines"></div>
       <button id="btn-review" class="secondary">Lihat selisih</button>
+      <button id="btn-discard" class="ghost">Buang hitungan</button>
       <button id="btn-submit">Kirim ke opname</button>
       <div class="muted" style="margin-top:8px">
         Mengirim hanya mengisi jumlah hitung pada item opname. Posting stok tetap lewat persetujuan
@@ -134,6 +140,17 @@
 
     <button id="btn-logout" class="ghost">Keluar</button>
   </section>
+
+  <dialog id="discard-confirm" aria-labelledby="discard-confirm-title">
+    <strong id="discard-confirm-title">Buang draft hitungan</strong>
+    <p class="muted">Draft yang dibuang tidak dapat dilanjutkan dan baris yang sudah dihitung hilang dari perangkat ini. Stok tidak pernah berubah karena hitungan, jadi tidak ada pembalikan yang perlu dilakukan.</p>
+    <label class="muted" for="discard-reason">Alasan pembuangan (wajib, masuk ke audit trail)</label>
+    <input id="discard-reason" type="text" placeholder="mis. salah gudang, salah perangkat" autocomplete="off" />
+    <div class="dialog-actions">
+      <button id="btn-discard-cancel" type="button" class="ghost">Kembali</button>
+      <button id="btn-discard-confirm" type="button" class="danger">Buang draft</button>
+    </div>
+  </dialog>
 
   <dialog id="submit-confirm" aria-labelledby="submit-confirm-title">
     <strong id="submit-confirm-title">Konfirmasi kirim hitungan</strong>

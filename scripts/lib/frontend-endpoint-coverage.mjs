@@ -120,7 +120,7 @@ export function pathMatches(normalizedA, normalizedB) {
  * Exact or same-line assembled reachability of one route against one UI source
  * line's tokens.
  */
-export function lineCoversRoute(routeNormalized, lineTokens) {
+export function lineCoversRoute(routeNormalized, lineTokens, { interpolated = false } = {}) {
   const segs = segments(routeNormalized);
   if (!segs.length) return false;
   const covered = new Set();
@@ -133,6 +133,22 @@ export function lineCoversRoute(routeNormalized, lineTokens) {
     const offset = segs.length - t.length;
     if (t.every((seg, i) => assembledSegmentMatches(seg, segs[offset + i]))) {
       for (let i = 0; i < t.length; i += 1) covered.add(offset + i);
+    }
+  }
+  // An interpolation between two covered runs stands for the segments it skipped, and only those.
+  //
+  // The restriction to PARAMETER segments is the whole safety argument. `assembledSegmentMatches`
+  // already refuses to let `:p` stand for a literal or a literal stand for `:p`, and that rule is
+  // what stops one route-building line certifying every endpoint sharing its prefix or suffix. This
+  // addition keeps it: a gap may only be closed where the ROUTE itself declares a parameter, so a
+  // line can never invent a literal segment of the endpoint. A line that merely mentions two
+  // unrelated paths, with no concatenation, is unaffected.
+  if (interpolated) {
+    for (let i = 0; i < segs.length; i += 1) {
+      if (covered.has(i) || !segs[i].startsWith(':')) continue;
+      const coveredBefore = [...covered].some((index) => index < i);
+      const coveredAfter = [...covered].some((index) => index > i);
+      if (coveredBefore && coveredAfter) covered.add(i);
     }
   }
   return covered.size === segs.length;
@@ -210,7 +226,14 @@ export function collectUiLines(rootDir) {
         const found = [...line.matchAll(tokenRe)].map((m) => normalizePath(m[1]));
         if (!found.length) return;
         found.forEach((t) => tokens.add(t));
-        lines.push({ file: relative(rootDir, file), line: index + 1, tokens: found });
+        // A client may build a path by concatenating quoted pieces around an interpolation:
+        //   api('/mobile-ops/drafts/' + encodeURIComponent(draft.id) + '/scan')
+        // The pieces are two separate tokens and the parameter between them is not a token at all, so
+        // the route looked unreachable while the screen was calling it in front of us. This records
+        // that the line interpolated something, which `lineCoversRoute` may use to cover PARAMETER
+        // segments only. It is deliberately not a licence to cover a literal: see the note there.
+        const concatenated = found.length >= 2 && /['"`][^'"`]*['"`]\s*\+\s*[^'"`+;]+\+\s*['"`]/.test(line);
+        lines.push({ file: relative(rootDir, file), line: index + 1, tokens: found, interpolated: concatenated });
       });
     }
   }
@@ -222,7 +245,7 @@ export function routeIsReachable(route, ui) {
     if (pathMatches(route.path, token)) return { reachable: true, how: 'exact', via: null };
   }
   for (const entry of ui.lines) {
-    if (lineCoversRoute(route.path, entry.tokens)) {
+    if (lineCoversRoute(route.path, entry.tokens, { interpolated: entry.interpolated })) {
       return { reachable: true, how: 'assembled', via: `${entry.file}:${entry.line}` };
     }
   }

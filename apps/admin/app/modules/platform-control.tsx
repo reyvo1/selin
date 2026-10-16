@@ -8,12 +8,14 @@ import { Panel, StatusChip, Table } from '../ui';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
 type Mode = 'platform' | 'custom-fields' | 'approvals' | 'webhooks' | 'ui-config' | 'audit-ops';
+type RegisteredPlugin = { id:string; type:'payment'|'shipping'|'marketplace'|'notification'|'accounting'|'device'|'custom'; version:string; capabilities:string[]; productionReady:boolean; description:string };
 type Setting = { id:string; namespace:string; key:string; value:unknown; isSecret:boolean; branchId?:string|null; updatedAt?:string };
 type CustomField = { id:string; entityType:string; key:string; label:string; dataType:string; required:boolean; searchable:boolean; isActive:boolean };
 type Webhook = { id:string; name:string; url:string; events:unknown; isActive:boolean; headers?:unknown; createdAt?:string };
 type ApprovalPolicy = { id:string; code:string; name:string; entityType:string; steps:unknown; isActive:boolean };
 type ApprovalRequest = { id:string; entityType:string; entityId:string; status:string; requesterId:string; currentStep:number; requestedAt:string };
 type UiSchema = { id:string; code:string; surface:string; version:number; branchId?:string|null; schema:unknown };
+type AutomationJobRow = { id:string; jobType?:string; status:string; scheduledAt?:string|null; startedAt?:string|null; finishedAt?:string|null; lastError?:string|null; attempts?:number; payload?:unknown; audit?:Array<{ id:string; action:string; createdAt:string; user?:{name?:string|null}|null }> };
 type AuditRow = { id:string; action:string; entityType:string; entityId?:string|null; createdAt:string; user?:{name?:string|null;email?:string|null}|null };
 type OutboxRow = { id:string; eventType:string; aggregateType:string; aggregateId:string; status:string; attempts:number; lastError?:string|null; createdAt:string };
 type WebhookDelivery = { id:string; endpointId:string; eventId?:string|null; eventType:string; status:string; attempts:number; responseCode?:number|null; responseBody?:string|null; nextRetryAt?:string|null; deliveredAt?:string|null; createdAt:string };
@@ -42,6 +44,9 @@ export default function PlatformControlView({token,mode}:Props){
   const [delegateTarget,setDelegateTarget]=useState<Record<string,string>>({});
   const [message,setMessage]=useState('');
   const [settings,setSettings]=useState<Setting[]>([]);
+  const [plugins,setPlugins]=useState<RegisteredPlugin[]>([]);
+  const [jobs,setJobs]=useState<AutomationJobRow[]>([]);
+  const [jobDetail,setJobDetail]=useState<AutomationJobRow|null>(null);
   const [fields,setFields]=useState<CustomField[]>([]);
   const [webhooks,setWebhooks]=useState<Webhook[]>([]);
   const [policies,setPolicies]=useState<ApprovalPolicy[]>([]);
@@ -61,6 +66,9 @@ export default function PlatformControlView({token,mode}:Props){
     setMessage('');
     try{
       if(mode==='platform')setSettings(await call<Setting[]>(token,'/platform/settings'));
+      // GET /platform/plugins has existed from the start and no screen ever called it, so an operator
+      // could not tell a production-ready adapter from a template without reading the server source.
+      if(mode==='platform')setPlugins(await optionalAuthorization(call<RegisteredPlugin[]>(token,'/platform/plugins'),[] as RegisteredPlugin[]));
       if(mode==='custom-fields')setFields(await call<CustomField[]>(token,'/platform/custom-fields'));
       if(mode==='webhooks')setWebhooks(await call<Webhook[]>(token,'/platform/webhooks'));
       if(mode==='webhooks')setDeliveries(await call<WebhookDelivery[]>(token,'/platform/webhook-deliveries?limit=100'));
@@ -71,12 +79,27 @@ export default function PlatformControlView({token,mode}:Props){
       }
       if(mode==='ui-config')setSchemas(await call<UiSchema[]>(token,'/platform/ui-schemas'));
       if(mode==='audit-ops'){
-        const [nextAudit,nextOutbox,nextHealth]=await Promise.all([call<AuditRow[]>(token,'/platform/audit-logs?limit=100'),call<OutboxRow[]>(token,'/platform/outbox?limit=100'),call<OpsHealth>(token,'/platform/ops-health')]);
-        setAudit(nextAudit);setOutbox(nextOutbox);setHealth(nextHealth);
+        const [nextAudit,nextOutbox,nextHealth,third]=await Promise.all([call<AuditRow[]>(token,'/platform/audit-logs?limit=100'),call<OutboxRow[]>(token,'/platform/outbox?limit=100'),call<OpsHealth>(token,'/platform/ops-health'),call<AutomationJobRow[]>(token,'/platform/automation-jobs')]);
+        setAudit(nextAudit);setOutbox(nextOutbox);setHealth(nextHealth);setJobs(third);
       }
     }catch(error){setMessage(error instanceof Error?error.message:'Gagal memuat control plane');}
   }
   useEffect(()=>{void refresh();},[token,mode]);
+
+  /**
+   * Open one automation job with its audit trail.
+   *
+   * The audit-ops screen showed the audit log, the outbox and ops health, and there was a route that
+   * returned a single job together with everything ever audited about it — which nothing called. An
+   * operator looking at a stuck scheduled job had the list on one screen and the answer on another,
+   * with no link between them.
+   */
+  async function openJob(jobId: string) {
+    setMessage('');
+    try {
+      setJobDetail(await call<AutomationJobRow>(token, `/platform/automation-jobs/${encodeURIComponent(jobId)}`));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Gagal memuat detail automation job.'); }
+  }
 
   async function saveSetting(event:FormEvent){event.preventDefault();try{await call(token,'/platform/settings',{method:'POST',body:JSON.stringify({namespace:settingForm.namespace,key:settingForm.key,value:parseJson(settingForm.value),isSecret:settingForm.isSecret})});setSettingForm({...settingForm,key:'',value:'{}'});await refresh();setMessage('System setting disimpan.');}catch(error){setMessage(error instanceof Error?error.message:'Gagal menyimpan setting');}}
   async function createField(event:FormEvent){event.preventDefault();try{await call(token,'/platform/custom-fields',{method:'POST',body:JSON.stringify(fieldForm)});setFieldForm({...fieldForm,key:'',label:''});await refresh();setMessage('Custom field dibuat.');}catch(error){setMessage(error instanceof Error?error.message:'Gagal membuat custom field');}}
@@ -93,6 +116,16 @@ export default function PlatformControlView({token,mode}:Props){
 
   return <section className="stack">
     {mode==='platform'&&<>
+      <Panel eyebrow="ADAPTER REGISTRY" title="Katalog Plugin" badge={`${plugins.filter((row)=>row.productionReady).length} siap produksi / ${plugins.length} terdaftar`}>
+        <p className="sectionHelp">Daftar adapter yang terpasang di server ini beserta kapabilitas dan status kesiapan. <strong>Belum siap produksi</strong> berarti template integrasi, bukan sesuatu yang boleh dipakai untuk transaksi nyata.</p>
+        <Table head={['Adapter','Tipe','Versi','Kesiapan','Kapabilitas']} rows={plugins.map((row)=>[
+          <span key={`${row.id}-id`}><strong>{row.id}</strong><small>{row.description}</small></span>,
+          row.type,
+          row.version,
+          <span key={`${row.id}-ready`} className={row.productionReady ? 'okText' : 'mutedInline'}>{row.productionReady ? 'SIAP PRODUKSI' : 'BELUM SIAP'}</span>,
+          <span key={`${row.id}-caps`}>{row.capabilities.join(', ')}</span>,
+        ])} empty="Belum ada adapter terdaftar"/>
+      </Panel>
       <Panel eyebrow="SYSTEM SETTINGS" title="Konfigurasi Runtime" badge={`${settings.length} setting`}>
         <form className="formStack" onSubmit={saveSetting}>
           <div className="grid2"><label>Namespace<input required value={settingForm.namespace} onChange={(e)=>setSettingForm({...settingForm,namespace:e.target.value})}/></label><label>Key<input required value={settingForm.key} onChange={(e)=>setSettingForm({...settingForm,key:e.target.value})}/></label></div>
@@ -145,6 +178,32 @@ export default function PlatformControlView({token,mode}:Props){
     {mode==='audit-ops'&&<>
       <section className="grid2"><Panel eyebrow="OPS HEALTH" title="Kesehatan Operasional" badge={health?.healthy?'HEALTHY':'ATTENTION'}>{health?<div className="metricGrid"><div><small>Outbox pending</small><strong>{health.outbox.pending}</strong></div><div><small>Outbox failed</small><strong>{health.outbox.failed}</strong></div><div><small>Webhook failed</small><strong>{health.webhooks.failed}</strong></div><div><small>Report failed</small><strong>{health.reportJobs.failed}</strong></div></div>:<p>Memuat health...</p>}</Panel><Panel eyebrow="FAILED OUTBOX" title="Replay Queue" badge={`${failedOutbox.length} failed`}><Table head={['Event','Aggregate','Attempts','Aksi']} rows={failedOutbox.map((row)=>[row.eventType,`${row.aggregateType}:${row.aggregateId}`,row.attempts,<button type="button" className="secondary" onClick={()=>void replayOutbox(row)}>Replay</button>])} empty="Tidak ada failed outbox."/></Panel></section>
       <Panel eyebrow="AUDIT" title="Audit Log Terbaru"><Table head={['Action','Entity','User','Waktu']} rows={audit.map((row)=>[row.action,`${row.entityType}${row.entityId?` · ${row.entityId}`:''}`,row.user?.name??row.user?.email??'-',new Date(row.createdAt).toLocaleString('id-ID')])} empty="Belum ada audit log."/></Panel>
+      <Panel eyebrow="AUTOMATION" title="Automation Job" badge={`${jobs.filter((row)=>row.status==='PENDING'||row.status==='RUNNING').length} berjalan`}>
+        <Table head={['Jenis','Status','Dijadwalkan','Selesai','Percobaan','Aksi']} rows={jobs.map((row)=>[
+          row.jobType ?? '—',
+          <span key={`${row.id}-s`} className={row.status==='FAILED'?'mutedInline':'okText'}>{row.status}</span>,
+          row.scheduledAt ? new Date(row.scheduledAt).toLocaleString('id-ID') : '—',
+          row.finishedAt ? new Date(row.finishedAt).toLocaleString('id-ID') : '—',
+          String(row.attempts ?? '—'),
+          <button key={`${row.id}-a`} type="button" className="secondary" onClick={() => { void openJob(row.id); }}>Rincian</button>,
+        ])} empty="Belum ada automation job"/>
+      </Panel>
+      {jobDetail && <Panel eyebrow="AUTOMATION DETAIL" title={`Job ${jobDetail.id.slice(0, 8)}`} badge={jobDetail.status}>
+        <p className="sectionHelp">Termasuk seluruh jejak audit untuk job ini, sehingga alasan kegagalannya dapat dibaca tanpa membuka log terpisah.</p>
+        <Table head={['Kolom','Nilai']} rows={[
+          ['Jenis', jobDetail.jobType ?? '—'],
+          ['Status', jobDetail.status],
+          ['Dijadwalkan', jobDetail.scheduledAt ? new Date(jobDetail.scheduledAt).toLocaleString('id-ID') : '—'],
+          ['Mulai', jobDetail.startedAt ? new Date(jobDetail.startedAt).toLocaleString('id-ID') : '—'],
+          ['Selesai', jobDetail.finishedAt ? new Date(jobDetail.finishedAt).toLocaleString('id-ID') : '—'],
+          ['Percobaan', String(jobDetail.attempts ?? '—')],
+          ['Error terakhir', jobDetail.lastError ?? 'tidak ada'],
+        ]}/>
+        {jobDetail.audit && jobDetail.audit.length > 0 && <Table head={['Waktu','Aksi','Oleh']} rows={jobDetail.audit.map((entry)=>[
+          new Date(entry.createdAt).toLocaleString('id-ID'), entry.action, entry.user?.name ?? '—',
+        ])}/>}
+        <div className="actionRow"><button type="button" className="secondary" onClick={() => setJobDetail(null)}>Tutup</button></div>
+      </Panel>}
       <Panel eyebrow="OUTBOX" title="Event Outbox"><Table head={['Event','Aggregate','Status','Attempts','Error']} rows={outbox.map((row)=>[row.eventType,`${row.aggregateType}:${row.aggregateId}`,<StatusChip status={row.status}/>,row.attempts,row.lastError??'-'])} empty="Outbox kosong."/></Panel>
     </>}
 

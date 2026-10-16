@@ -32,6 +32,22 @@ jobs:
         env:
           DATABASE_PROFILE: postgresql
           DATABASE_URL: postgresql://toko360:toko360@127.0.0.1:5432/toko360_typecheck?schema=public
+      # Two clients, two purposes, and the order matters. `npm test` instantiates PrismaClient through
+      # the SQLite URL in .env, so it needs the SQLITE client; the step above leaves the POSTGRES one
+      # active. Without this restore, 92 tests fail in a clean checkout with "the URL must start with
+      # the protocol postgresql://". This is the same defect that was already found and fixed in
+      # scripts/run-build-gate.mjs on 2026-10-01 (commit 095e42a) — the local gate was repaired and this
+      # workflow was not, because until now it had never run: ci.yml triggers only on pull_request and
+      # main has never had one. The sqlite-integration job in this same file already sequences it
+      # correctly; this restores the same order here.
+      - name: Restore SQLite Prisma Client for the test suite
+        run: npm run db:local:generate
+      # `tests/post1c-telegram-polling.test.mjs` imports apps/worker/dist/telegram-polling.js, so in a
+      # clean checkout it fails with ERR_MODULE_NOT_FOUND. On a laptop `dist/` always exists from an
+      # earlier build, which is why this only ever shows up in CI. The test is deliberately unchanged —
+      # exercising the real transport over a real HTTP server is the correct proof — so the gate must
+      # provide the artefact. run-build-gate.mjs has done exactly this since 2026-10-01.
+      - run: npm run build -w @toko360/worker
       - run: npm test
       - run: npm run prisma:validate:sqlite -w @toko360/api
       - name: Validate CI-only Docker Compose
