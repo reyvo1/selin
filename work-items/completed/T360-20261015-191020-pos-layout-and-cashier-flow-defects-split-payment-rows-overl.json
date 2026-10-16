@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "pos-ui",
   "wave": "W0",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -66,9 +66,11 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T11:10:20.619Z",
-  "updatedAt": "2026-10-16T15:00:38.096Z",
+  "updatedAt": "2026-10-16T15:04:02.156Z",
   "releaseEvidence": [
-    "handoff/release-evidence/T360-20261015-191020-pos-layout-and-cashier-flow-defects.md"
+    "PR #12 merged ke main: fase STAGING, semua check hijau.",
+    "tests/pos-barcode-scanner.test.mjs + tests/pos-surface-and-scan-commit.test.mjs: 26 pass, 0 fail.",
+    "npm run workflow:validate lulus."
   ],
   "stagingEvidence": [
     "tests/pos-barcode-scanner.test.mjs + tests/pos-surface-and-scan-commit.test.mjs: 26 pass, 0 fail.",
