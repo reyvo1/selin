@@ -4,12 +4,14 @@
   "type": "feature",
   "module": "catalog",
   "wave": "W0",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
   "releaseEvidence": [
-    "handoff/release-evidence/T360-20261015-225138-product-imagery.md"
+    "PR #14 merged ke main: fase STAGING, semua check hijau.",
+    "tests/product-imagery.test.mjs + tests/f12r2-modern-visual-contract.test.mjs: 15 pass, 0 fail.",
+    "npm run workflow:validate lulus."
   ],
   "dependencies": [],
   "impacts": {
@@ -64,7 +66,7 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T15:13:38.000Z",
-  "updatedAt": "2026-10-16T15:07:27.917Z",
+  "updatedAt": "2026-10-16T15:10:51.859Z",
   "stagingEvidence": [
     "tests/product-imagery.test.mjs + tests/f12r2-modern-visual-contract.test.mjs: 15 pass, 0 fail.",
     "npm run workflow:validate lulus."
