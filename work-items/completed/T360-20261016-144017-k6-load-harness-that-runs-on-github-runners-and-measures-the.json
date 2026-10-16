@@ -4,7 +4,7 @@
   "type": "performance",
   "module": "performance",
   "wave": "W6",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "unassigned",
   "featureFlag": "",
@@ -48,5 +48,11 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-16T06:40:17.205Z",
-  "updatedAt": "2026-10-16T14:32:35.577Z"
+  "updatedAt": "2026-10-16T14:38:00.246Z",
+  "releaseEvidence": [
+    "PR #6 merged ke main sebagai 386a368: closeout verifikasi dan fase STAGING.",
+    "Semua check PR #6 hijau: pull-request-policy, manifest-policy, repository tests, SQLite integration, PostgreSQL integration, stress (2m6s).",
+    "Run k6 PASS di GitHub runner (read, 5 VU): 14197 request, p95 22ms, 0% error; artifact handoff/quality/k6-read-latest.json.",
+    "PR #4 (852c2e7) dan PR #5 (7c316b1) merged sebelumnya dengan job stress hijau."
+  ]
 }
