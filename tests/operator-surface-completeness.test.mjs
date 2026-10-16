@@ -156,6 +156,35 @@ test('the admin can see and cancel a purchase order', () => {
 });
 
 // ---------------------------------------------------------------------------
+// A stock count that went wrong could not be abandoned.
+// ---------------------------------------------------------------------------
+
+test('the stock-count screen can discard a draft', () => {
+  // POST /mobile-ops/drafts/:id/discard existed on the server, audited as
+  // MOBILE_OPNAME_DRAFT_DISCARDED and refusing anything not OPEN — and this screen never called it.
+  // The only exits from a count were submitting it or walking away, so a count taken in the wrong
+  // warehouse stayed OPEN on the server forever and re-opening it resumed the same bad count.
+  const controller = read('apps/api/src/mobile-ops/mobile-ops.controller.ts');
+  const service = read('apps/api/src/mobile-ops/mobile-ops.service.ts');
+  assert.match(controller, /@Post\('drafts\/:draftId\/discard'\)/, 'the server route must still exist');
+  assert.match(service, /MOBILE_OPNAME_DRAFT_DISCARDED/, 'and must still be audited');
+
+  const html = read('apps/pos/public/stock-count/index.html');
+  const script = read('apps/pos/public/stock-count/app.js');
+  assert.match(html, /id="btn-discard"/, 'the screen needs a discard control');
+  assert.match(script, /\/discard'/, 'the screen must actually call the route');
+  assert.match(script, /body: \{ reason: reason \}/, 'a reason is required, because the server requires one and it is audited');
+  assert.match(html, /id="discard-reason"/, 'and the operator must be able to type it');
+  // The confirmation is a <dialog>, not a native window.prompt. The repository forbids native
+  // prompts on operator surfaces for a reason: a native dialog cannot be styled and cannot be
+  // asserted by a test, and this screen is held at arm's length in a warehouse.
+  assert.match(html, /<dialog id="discard-confirm"/, 'the confirmation must be an in-page dialog');
+  assert.doesNotMatch(script, /\bwindow\.(?:prompt|confirm|alert)\s*\(/, 'no native browser prompt on this screen either');
+  // Discarding must clear local state, or the device keeps showing lines that no longer exist.
+  assert.match(script, /draft = null;[\s\S]{0,80}lines = \[\]/, 'discarding must clear the local draft and lines');
+});
+
+// ---------------------------------------------------------------------------
 // The decision this work did NOT make.
 // ---------------------------------------------------------------------------
 
