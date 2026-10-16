@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "pos-ui",
   "wave": "W0",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -66,8 +66,12 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T11:10:20.619Z",
-  "updatedAt": "2026-10-15T22:20:00.000Z",
+  "updatedAt": "2026-10-16T15:00:38.096Z",
   "releaseEvidence": [
     "handoff/release-evidence/T360-20261015-191020-pos-layout-and-cashier-flow-defects.md"
+  ],
+  "stagingEvidence": [
+    "tests/pos-barcode-scanner.test.mjs + tests/pos-surface-and-scan-commit.test.mjs: 26 pass, 0 fail.",
+    "npm run workflow:validate lulus."
   ]
 }
