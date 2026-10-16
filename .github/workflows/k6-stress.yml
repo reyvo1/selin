@@ -142,13 +142,37 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
+          # The credential for this instance is generated here, per run, and never leaves the runner.
+          # `.env.local.example` ships `SEED_ADMIN_PASSWORD=Admin123!` for local demo use; that is a
+          # published default, so it is overwritten rather than inherited. `ci-prepare-github-simulation`
+          # requires at least 14 characters, so a shorter random string would fail the seed in a way
+          # that reads as a harness bug.
+          LOAD_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)"
+          if [ "${#LOAD_PASSWORD}" -lt 14 ]; then
+            echo "::error::generated load password is too short for the seed"
+            exit 1
+          fi
           cp .env.local.example .env
+          # `example.invalid` is reserved by RFC 2606 and cannot resolve, so a credential minted here
+          # can never be phished back at a real mailbox.
+          SEED_ADMIN_EMAIL="k6-load@example.invalid"
+          {
+            echo ""
+            echo "# Written by .github/workflows/k6-stress.yml for this run only."
+            echo "SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL}"
+            echo "SEED_ADMIN_PASSWORD=${LOAD_PASSWORD}"
+            echo "T360_UAT_ENVIRONMENT=GITHUB_K6_LOAD"
+          } >> .env
+          # The same values reach the mint step through the environment rather than through a second
+          # copy of the password in this file.
+          echo "SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL}" >> "$GITHUB_ENV"
+          echo "SEED_ADMIN_PASSWORD=${LOAD_PASSWORD}" >> "$GITHUB_ENV"
           npm run db:local:prepare
           npm run build -w @toko360/worker
           npm run dev -w @toko360/api &
           for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:4000/api/v1/health >/dev/null 2>&1; then
-              echo "API ready"
+              echo "disposable API ready"
               exit 0
             fi
             sleep 2
@@ -157,21 +181,24 @@ jobs:
           exit 1
 
       # A load run needs a session, and an anonymous run is refused at the auth guard before the query
-      # ever runs — which measures the guard and reports a fast number for a request that was never
-      # served. So mint a token against the instance this job owns and hand it to k6.
+      # ever runs — which measures the guard and then reports a fast number for a request that was
+      # never served. So mint a real session against the instance this job owns.
+      #
+      # `apps/api/src/auth/auth.controller.ts` exposes `POST /auth/login` taking `{email, password}`,
+      # and `auth.service.ts` returns `accessToken`. The runner expects that field name, so renaming it
+      # here would silently produce an empty Authorization header rather than an obvious 401.
       - name: Mint a load-test session for an automatic run
         if: github.event_name != 'workflow_dispatch'
         env:
           T360_API_URL: http://127.0.0.1:4000/api/v1
-          SEED_ADMIN_EMAIL: ${{ vars.K6_STRESS_READ_EMAIL }}
-          SEED_ADMIN_PASSWORD: ${{ secrets.K6_STRESS_READ_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${SEED_ADMIN_EMAIL}" ] || [ -z "${SEED_ADMIN_PASSWORD}" ]; then
-            echo "::error::vars.K6_STRESS_READ_EMAIL and secret K6_STRESS_READ_PASSWORD must be set for"
-            echo "an automatic run. Minting a throwaway credential is deliberately not automated here:"
-            echo "the seed password is a published demo default, and a load harness is the wrong place"
-            echo "to decide who may hold a credential."
+          if [ -z "${SEED_ADMIN_EMAIL:-}" ] || [ -z "${SEED_ADMIN_PASSWORD:-}" ]; then
+            echo "::error::no load credential reached this step"
+            exit 1
+          fi
+          if [ "${SEED_ADMIN_PASSWORD}" = "Admin123!" ]; then
+            echo "::error::refusing to authenticate with the published demo password"
             exit 1
           fi
           TOKEN=$(curl -fsS -X POST "${T360_API_URL}/auth/login" \
@@ -179,12 +206,11 @@ jobs:
             -d "{\"email\":\"${SEED_ADMIN_EMAIL}\",\"password\":\"${SEED_ADMIN_PASSWORD}\"}" \
             | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);process.stdout.write(j.accessToken||'')})")
           if [ -z "${TOKEN}" ]; then
-            echo "::error::could not mint a load-test session"
+            echo "::error::could not mint a load-test session against the disposable instance"
             exit 1
           fi
           echo "K6_STRESS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
-          echo "session minted"
-
+          echo "load session minted"
 
       - name: Refuse a production-shaped target before anything connects
         env:

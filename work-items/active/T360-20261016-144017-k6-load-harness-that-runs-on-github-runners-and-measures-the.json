@@ -1,0 +1,41 @@
+{
+  "id": "T360-20261016-144017",
+  "title": "k6 load harness that runs on GitHub runners and measures the queries the application actually sends",
+  "type": "performance",
+  "module": "performance",
+  "wave": "W6",
+  "phase": "IMPLEMENTATION",
+  "risk": "HIGH",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "ISI aturan bisnis dan invariant modul."
+  ],
+  "acceptanceCriteria": [
+    "ISI hasil terukur yang harus tercapai."
+  ],
+  "testPlan": [
+    "ISI unit/integration/e2e/concurrency/security test yang diperlukan."
+  ],
+  "migrationPlan": "Tidak ada perubahan database; perbarui bila dampak database berubah.",
+  "rollbackPlan": "Jelaskan feature flag, rollback deployment, dan compensating operation bila transaksi sudah diposting.",
+  "monitoringPlan": "Jelaskan metric, log, alert, dan masa observasi setelah rilis.",
+  "securityNotes": "Jelaskan autentikasi, permission, tenant scope, data sensitif, dan audit trail.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-16T06:40:17.205Z",
+  "updatedAt": "2026-10-16T06:40:27.396Z"
+}

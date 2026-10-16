@@ -191,10 +191,24 @@ test("GitHub runs the harness, and the operator's machine never does", () => {
   assert.match(workflow, /TARGET="http:\/\/127\.0\.0\.1:4000\/api\/v1"/, 'the automatic target must be the local disposable instance');
 
   // A load run without a session measures the auth guard, not the query. Minting one is therefore part
-  // of the automatic path, and it refuses rather than falling back to a published demo password.
+  // of the automatic path.
   assert.match(workflow, /Mint a load-test session for an automatic run/, 'an automatic run must have a session');
-  assert.match(workflow, /published demo default/, 'and must refuse rather than use one');
   assert.match(workflow, /K6_STRESS_TOKEN=\$\{TOKEN\}/, 'the minted token must reach the run');
+
+  // The credential is generated inside the run, for an instance the job owns and destroys. An earlier
+  // version asked the operator to configure a secret, which made every automatic run fail until it did;
+  // a version before that would have fallen back to the published demo password, which is worse. Both
+  // properties are kept: generated per run, and never the published default.
+  assert.match(workflow, /openssl rand/, 'the load credential must be generated inside the run');
+  assert.match(workflow, /SEED_ADMIN_PASSWORD=\$\{LOAD_PASSWORD\}/, 'and must override the seed password, not inherit it');
+  assert.match(workflow, /refusing to authenticate with the published demo password/, 'and must refuse the published default outright');
+  assert.match(workflow, /example\.invalid/, 'on an address RFC 2606 reserves, so the credential cannot be phished back');
+
+  // The field names are the application's, not invented: `POST /auth/login` takes `{email, password}`
+  // and answers `accessToken`. A rename here would send an empty Authorization header instead of a
+  // legible 401, and the run would report a suspiciously fast number.
+  assert.match(workflow, /POST "\$\{T360_API_URL\}\/auth\/login"/, 'the login route must be the real one');
+  assert.match(workflow, /j\.accessToken/, 'and the token field must be the real one');
 
   // Production refusal holds on both paths, and the approved-host rule applies to manual runs only,
   // since an automatic run owns its target and has no approved host to match.
