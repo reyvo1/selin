@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "navigation",
   "wave": "W1",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -48,5 +48,10 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T14:51:44.255Z",
-  "updatedAt": "2026-10-16T14:42:45.930Z"
+  "updatedAt": "2026-10-16T14:48:23.597Z",
+  "releaseEvidence": [
+    "PR #8 merged ke main sebagai e3ae063: fase STAGING, semua check hijau (policy, repo tests, SQLite, PostgreSQL, stress).",
+    "tests/operator-surface-completeness.test.mjs: 17 pass, 0 fail.",
+    "npm run workflow:validate lulus."
+  ]
 }
