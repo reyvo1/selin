@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { resolve } from 'node:path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -29,6 +30,13 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api/v1');
+  // Foto produk yang diunggah dari perangkat operator disimpan di disk server cabang
+  // (lihat imageStorageRoot() di products/product-image.util.ts) dan harus bisa dimuat
+  // browser lewat http(s). useStaticAssets tidak terpengaruh global prefix, jadi file
+  // tersaji di /media/product-images/... berdampingan dengan /api/v1/...
+  app.useStaticAssets(resolve(process.env.PRODUCT_IMAGE_DIR ?? 'uploads/product-images'), {
+    prefix: '/media/product-images/',
+  });
   // Header yang diizinkan pada preflight harus lengkap. Default Nest hanya mencantumkan header
   // "simple" plus Authorization. Aplikasi Admin (page.tsx:196) mengirim `Content-Type:
   // application/json` pada SETIAP request lewat authFetch, jadi preflight menanyakan
@@ -67,6 +75,9 @@ async function bootstrap() {
       'X-Customer-Session',
       'X-Order-Access-Token',
       'X-Api-Key',
+      // Upload foto produk mengirim Idempotency-Key; tanpa baris ini preflight
+      // menolak seluruh request dari browser (pola bug yang sama dengan content-type).
+      'Idempotency-Key',
     ],
     exposedHeaders: ['Content-Disposition'],
     maxAge: 600,

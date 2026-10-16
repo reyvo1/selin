@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -72,6 +73,27 @@ import { ProductsService } from './products.service';
   @Permissions('product.update')
   update(@Param('id') id: string, @Body() dto: UpdateProductDto, @CurrentUser() user: AuthUser) {
     return this.products.update(id, dto, user);
+  }
+
+  @ApiBearerAuth()
+  @Roles('SUPER_ADMIN', 'OWNER', 'ADMIN')
+  @Post(':id/image')
+  @Permissions('product.update')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  uploadImage(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string; size: number } | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @CurrentUser() user: AuthUser,
+    @Req() request: { protocol?: string; headers?: Record<string, string | string[] | undefined>; get?: (name: string) => string | undefined },
+  ) {
+    const forwardedProto = request.headers?.['x-forwarded-proto'];
+    const protocol = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(',')[0]?.trim()
+      ?? request.protocol
+      ?? 'http';
+    const host = request.get?.('host') ?? request.headers?.['host'];
+    const hostValue = Array.isArray(host) ? host[0] : host ?? '';
+    return this.products.uploadImage(id, file, idempotencyKey, user, { protocol, host: hostValue });
   }
 
   @ApiBearerAuth()

@@ -1,0 +1,41 @@
+{
+  "id": "T360-20261017-001644",
+  "title": "upload foto produk dari perangkat ke penyimpanan lokal cabang",
+  "type": "feature",
+  "module": "products",
+  "wave": "W7",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "Foto produk boleh dari file perangkat atau URL http(s); file JPEG/PNG/WEBP maks 5 MiB, validasi magic byte, nama acak, tenant-scoped per company; URL publik memakai host request agar valid di LAN; mutasi idempotent via Idempotency-Key; permission product.update."
+  ],
+  "acceptanceCriteria": [
+    "POST /products/:id/image menerima file dan mengisi imageUrl URL http(s) lokal; upload ulang key sama aman; file yatim dibersihkan saat transaksi gagal; admin ada picker+pratinjau; test 9/9 hijau; tsc api+admin bersih."
+  ],
+  "testPlan": [
+    "tests/product-image-upload.test.mjs (9 test: magic byte, batas, key acak, URL, kontrak route/permission/idempotency/audit/static/CORS/UI) + tsc --noEmit api dan admin."
+  ],
+  "migrationPlan": "Tidak ada perubahan database; perbarui bila dampak database berubah.",
+  "rollbackPlan": "Revert commit; endpoint hilang, kolom imageUrl dan URL manual tetap jalan; file yang sudah terunggah tetap tersaji statis.",
+  "monitoringPlan": "Pantau error 400/413 upload dan pertumbuhan direktori uploads/; antrean backup volume bila pindah production.",
+  "securityNotes": "Permission product.update; magic-byte check; path traversal ditolak (startsWith root); nama file UUID; tanpa auth pada /media (capability URL acak, setara foto katalog publik); Idempotency-Key masuk allow-list CORS.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-16T16:16:44.606Z",
+  "updatedAt": "2026-10-16T16:22:40.197Z"
+}

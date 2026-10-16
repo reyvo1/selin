@@ -1,12 +1,23 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../auth/auth.types';
+import { beginIdempotent, completeIdempotent, hashPayload } from '../common/idempotency';
 import { decodeCursor, parsePageLimit, toCursorPage } from '../common/pagination';
 import { resolveProductUnitPrice } from '../common/product-pricing';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { BulkImportProductsDto, BulkProductRowDto } from './dto/bulk-products.dto';
+import {
+  buildPublicImageUrl,
+  imageStorageRoot,
+  buildImageStorageKey,
+  validateImageBytes,
+  type UploadedImageFile,
+} from './product-image.util';
 
 type DbClient = Prisma.TransactionClient | PrismaService;
 type ProductCursor = { name: string; id: string };
@@ -462,9 +473,78 @@ export class ProductsService {
     });
   }
 
-  // T360-20260829 value pack 2 — riwayat perubahan harga produk.
-  async priceHistory(id: string, user: AuthUser, limitValue?: string) {
+  // Upload foto produk dari perangkat operator ke disk server cabang.
+  //
+  // Alurnya: validasi isi file -> tulis ke disk (nama acak, flag wx) -> transaksi
+  // DB (idempotency receipt + update imageUrl + audit). File ditulis dulu supaya
+  // transaksi tidak pernah menunjuk ke file yang tidak ada; kalau transaksi gagal,
+  // file yang baru ditulis dihapus sebagai compensating operation. File dari
+  // percobaan yang lolos idempotency (replay COMPLETED) tidak pernah ditulis ulang:
+  // dicek dulu sebelum menyentuh disk supaya retry tidak menumpuk file yatim.
+  async uploadImage(
+    id: string,
+    file: UploadedImageFile | undefined,
+    idempotencyKey: string | undefined,
+    user: AuthUser,
+    hostInfo: { protocol: string; host: string },
+  ) {
     const scope = this.requireTenantScope(user);
+    if (!file || !file.buffer || file.buffer.length === 0) throw new BadRequestException('File foto wajib diunggah.');
+    const key = (idempotencyKey ?? '').trim();
+    if (!key) throw new BadRequestException('Idempotency-Key wajib diisi.');
+    let extension: string;
+    try {
+      extension = validateImageBytes(file.buffer, file.mimetype).extension;
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'File gambar tidak valid.');
+    }
+    const fileHash = createHash('sha256').update(file.buffer).digest('hex');
+    const payload = { productId: id, fileHash };
+    const prior = await this.prisma.idempotencyReceipt.findUnique({
+      where: { companyId_scope_key: { companyId: scope.companyId, scope: 'product-image', key } },
+    });
+    if (prior && prior.status === 'COMPLETED' && prior.requestHash === hashPayload(payload)) {
+      return (prior.response as unknown as { id: string; imageUrl: string }) ?? null;
+    }
+    const storageKey = buildImageStorageKey(scope.companyId, id, extension);
+    const root = imageStorageRoot();
+    const absolute = resolve(root, storageKey);
+    if (absolute !== root && !absolute.startsWith(`${root}/`)) throw new BadRequestException('Lokasi foto tidak valid.');
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, file.buffer, { flag: 'wx' });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const receipt = await beginIdempotent(tx, { companyId: scope.companyId, scope: 'product-image', key, payload });
+        if (receipt.replay) {
+          if (receipt.status === 'COMPLETED') return receipt.response;
+          throw new BadRequestException('Upload dengan Idempotency-Key ini masih diproses.');
+        }
+        const product = await tx.product.findFirst({ where: { id, companyId: scope.companyId } });
+        if (!product) return this.denyTenantAccess(tx, user, scope, 'Product', id);
+        const imageUrl = buildPublicImageUrl(hostInfo.protocol, hostInfo.host, storageKey);
+        await tx.product.update({ where: { id: product.id }, data: { imageUrl } });
+        await tx.auditLog.create({
+          data: {
+            companyId: scope.companyId,
+            userId: user.sub,
+            action: 'UPLOAD_PRODUCT_IMAGE',
+            entityType: 'Product',
+            entityId: product.id,
+            payload: { branchId: scope.branchId, sku: product.sku, byteLength: file.buffer.length, storageKey },
+          },
+        });
+        const response = { id: product.id, imageUrl };
+        await completeIdempotent(tx, { companyId: scope.companyId, scope: 'product-image', key, resourceType: 'Product', resourceId: product.id, response });
+        return response;
+      });
+    } catch (error) {
+      await unlink(absolute).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  // T360-20260829 value pack 2 — riwayat perubahan harga produk.
+  async priceHistory(id: string, user: AuthUser, limitValue?: string) {    const scope = this.requireTenantScope(user);
     const limit = Math.min(Math.max(Number(limitValue ?? 50) || 50, 1), 200);
     const product = await this.prisma.product.findFirst({ where: { id, companyId: scope.companyId }, select: { id: true } });
     if (!product) return this.denyTenantAccess(this.prisma, user, scope, 'Product', id);
