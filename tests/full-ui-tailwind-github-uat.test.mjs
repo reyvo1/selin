@@ -15,7 +15,8 @@ const adminPage=read('apps/admin/app/page.tsx');
 test('full UI migration makes Tailwind v4 canonical and audit commands mandatory',()=>{
   assert.equal(pkg.devDependencies.tailwindcss,'4.3.3');
   assert.equal(pkg.devDependencies['@tailwindcss/postcss'],'4.3.3');
-  assert.match(pkg.scripts['audit:full:repo'], /^node scripts\/audit-full-repository\.mjs/);
+  assert.match(pkg.scripts['audit:full:repo'], /node scripts\/audit-full-repository\.mjs/);
+  assert.match(pkg.scripts['audit:full:repo'], /audit:p5:visual/);
   assert.match(pkg.scripts['audit:full:repo'], /audit:product:completeness/);
   assert.equal(pkg.scripts['ci:api:sweep'],'node scripts/ci-runtime-api-sweep.mjs');
   assert.equal(pkg.scripts['ci:ui:audit'],'node scripts/ci-ui-source-audit.mjs');
