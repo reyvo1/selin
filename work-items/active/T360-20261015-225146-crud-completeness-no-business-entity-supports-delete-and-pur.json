@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "procurement",
   "wave": "W2",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -55,5 +55,9 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T15:14:06.000Z",
-  "updatedAt": "2026-10-15T17:50:24.681Z"
+  "updatedAt": "2026-10-16T14:52:33.872Z",
+  "stagingEvidence": [
+    "tests/operator-surface-completeness.test.mjs: 17 pass, 0 fail — mencakup route cancel PO, permission purchase.cancel, idempotency header, refusal, audit CANCEL_PURCHASE_ORDER, seed grant, admin wiring, absence PATCH.",
+    "npm run workflow:validate lulus."
+  ]
 }
