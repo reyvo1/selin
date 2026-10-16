@@ -76,6 +76,9 @@ export default function PpobOperatorWorkspace({ token, online, active, shiftOpen
   const [busy, setBusy] = useState(false);
   const [catalogBusy, setCatalogBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
+  const [detail, setDetail] = useState<DigitalTransaction | null>(null);
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [detailError, setDetailError] = useState('');
 
   useEffect(() => { pendingPurchaseRef.current = null; setPurchase({ providerSku: '', customerNo: '', cashReceived: '', confirmed: false, changeReturned: false }); }, [token]);
   const chosenProduct = products.find((product) => product.providerSku === purchase.providerSku);
@@ -168,6 +171,25 @@ export default function PpobOperatorWorkspace({ token, online, active, shiftOpen
     finally { setCatalogBusy(false); }
   }
 
+  /**
+   * Open one provider transaction in full.
+   *
+   * The history list showed the number, the customer, the status and the price. It did not show the
+   * provider's own message, the serial, the last provider check, or which Accounting Core events the
+   * cash capture, the settlement and the refund are attached to. That is precisely what a cashier or a
+   * supervisor is asked for when a digital purchase goes wrong, and the answer was only reachable by
+   * opening devtools and pasting an id into curl.
+   */
+  async function openDetail(transaction: DigitalTransaction) {
+    setDetailBusy(true); setDetailError('');
+    try {
+      setDetail(await getJson<DigitalTransaction>(token, `/digital-services/transactions/${encodeURIComponent(transaction.id)}`));
+    } catch (error) {
+      setDetail(null);
+      setDetailError(error instanceof Error ? error.message : 'Detail transaksi tidak dapat dimuat.');
+    } finally { setDetailBusy(false); }
+  }
+
   async function recheck(transaction: DigitalTransaction) {
     if (!online || !token || busy || !['PENDING', 'PROCESSING'].includes(transaction.status)) return;
     setBusy(true);
@@ -227,9 +249,22 @@ export default function PpobOperatorWorkspace({ token, online, active, shiftOpen
         {!historyBusy && !historyError && transactions.length === 0 && <div className="syncEmpty">Belum ada transaksi digital pada cabang ini.</div>}
         <ul className="ppobList">{transactions.map((row) => <li key={row.id}>
           <div><strong>{row.number}</strong><small>{row.providerSku} · {row.customerNo} · {new Date(row.createdAt).toLocaleString('id-ID')}</small><small>{row.serialNumber ? `SN: ${row.serialNumber}` : row.message ?? 'Belum ada pesan provider'}</small></div>
-          <div><span className="ppobStatus">{row.status}</span><strong>{rupiah(row.sellingPrice)}</strong>{['PENDING', 'PROCESSING'].includes(row.status) && <button type="button" className="secondary" onClick={() => void recheck(row)} disabled={!online || busy}>Recheck</button>}</div>
+          <div><span className="ppobStatus">{row.status}</span><strong>{rupiah(row.sellingPrice)}</strong><button type="button" className="linkButton" onClick={() => void openDetail(row)} disabled={!online || detailBusy}>Rincian</button>{['PENDING', 'PROCESSING'].includes(row.status) && <button type="button" className="secondary" onClick={() => void recheck(row)} disabled={!online || busy}>Recheck</button>}</div>
         </li>)}</ul>
         {transactionCursor && <button type="button" className="secondary" disabled={!online || historyBusy} onClick={() => void loadHistory(transactionCursor)}>Riwayat berikutnya</button>}
+        {detailError && <p role="alert" className="fieldWarning">{detailError}</p>}
+        {detail && <div className="voucherBox" role="region" aria-label={`Rincian transaksi ${detail.number}`}>
+          <strong>{detail.number} · {detail.status}</strong>
+          <small>SKU: {detail.providerSku} · tujuan: {detail.customerNo}</small>
+          <small>Dibuat: {new Date(detail.createdAt).toLocaleString('id-ID')}</small>
+          <small>Pesan provider: {detail.message ?? 'belum ada'}</small>
+          <small>Nomor seri: {detail.serialNumber ?? 'belum ada'}</small>
+          <small>Pemeriksaan provider terakhir: {detail.lastCheckedAt ? new Date(detail.lastCheckedAt).toLocaleString('id-ID') : 'belum pernah'}</small>
+          <small>Jurnal Capture Cash: {detail.paymentAccountingEventId ?? 'tidak tertaut'}</small>
+          <small>Jurnal Settlement: {detail.settlementAccountingEventId ?? 'tidak tertaut'}</small>
+          <small>Jurnal Refund: {detail.refundAccountingEventId ?? 'tidak tertaut'}</small>
+          <button type="button" className="secondary" onClick={() => setDetail(null)}>Tutup rincian</button>
+        </div>}
       </section>
     </div>
   </section>;

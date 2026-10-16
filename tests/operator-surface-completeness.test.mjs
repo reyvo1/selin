@@ -229,6 +229,56 @@ test('the stock-count screen can discard a draft', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Detail reads. Every one of these existed with no way for an operator to open one row.
+// ---------------------------------------------------------------------------
+
+test('a single branch transfer can be read', () => {
+  const branchSync = read('apps/admin/app/modules/branch-sync.tsx');
+  assert.match(branchSync, /async function openSyncDetail/, 'the panel needs a reader');
+  assert.ok(branchSync.includes('`/branch-transfer/transfers/${transferId}`'), 'it must call the route the API exposes');
+  // Reading the recorded state is what the panel is FOR. Two branches disagreeing is the problem, and
+  // an operator who cannot read one transfer's state cannot decide between arrival and departure.
+  for (const field of ['departureRecordedAt', 'arrivalAcknowledgedAt', 'destinationQuantity'])
+    assert.ok(branchSync.includes(field), `the detail must show ${field}`);
+});
+
+test('one provider transaction can be read in full from the POS', () => {
+  const ppob = read('apps/pos/app/ppob-workspace.tsx');
+  assert.match(ppob, /async function openDetail/, 'the PPOB history needs a reader');
+  assert.ok(ppob.includes('`/digital-services/transactions/${encodeURIComponent(transaction.id)}`'), 'it must call the route the API exposes');
+  // The four things a supervisor is actually asked for when a digital purchase goes wrong.
+  for (const field of ['message', 'serialNumber', 'lastCheckedAt', 'paymentAccountingEventId'])
+    assert.ok(ppob.includes(field), `the detail must show ${field}`);
+});
+
+test('one automation job can be read with its audit trail', () => {
+  const platform = read('apps/admin/app/modules/platform-control.tsx');
+  assert.match(platform, /async function openJob/, 'the audit-ops screen needs a reader');
+  assert.ok(platform.includes('`/platform/automation-jobs/${encodeURIComponent(jobId)}`'), 'it must call the route the API exposes');
+  assert.match(platform, /jobDetail\.audit/, 'the endpoint returns the audit trail and that is the reason to call it');
+});
+
+test("a device's held offline queue can be replayed from the server side", () => {
+  // This endpoint was reachable only from the tenant integration harness, while its sibling `requeue`
+  // had a control on the same screen. Its guard is integration.manage on SUPER_ADMIN/OWNER/ADMIN — a
+  // human permission — so it was never a node protocol: it is the recovery path for a device that
+  // could not deliver its own queue.
+  const r3 = read('apps/admin/app/modules/r3-operations.tsx');
+  assert.match(r3, /async function submitOfflineBatch/, 'the control must exist');
+  assert.ok(r3.includes("`/devices/${selectedDeviceId}/offline-transactions`"), 'it must call the route the API exposes');
+  // The payload is built from rows this screen already shows, so an operator cannot submit a batch
+  // that does not correspond to transactions the server has actually received.
+  assert.match(r3, /localId: row\.localId,[\s\S]{0,120}sequence: row\.sequence/, 'each row must keep its own localId and sequence, which is what makes the replay check work');
+  // The tenant must not be settable from the browser. The server stamps companyId/branchId from the
+  // AUTHENTICATED caller and refuses a payload claiming another tenant, so sending them here would be
+  // sending something the server overwrites while reading as though the operator chooses the tenant.
+  const payloadLine = r3.split('\n').find((line) => line.includes('payload: {')) ?? '';
+  assert.ok(!payloadLine.includes('companyId') && !payloadLine.includes('branchId'),
+    'the payload must not carry tenant fields; the authenticated caller decides the tenant');
+  assert.match(r3, /canAll\('integration\.manage'\)/, 'the control must respect the permission the route requires');
+});
+
+// ---------------------------------------------------------------------------
 // The decision this work did NOT make.
 // ---------------------------------------------------------------------------
 

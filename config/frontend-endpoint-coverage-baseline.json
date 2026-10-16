@@ -11,7 +11,7 @@
     "SUPERSEDED": "No caller in the repository and its data is already delivered through another reachable endpoint."
   },
   "summary": {
-    "total": 29,
+    "total": 25,
     "byClass": {
       "DEVICE_INGEST": 1,
       "NODE_PROTOCOL": 22,
@@ -100,12 +100,6 @@
       "reason": "Node-to-node surface guarded by Permissions 'integration.manage'. apps/worker reaches the Telegram and Digiflazz providers only and holds no client for this route, and the reachable siblings on this controller are the observational admin reads (GET /branch-continuity/capabilities, PUT /branch-continuity/capabilities, GET /branch-continuity/consolidated); the counterparty for this write is the edge node, which is not in this repository."
     },
     {
-      "id": "GET /branch-transfer/transfers/:transferId",
-      "controller": "apps/api/src/branch-continuity/branch-transfer.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Human-facing endpoint guarded by Permissions 'integration.manage' that no UI app calls while its reachable siblings on the same controller are used: POST /branch-transfer/transfers/:transferId/arrival, GET /branch-transfer/pending, POST /branch-transfer/transfers/:transferId/abandon. The screen exists and its workflow is live; this step of it is not wired."
-    },
-    {
       "id": "POST /branch-sync/nodes/:nodeId/aggregates/:aggregateType/:aggregateId/version",
       "controller": "apps/api/src/branch-sync/branch-sync.controller.ts",
       "class": "NODE_PROTOCOL",
@@ -160,18 +154,6 @@
       "reason": "Node-to-node surface guarded by no endpoint guard. apps/worker reaches the Telegram and Digiflazz providers only and holds no client for this route, and the reachable siblings on this controller are the observational admin reads (POST /branch-sync/nodes, GET /branch-sync/nodes, POST /branch-sync/nodes/:nodeId/peers); the counterparty for this write is the edge node, which is not in this repository."
     },
     {
-      "id": "GET /digital-services/transactions/:id",
-      "controller": "apps/api/src/digital-services/digital-services.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Human-facing endpoint guarded by Roles 'SUPER_ADMIN', 'OWNER', 'ADMIN', 'CASHIER' that no UI app calls while its reachable siblings on the same controller are used: GET /digital-services/products, PATCH /digital-services/products/:id/tax-verification, POST /digital-services/catalog/sync, GET /digital-services/transactions, POST /digital-services/transactions, POST /digital-services/transactions/:id/settle, POST /digital-services/transactions/:id/refund, POST /digital-services/transactions/:id/recheck. The screen exists and its workflow is live; this step of it is not wired."
-    },
-    {
-      "id": "POST /devices/:id/offline-transactions",
-      "controller": "apps/api/src/extensions/extensions.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Human-facing endpoint guarded by Roles 'SUPER_ADMIN','OWNER','ADMIN' that no UI app calls while its reachable siblings on the same controller are used: GET /inventory-batches, POST /inventory-batches, GET /inventory-serials, POST /inventory-serials, GET /loyalty/programs, POST /loyalty/programs, POST /loyalty/transactions, GET /customers, GET /loyalty/accounts/:customerId, GET /loyalty/tier/:customerId, GET /finance/fiscal-periods, POST /finance/fiscal-periods, PATCH /finance/fiscal-periods/:id/soft-close, PATCH /finance/fiscal-periods/:id/reopen, PATCH /finance/fiscal-periods/:id/close, GET /finance/bank-statements, POST /finance/bank-statements/import, GET /finance/reconciliations, POST /finance/reconciliations, GET /finance/reconciliations/:id/details, POST /finance/reconciliations/:id/auto-match, POST /finance/reconciliations/:id/match, POST /finance/reconciliations/:id/unmatch, GET /devices, POST /devices, GET /devices/:id/sync/diagnostics, POST /devices/:id/credentials/rotate, PATCH /devices/:id/status, POST /devices/:id/sync/ack, POST /devices/:id/offline-transactions/:transactionId/requeue, GET /analytics/daily-summaries, POST /analytics/daily-summaries/materialize, GET /retention/policies, POST /retention/policies, GET /retention/archive-runs, POST /retention/archive-runs, GET /integrations/:id/mappings, POST /integrations/:id/mappings, DELETE /integrations/:id/mappings/:mappingId, GET /forecasts, POST /forecasts/run, GET /forecasts/:id, GET /operator-insights, POST /operator-insights/refresh, PATCH /operator-insights/:id/status, GET /operator-assistant/history, POST /operator-assistant/query, GET /shipments, POST /shipments, GET /marketplace-orders, POST /marketplace-orders/import, GET /notifications/providers, GET /notifications/templates, POST /notifications/templates, GET /notifications, POST /notifications. The screen exists and its workflow is live; this step of it is not wired."
-    },
-    {
       "id": "GET /sync/pull",
       "controller": "apps/api/src/extensions/extensions.controller.ts",
       "class": "NODE_PROTOCOL",
@@ -182,12 +164,6 @@
       "controller": "apps/api/src/payments/payments.controller.ts",
       "class": "PROVIDER_CALLBACK",
       "reason": "No endpoint guard: this is the public webhook a payment provider calls over the internet, and a browser cannot originate it. Its only sibling GET /payments/provider-events is the admin read of what those callbacks produced, and that sibling is reachable."
-    },
-    {
-      "id": "GET /platform/automation-jobs/:id",
-      "controller": "apps/api/src/platform/platform.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Human-facing endpoint guarded by Roles 'SUPER_ADMIN','OWNER','ADMIN','AUDITOR' that no UI app calls while its reachable siblings on the same controller are used: GET /platform/manifest, GET /platform/storefront-branches, GET /platform/setup-readiness, GET /platform/tenant, PATCH /platform/tenant, GET /platform/features, POST /platform/features, GET /platform/settings, POST /platform/settings, GET /platform/custom-fields, POST /platform/custom-fields, POST /platform/custom-field-values, GET /platform/integrations, POST /platform/integrations, PATCH /platform/integrations/:id, GET /platform/webhooks, POST /platform/webhooks, GET /platform/business-rules, POST /platform/business-rules, PATCH /platform/business-rules/:id, GET /platform/automation-jobs, POST /platform/automation-jobs/:id/cancel, GET /platform/approval-policies, POST /platform/approval-policies, GET /platform/approval-requests, POST /platform/approval-requests, PATCH /platform/approval-requests/:id/decision, PATCH /platform/approval-requests/:id/delegate, POST /platform/automation-jobs/:id/replay, GET /platform/webhook-deliveries, POST /platform/webhook-deliveries/:id/replay, POST /platform/outbox/:id/replay, POST /platform/notifications/:id/cancel, POST /platform/notifications/:id/replay, GET /platform/audit-logs, GET /platform/ui-schemas, POST /platform/ui-schemas, GET /platform/outbox, GET /platform/ops-health. The screen exists and its workflow is live; this step of it is not wired."
     },
     {
       "id": "GET /platform/modules",

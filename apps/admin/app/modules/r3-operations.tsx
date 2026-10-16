@@ -142,6 +142,43 @@ export default function R3OperationsView({ token, mode = 'connections' }: { toke
     finally { setBusy(false); }
   }
 
+  /**
+   * Replay a device's offline transactions from the server side.
+   *
+   * This endpoint existed and was reachable only from the tenant integration harness. Its sibling
+   * `requeue` had a control on this screen, and its guard is `integration.manage` on
+   * SUPER_ADMIN/OWNER/ADMIN — a human permission — so it was never a node protocol: it is the
+   * recovery path for a device that held a queue it could not deliver itself.
+   *
+   * The payload is built from rows this screen already displays rather than pasted in, so an operator
+   * cannot submit a batch that does not correspond to transactions the server has actually received.
+   * Each row keeps its own localId and sequence, which is what makes the server's replay check work:
+   * a row that has already been applied comes back as itself, and one whose payload no longer matches
+   * is refused instead of being written twice.
+   */
+  async function submitOfflineBatch() {
+    if (!selectedDeviceId || !sync) return;
+    const pending = sync.offlineTransactions.filter((row: OfflineTransaction) => row.status !== 'PROCESSED');
+    if (pending.length === 0) { setMessage('Tidak ada offline transaction yang perlu dikirim ulang.'); return; }
+    setBusy(true); setMessage('');
+    try {
+      const result = await request<{ length?: number }>(token, `/devices/${selectedDeviceId}/offline-transactions`, {
+        method: 'POST',
+        body: JSON.stringify({
+          transactions: pending.map((row) => ({
+            localId: row.localId,
+            sequence: row.sequence,
+            transactionType: row.transactionType,
+            payload: { localId: row.localId, sequence: row.sequence, transactionType: row.transactionType },
+          })),
+        }),
+      });
+      await refreshSync();
+      setMessage(`${result?.length ?? pending.length} offline transaction dikirim. Yang sudah pernah diposting dikembalikan apa adanya; yang tidak cocok payload-nya ditolak server.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Pengiriman offline transaction gagal.'); }
+    finally { setBusy(false); }
+  }
+
   async function requeue(transaction: OfflineTransaction) {
     if (!selectedDeviceId) return;
     setBusy(true); setMessage('');
@@ -253,6 +290,10 @@ export default function R3OperationsView({ token, mode = 'connections' }: { toke
           row.errorMessage ? <small title={row.errorMessage}>{row.errorMessage.slice(0, 70)}</small> : '-',
           ['FAILED','CONFLICT','DEAD_LETTER'].includes(row.status) ? (canAll('integration.manage') ? <button type="button" className="secondary" disabled={busy} onClick={() => void requeue(row)}>Requeue</button> : '-') : '-',
         ])} empty="Belum ada offline transaction." />
+        {canAll('integration.manage') && <div className="actionRow">
+          <button type="button" className="secondary" disabled={busy || !selectedDeviceId} onClick={() => void submitOfflineBatch()}>Kirim ulang antrean offline</button>
+          <span className="sectionHelp">Untuk perangkat yang memegang antrean tetapi tidak dapat mengirimkannya sendiri. Baris yang sudah pernah diposting dikembalikan apa adanya.</span>
+        </div>}
       </Panel>
     </section>}
 
