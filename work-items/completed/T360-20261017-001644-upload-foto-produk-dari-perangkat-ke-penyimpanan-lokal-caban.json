@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "products",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "unassigned",
   "featureFlag": "",
@@ -37,5 +37,13 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-16T16:16:44.606Z",
-  "updatedAt": "2026-10-16T16:22:40.197Z"
+  "updatedAt": "2026-10-16T16:26:10.208Z",
+  "stagingEvidence": [
+    "PR #19 merged ke main, 6/6 check hijau.",
+    "Test 9/9 + tsc api/admin bersih."
+  ],
+  "releaseEvidence": [
+    "PR #19 merged ke main sebagai squash; semua check hijau (policy, repo tests, SQLite, PostgreSQL, stress).",
+    "tests/product-image-upload.test.mjs 9/9."
+  ]
 }
