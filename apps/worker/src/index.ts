@@ -1090,6 +1090,7 @@ async function tick(): Promise<void> {
   await processApprovalExpiries();
   await emitAutomationSourceEvents();
   await dispatchOutbox();
+  await requeueDueSyncEvents();
   await sendWebhookDeliveries();
   await processConsoleNotifications();
   await processExternalNotifications();
@@ -1716,6 +1717,51 @@ function renderReportOutput(csv: string, format: string, reportType: string): { 
   if (normalized === 'XLSX') return { extension: 'xlsx', data: renderXlsx(csv) };
   if (normalized === 'PDF') return { extension: 'pdf', data: renderPdf(csv, `Toko360 ${reportType}`) };
   throw new Error(`Format report tidak didukung worker: ${format}`);
+}
+
+// Batas yang sama dengan DEAD_LETTER_THRESHOLD di
+// apps/api/src/branch-sync/branch-sync.service.ts:51 — satu-satunya sumber kebenaran
+// ambang dead-letter; duplikasi angka di sini disengaja agar worker tetap jalan walau
+// service API tidak bisa diimpor, dan test mengunci keduanya sama.
+const SYNC_DEAD_LETTER_THRESHOLD = 8;
+
+/**
+ * Antre-ulang otomatis event sync yang gagal dan sudah jatuh tempo.
+ *
+ * Akar masalahnya: pullEvents hanya melayani status PENDING/PUBLISHING, sedangkan
+ * recordFailure memindahkan event ke FAILED dengan nextRetryAt — dan tidak ada
+ * worker yang mengembalikannya ke PENDING. Akibatnya setelah internet pulih, event
+ * yang sempat gagal tetap tak terlihat oleh pull peer sampai operator menekan
+ * requeue manual: data macet diam-diam. Loop ini menutupnya: setiap tick, baris
+ * FAILED yang nextRetryAt-nya lewat dan attempts-nya di bawah ambang diklaim
+ * atomik lalu dikembalikan ke PENDING supaya pull berikutnya membawanya.
+ * DEAD_LETTER tetap manual (recordConflict/requeueDeadLetter) — racun tidak boleh
+ * hidup lagi sendiri.
+ */
+async function requeueDueSyncEvents(): Promise<void> {
+  const now = new Date();
+  const due = await prisma.syncOutbox.findMany({
+    where: { status: 'FAILED', nextRetryAt: { lte: now }, attempts: { lt: SYNC_DEAD_LETTER_THRESHOLD } },
+    orderBy: { nextRetryAt: 'asc' },
+    take: 100,
+  });
+  for (const row of due) {
+    const claimed = await prisma.syncOutbox.updateMany({
+      where: { id: row.id, status: 'FAILED', attempts: { lt: SYNC_DEAD_LETTER_THRESHOLD } },
+      data: { status: 'PENDING', nextRetryAt: null, lastError: null },
+    });
+    if (!claimed.count) continue;
+    await prisma.auditLog.create({
+      data: {
+        companyId: row.companyId,
+        userId: null,
+        action: 'SYNC_EVENT_REQUEUED_AUTO',
+        entityType: 'SyncOutbox',
+        entityId: row.id,
+        payload: { eventId: row.eventId, attempts: row.attempts },
+      },
+    });
+  }
 }
 
 async function processReportJobs(): Promise<void> {

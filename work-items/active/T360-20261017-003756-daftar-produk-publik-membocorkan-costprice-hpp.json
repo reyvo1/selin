@@ -1,0 +1,41 @@
+{
+  "id": "T360-20261017-003756",
+  "title": "daftar produk publik membocorkan costPrice HPP",
+  "type": "security",
+  "module": "products",
+  "wave": "W7",
+  "phase": "VERIFICATION",
+  "risk": "HIGH",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "Respons produk anonim tidak boleh memuat HPP (costPrice produk maupun variant); harga jual/effectiveSalePrice tetap publik; respons terautentikasi tidak berubah."
+  ],
+  "acceptanceCriteria": [
+    "GET /products tanpa login tidak lagi memuat costPrice di level produk maupun variant; salePrice tetap ada; test 5/5 hijau; tsc bersih."
+  ],
+  "testPlan": [
+    "tests/security-sync-hardening.test.mjs (strip costPrice + respons auth utuh)."
+  ],
+  "migrationPlan": "Tidak ada perubahan database; perbarui bila dampak database berubah.",
+  "rollbackPlan": "Revert commit; paparan kembali seperti semula.",
+  "monitoringPlan": "Pantau error field di storefront/kiosk setelah rilis; tidak ada metric baru.",
+  "securityNotes": "Menutup kebocoran HPP ke publik; permission dan tenant scope tidak berubah.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-16T16:37:56.453Z",
+  "updatedAt": "2026-10-16T16:40:02.643Z"
+}

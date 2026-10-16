@@ -23,6 +23,32 @@ type DbClient = Prisma.TransactionClient | PrismaService;
 type ProductCursor = { name: string; id: string };
 type TenantScope = { companyId: string; branchId: string };
 
+// HPP tidak boleh keluar lewat respons publik (list maupun findOne). Prisma
+// mengembalikan full row termasuk costPrice di produk, di tiap variant, dan di
+// variant yang ter-include lewat units/barcodes — semuanya dibuang di satu tempat
+// ini beserta companyId (perilaku lama). Harga jual/effectiveSalePrice tetap publik.
+function stripPublicCost(item: any): any {
+  if (!item || typeof item !== 'object') return item;
+  const { companyId: _companyId, costPrice: _costPrice, ...rest } = item;
+  if (Array.isArray(rest.variants)) {
+    rest.variants = rest.variants.map((variant: any) => {
+      if (!variant || typeof variant !== 'object') return variant;
+      const { costPrice: _variantCost, ...v } = variant;
+      return v;
+    });
+  }
+  const stripNestedVariant = (row: any) => {
+    if (row && typeof row === 'object' && row.variant && typeof row.variant === 'object') {
+      const { costPrice: _nestedCost, ...v } = row.variant;
+      return { ...row, variant: v };
+    }
+    return row;
+  };
+  if (Array.isArray(rest.units)) rest.units = rest.units.map(stripNestedVariant);
+  if (Array.isArray(rest.barcodes)) rest.barcodes = rest.barcodes.map(stripNestedVariant);
+  return rest;
+}
+
 @Injectable()
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -262,10 +288,7 @@ export class ProductsService {
       }))),
     })));
     if (user) return { ...page, items: pricedItems };
-    return {
-      ...page,
-      items: pricedItems.map(({ companyId: _companyId, ...item }) => item),
-    };
+    return { ...page, items: pricedItems.map((item) => stripPublicCost(item)) };
   }
 
   async create(dto: CreateProductDto, user: AuthUser) {
@@ -588,8 +611,7 @@ export class ProductsService {
       })));
       const pricedProduct = { ...product, units, effectiveSalePrice };
       if (user) return pricedProduct;
-      const { companyId: _companyId, ...publicProduct } = pricedProduct;
-      return publicProduct;
+      return stripPublicCost(pricedProduct);
     }
     const exists = await this.prisma.product.findUnique({ where: { id }, select: { id: true } });
     if (exists) return this.denyTenantAccess(this.prisma, user, scope, 'Product', id);

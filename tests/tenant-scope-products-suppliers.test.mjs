@@ -67,8 +67,9 @@ test('product catalog resolves authenticated tenant or trusted public branch cod
 
 test('product inventory and public response remain branch scoped', () => {
   assert.match(productService, /warehouse: \{[\s\S]*?branchId: scope\.branchId,[\s\S]*?branch: \{ companyId: scope\.companyId \}/);
-  assert.match(productService, /items: pricedItems\.map\(\(\{ companyId: _companyId, \.\.\.item \}\) => item\)/);
-  assert.match(productService, /const \{ companyId: _companyId, \.\.\.publicProduct \} = pricedProduct/);
+  assert.match(productService, /items: pricedItems\.map\(\(item\) => stripPublicCost\(item\)\)/);
+  assert.match(productService, /return stripPublicCost\(pricedProduct\)/);
+  assert.match(productService, /costPrice: _variantCost/);
   assert.match(storefront, /products\?branchCode=\$\{encodeURIComponent\(branchCode\)\}&limit=100/);
   assert.match(storefront, /function changeBranch/);
 });
