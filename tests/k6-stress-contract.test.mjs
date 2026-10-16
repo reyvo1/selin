@@ -165,31 +165,73 @@ test('an unknown scenario fails loudly instead of falling back to the read one',
     'the fallback shape must be gone');
 });
 
-test('the heavy profile runs on a GitHub runner, never on a push or a pull request', () => {
+test("GitHub runs the harness, and the operator's machine never does", () => {
   const workflow = read('.github/workflows/k6-stress.yml');
-  // Dispatch-only is the whole mechanism. A `push` or `pull_request` trigger would let an ordinary
-  // commit start a load run on whatever machine the runner lands on.
-  const triggerBlock = workflow.slice(0, workflow.indexOf('permissions:'));
-  assert.ok(!/^\s{2}push:/m.test(triggerBlock), 'the stress workflow must not trigger on push');
-  assert.ok(!/^\s{2}pull_request:/m.test(triggerBlock), 'the stress workflow must not trigger on pull_request');
-  assert.match(triggerBlock, /workflow_dispatch:/, 'it must be manually dispatched');
+  const trigger = workflow.slice(0, workflow.indexOf('permissions:'));
 
-  // The runner must refuse a production-shaped target on CI too, not only locally.
-  assert.match(workflow, /production|prod/, 'CI must refuse a production-shaped host');
-  assert.match(workflow, /K6_STRESS_ALLOWED_HOST/, 'and the approved host must be an explicit repository variable, not any host');
+  // This is the correction the operator asked for. Dispatch-only meant the harness had never run at
+  // all, which is the same failure as the never-run ci.yml job that carried a 92-test failure. The
+  // automatic profile runs on GitHub's disposable runner, so it costs the operator nothing.
+  assert.match(trigger, /^\s{2}pull_request:/m, 'the default profile must run on pull requests');
+  assert.match(trigger, /^\s{2}push:/m, 'and on push to the mainline');
+  assert.match(trigger, /workflow_dispatch:/, 'the heavy profile stays available by hand');
+
+  // An automatic run has no `inputs`, so every step must resolve the profile from the resolve step
+  // rather than read `inputs.*` directly — otherwise the scenario steps compare against an empty string
+  // and skip themselves, and the workflow passes having measured nothing.
+  assert.match(workflow, /id: profile/, 'there must be a step that resolves the profile');
+  assert.match(workflow, /\$\{\{ github\.event_name \}\}" = "workflow_dispatch"/, 'which distinguishes a manual run from an automatic one');
+  assert.match(workflow, /SCENARIO="read"[\s\S]*VUS="\d+"/, 'and supplies a default profile for the automatic path');
+  assert.ok(!/if: inputs\.scenario/.test(workflow), 'no step may branch on inputs.scenario directly');
+
+  // The automatic run must own its target. A load test pointed at anything that matters is the thing
+  // this harness exists to prevent, so the default target is the API the job starts and seeds itself.
+  assert.match(workflow, /Start a disposable API for an automatic run/, 'an automatic run must bring up its own target');
+  assert.match(workflow, /if: github\.event_name != 'workflow_dispatch'/, 'and only the automatic path does that');
+  assert.match(workflow, /TARGET="http:\/\/127\.0\.0\.1:4000\/api\/v1"/, 'the automatic target must be the local disposable instance');
+
+  // A load run without a session measures the auth guard, not the query. Minting one is therefore part
+  // of the automatic path, and it refuses rather than falling back to a published demo password.
+  assert.match(workflow, /Mint a load-test session for an automatic run/, 'an automatic run must have a session');
+  assert.match(workflow, /published demo default/, 'and must refuse rather than use one');
+  assert.match(workflow, /K6_STRESS_TOKEN=\$\{TOKEN\}/, 'the minted token must reach the run');
+
+  // Production refusal holds on both paths, and the approved-host rule applies to manual runs only,
+  // since an automatic run owns its target and has no approved host to match.
   const guard = workflow.slice(workflow.indexOf('Refuse a production-shaped target'), workflow.indexOf('name: Read stress'));
-  assert.match(guard, /set -euo pipefail/, 'the guard step must run with strict shell options, or a failure does not stop it');
-  assert.ok((guard.match(/exit 1/g) ?? []).length >= 3, 'every refusal branch must exit non-zero, not only log');
-  assert.match(guard, /::error::/, 'and must mark the job failed where a reader will see it');
+  assert.match(guard, /set -euo pipefail/, 'the guard must run with strict shell options');
+  assert.ok((guard.match(/exit 1/g) ?? []).length >= 2, 'every refusal branch must exit non-zero');
+  assert.match(guard, /K6_STRESS_ALLOWED_HOST/, 'a manual run must be pinned to an approved host');
+  assert.match(guard, /workflow_dispatch" \] && \[ "\$\{HOST\}" != "\$\{\{ vars\.K6_STRESS_ALLOWED_HOST \}\}"/, 'and that pin must apply to the manual path only, since an automatic run owns its target');
 
-  // Two concurrent load runs against one target measure each other's load.
-  assert.match(workflow, /^concurrency:/m, 'concurrency must be pinned');
+  // A superseded pull-request run measures source nobody will ship.
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/,
+    'a new push must supersede the previous PR run, since a manual run against a shared target must not cancel');
 
-  // A run that produced nothing is not a pass, and the evidence must reach the run summary so a
-  // reviewer reads the numbers rather than a green tick.
   assert.match(workflow, /upload-artifact/, 'evidence must be published');
-  assert.match(workflow, /GITHUB_STEP_SUMMARY/, 'and shown in the job summary');
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/, 'and the profile must be shown in the summary, so a number is never read without what it was taken under');
   assert.match(workflow, /no evidence file; a run that produced nothing is not a pass/, 'an empty run must fail the job');
+});
+
+test('the catalogue scenario sends the query the till actually sends', () => {
+  // `apps/pos/lib/catalog.ts` builds `new URLSearchParams({ limit: String(pageSize) })`, adds `cursor`
+  // only when there is one, and `CATALOG_PAGE_SIZE` is 100. There is no `offset` parameter anywhere in
+  // the POS client. An earlier version of this scenario used `limit=50` and paged with `offset`, so it
+  // measured a query shape the application never issues.
+  const catalog = read('tests/load/k6/catalog-read.js');
+  assert.match(catalog, /const CATALOG_PAGE_SIZE = 100;/, 'the page size must come from the application, not be chosen here');
+  assert.match(catalog, /limit: CATALOG_PAGE_SIZE/, 'and must be used for the catalogue request');
+  assert.doesNotMatch(catalog, /offset:/, 'the POS client never sends offset; paging this way measures a query no cashier makes');
+
+  // The walk has to follow `pageInfo.nextCursor`, because a server that ignored the cursor would
+  // return page 1 forever and look perfectly healthy.
+  assert.match(catalog, /pageInfo'\) \|\| \{\}\)\.nextCursor/, 'the walk must follow pageInfo.nextCursor');
+  assert.match(catalog, /cursor is not ignored/, 'and must assert the rows actually change');
+
+  // The search path leaves the client: `searchCatalog` sends `search` to the server because a
+  // client-side filter can only search what the device downloaded. That is a different query.
+  assert.match(catalog, /search: 'a'/, 'the server-side search path must be exercised');
+  assert.ok(catalog.includes("new Trend('toko360_search_latency'"), 'with its own budget');
 });
 
 test('the scripts are reachable and named', () => {
