@@ -42,6 +42,12 @@ jobs:
       # correctly; this restores the same order here.
       - name: Restore SQLite Prisma Client for the test suite
         run: npm run db:local:generate
+      # `tests/post1c-telegram-polling.test.mjs` imports apps/worker/dist/telegram-polling.js, so in a
+      # clean checkout it fails with ERR_MODULE_NOT_FOUND. On a laptop `dist/` always exists from an
+      # earlier build, which is why this only ever shows up in CI. The test is deliberately unchanged —
+      # exercising the real transport over a real HTTP server is the correct proof — so the gate must
+      # provide the artefact. run-build-gate.mjs has done exactly this since 2026-10-01.
+      - run: npm run build -w @toko360/worker
       - run: npm test
       - run: npm run prisma:validate:sqlite -w @toko360/api
       - name: Validate CI-only Docker Compose

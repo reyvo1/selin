@@ -63,6 +63,14 @@ test('PR CI does not test/build against an ungenerated or SQLite-generated Prism
   assert.ok(sqliteRestore > postgresGenerate, 'the SQLite Client must be restored after the PostgreSQL one');
   assert.ok(testRun > sqliteRestore, 'and the suite must run against the restored SQLite Client, not the PostgreSQL one');
 
+  // Same clean-checkout class of problem, different artefact. `tests/post1c-telegram-polling.test.mjs`
+  // imports apps/worker/dist/telegram-polling.js. On a laptop `dist/` always exists from an earlier
+  // build, so the failure is invisible until CI runs it on a fresh checkout — which is what happened
+  // the first time this job executed.
+  const workerBuild = job.indexOf('npm run build -w @toko360/worker');
+  assert.ok(workerBuild > sqliteRestore, 'the worker must be built before the suite, or the Telegram transport test cannot resolve apps/worker/dist');
+  assert.ok(testRun > workerBuild, 'and the suite must run after that build');
+
   // The negative control. Without the restore step the job still mentions generate and test in that
   // order, which is exactly what the old co-occurrence assertion accepted, so this proves the control
   // would fail the broken workflow rather than merely describing it.
