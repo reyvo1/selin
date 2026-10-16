@@ -156,6 +156,50 @@ test('the admin can see and cancel a purchase order', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The last two endpoints that had no operator control at all.
+// ---------------------------------------------------------------------------
+
+test('a branch transfer departure can be recorded', () => {
+  // The panel could acknowledge arrival and abandon a transfer, but never record the departure — so
+  // the FIRST leg of a transfer between branches had no operator control. The only things available
+  // were the second step and giving up.
+  const controller = read('apps/api/src/branch-continuity/branch-transfer.controller.ts');
+  assert.match(controller, /@Post\('transfers\/:transferId\/departure'\)/, 'the route must still exist');
+  assert.match(controller, /@Permissions\('integration\.manage'\)[\s\S]{0,120}registerDeparture|registerDeparture[\s\S]{0,200}integration\.manage/,
+    'and must stay behind the permission it was deliberately gated on');
+
+  const branchSync = read('apps/admin/app/modules/branch-sync.tsx');
+  assert.match(branchSync, /async function recordDeparture/, 'the panel needs an action');
+  assert.match(branchSync, /branch-transfer\/transfers\/\$\{transferId\}\/departure/, 'it must call the route the API exposes');
+  // All three controls must be present. Adding one is only half the fix; the gap was that this one
+  // was missing while its two siblings were there.
+  assert.match(branchSync, /ackArrival\(t\.transferId/, 'arrival must stay');
+  assert.match(branchSync, /setAbandon\(t\)/, 'abandon must stay');
+  assert.match(branchSync, /recordDeparture\(t\.transferId\)/, 'departure is the one that was missing');
+  // The service guards the state, and the message must not imply stock moved.
+  assert.match(branchSync, /stok tetap belum diposting/, 'the confirmation must not imply inventory was posted');
+});
+
+test('the plugin adapter catalog is visible to an operator', () => {
+  // GET /platform/plugins returned the whole registered-adapter list, including productionReady, and no
+  // screen called it. An operator had no way to tell a production-ready adapter from a template
+  // without reading the server source — which matters because a template is not something a payment
+  // may be run through.
+  assert.match(read('apps/api/src/platform/platform.controller.ts'), /@Get\('plugins'\)/, 'the route must still exist');
+
+  const platform = read('apps/admin/app/modules/platform-control.tsx');
+  // Written as a plain string, not a regex: the path contains slashes, and a regex here means
+  // one more escape level between the assertion and what it is asserting.
+  assert.ok(platform.includes("'/platform/plugins'"), 'the settings screen must call it');
+  assert.match(platform, /ADAPTER REGISTRY/, 'and must render it');
+  assert.match(platform, /row\.productionReady/, 'the readiness flag is the whole reason to show this');
+  assert.match(platform, /SIAP PRODUKSI/, 'readiness must be stated in words, not only by colour');
+  assert.match(platform, /capabilities\.join\(', '\)/, 'capabilities are part of what an operator needs');
+  // A permission the operator does not hold must degrade to an empty table, not break the screen.
+  assert.match(platform, /optionalAuthorization\(call<RegisteredPlugin\[\]>/, 'the fetch must tolerate a refused permission');
+});
+
+// ---------------------------------------------------------------------------
 // A stock count that went wrong could not be abandoned.
 // ---------------------------------------------------------------------------
 

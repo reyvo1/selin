@@ -152,3 +152,45 @@ test('the ledger does not grow silently: a new dead sibling fails the run', () =
   const missing = measured.flagged.map(FLAG_IDENTITY).filter((id) => !withoutLast.includes(id));
   assert.ok(missing.length >= 1, 'removing a reviewed entry must surface the endpoint again');
 });
+
+/**
+ * A client that builds a path by concatenation was invisible to this control.
+ *
+ * `api('/mobile-ops/drafts/' + encodeURIComponent(draft.id) + '/scan')` produces two separate tokens
+ * with nothing standing for the parameter between them, so the route measured as unreachable while the
+ * stock-count screen was calling it in front of us. Two endpoints had been filed as UI_GAP on the
+ * strength of that measurement, and a UI_GAP sends someone to build a screen that already exists.
+ *
+ * The fix lets an interpolation cover PARAMETER segments between two covered runs. The restriction to
+ * parameters is the safety argument, so each half of it is pinned here.
+ */
+
+test('an interpolated parameter between two covered runs counts as covered', () => {
+  const tokens = ['/mobile-ops/drafts', '/scan'];
+  assert.ok(!lineCoversRoute('/mobile-ops/drafts/:draftId/scan', tokens), 'without the flag the parameter is uncovered, which is why the endpoint was flagged in the first place');
+  assert.ok(
+    lineCoversRoute('/mobile-ops/drafts/:draftId/scan', tokens, { interpolated: true }),
+    'a line that concatenates around an interpolation covers the parameter it skipped',
+  );
+});
+
+test('an interpolation cannot invent a LITERAL segment of the route', () => {
+  // This is the half that would be dangerous if it broke. If the gap could cover a literal, then a
+  // line mentioning '/mobile-ops/drafts' and '/scan' would certify /mobile-ops/drafts/export/scan and
+  // anything else sharing that prefix — which is exactly what the `:p` rule exists to prevent.
+  const tokens = ['/mobile-ops/drafts', '/scan'];
+  assert.ok(
+    !lineCoversRoute('/mobile-ops/drafts/export/scan', tokens, { interpolated: true }),
+    'a literal segment must still have to appear as its own token',
+  );
+  assert.ok(!lineCoversRoute('/mobile-ops/drafts/export/scan', tokens), 'and it must not pass without the flag either');
+});
+
+test('two paths merely mentioned on one line do not certify a route between them', () => {
+  // Without the `interpolated` flag the parameter is never covered, so listing two sibling paths on
+  // one line — a very common shape in a route table or a test — cannot manufacture reachability.
+  const tokens = ['/mobile-ops/drafts', '/scan'];
+  assert.ok(!lineCoversRoute('/mobile-ops/drafts/:draftId/scan', tokens), 'no flag, no coverage');
+  // And the flag only means "this line concatenated", not "this line is a path builder for anything".
+  assert.ok(!lineCoversRoute('/payments/:id/refunds', tokens, { interpolated: true }), 'the rule is per-route, not per-line');
+});

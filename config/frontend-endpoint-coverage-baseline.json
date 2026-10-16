@@ -11,7 +11,7 @@
     "SUPERSEDED": "No caller in the repository and its data is already delivered through another reachable endpoint."
   },
   "summary": {
-    "total": 33,
+    "total": 29,
     "byClass": {
       "DEVICE_INGEST": 1,
       "NODE_PROTOCOL": 22,
@@ -106,12 +106,6 @@
       "reason": "Human-facing endpoint guarded by Permissions 'integration.manage' that no UI app calls while its reachable siblings on the same controller are used: POST /branch-transfer/transfers/:transferId/arrival, GET /branch-transfer/pending, POST /branch-transfer/transfers/:transferId/abandon. The screen exists and its workflow is live; this step of it is not wired."
     },
     {
-      "id": "POST /branch-transfer/transfers/:transferId/departure",
-      "controller": "apps/api/src/branch-continuity/branch-transfer.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Human-facing endpoint guarded by no endpoint guard that no UI app calls while its reachable siblings on the same controller are used: POST /branch-transfer/transfers/:transferId/arrival, GET /branch-transfer/pending, POST /branch-transfer/transfers/:transferId/abandon. The screen exists and its workflow is live; this step of it is not wired."
-    },
-    {
       "id": "POST /branch-sync/nodes/:nodeId/aggregates/:aggregateType/:aggregateId/version",
       "controller": "apps/api/src/branch-sync/branch-sync.controller.ts",
       "class": "NODE_PROTOCOL",
@@ -184,18 +178,6 @@
       "reason": "Node-to-node surface guarded by Permissions 'integration.manage'. apps/worker reaches the Telegram and Digiflazz providers only and holds no client for this route, and the reachable siblings on this controller are the observational admin reads (GET /inventory-batches, POST /inventory-batches, GET /inventory-serials); the counterparty for this write is the edge node, which is not in this repository."
     },
     {
-      "id": "POST /mobile-ops/drafts/:draftId/scan",
-      "controller": "apps/api/src/mobile-ops/mobile-ops.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Human-facing endpoint guarded by Permissions 'inventory.opname' that no UI app calls while its reachable siblings on the same controller are used: GET /mobile-ops/telegram/bindings, POST /mobile-ops/telegram/bindings, PUT /mobile-ops/telegram/bindings/revoke, GET /mobile-ops/drafts, POST /mobile-ops/drafts/open, GET /mobile-ops/drafts/:draftId, GET /mobile-ops/drafts/:draftId/discrepancy. The screen exists and its workflow is live; this step of it is not wired."
-    },
-    {
-      "id": "POST /mobile-ops/drafts/:draftId/submit",
-      "controller": "apps/api/src/mobile-ops/mobile-ops.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Human-facing endpoint guarded by Permissions 'inventory.opname' that no UI app calls while its reachable siblings on the same controller are used: GET /mobile-ops/telegram/bindings, POST /mobile-ops/telegram/bindings, PUT /mobile-ops/telegram/bindings/revoke, GET /mobile-ops/drafts, POST /mobile-ops/drafts/open, GET /mobile-ops/drafts/:draftId, GET /mobile-ops/drafts/:draftId/discrepancy. The screen exists and its workflow is live; this step of it is not wired."
-    },
-    {
       "id": "POST /payments/providers/:integrationId/callback",
       "controller": "apps/api/src/payments/payments.controller.ts",
       "class": "PROVIDER_CALLBACK",
@@ -209,12 +191,6 @@
     },
     {
       "id": "GET /platform/modules",
-      "controller": "apps/api/src/platform/platform.controller.ts",
-      "class": "SUPERSEDED",
-      "reason": "No caller anywhere in the repository, and the Admin runtime does not need it: apps/admin/app/domain-workspaces.ts derives the module set from GET /platform/manifest through enabledModuleCodes(manifest) instead. Recorded as superseded rather than as a missing screen, because the data it would return is already on screen."
-    },
-    {
-      "id": "GET /platform/plugins",
       "controller": "apps/api/src/platform/platform.controller.ts",
       "class": "SUPERSEDED",
       "reason": "No caller anywhere in the repository, and the Admin runtime does not need it: apps/admin/app/domain-workspaces.ts derives the module set from GET /platform/manifest through enabledModuleCodes(manifest) instead. Recorded as superseded rather than as a missing screen, because the data it would return is already on screen."

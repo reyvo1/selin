@@ -8,6 +8,7 @@ import { Panel, StatusChip, Table } from '../ui';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
 type Mode = 'platform' | 'custom-fields' | 'approvals' | 'webhooks' | 'ui-config' | 'audit-ops';
+type RegisteredPlugin = { id:string; type:'payment'|'shipping'|'marketplace'|'notification'|'accounting'|'device'|'custom'; version:string; capabilities:string[]; productionReady:boolean; description:string };
 type Setting = { id:string; namespace:string; key:string; value:unknown; isSecret:boolean; branchId?:string|null; updatedAt?:string };
 type CustomField = { id:string; entityType:string; key:string; label:string; dataType:string; required:boolean; searchable:boolean; isActive:boolean };
 type Webhook = { id:string; name:string; url:string; events:unknown; isActive:boolean; headers?:unknown; createdAt?:string };
@@ -42,6 +43,7 @@ export default function PlatformControlView({token,mode}:Props){
   const [delegateTarget,setDelegateTarget]=useState<Record<string,string>>({});
   const [message,setMessage]=useState('');
   const [settings,setSettings]=useState<Setting[]>([]);
+  const [plugins,setPlugins]=useState<RegisteredPlugin[]>([]);
   const [fields,setFields]=useState<CustomField[]>([]);
   const [webhooks,setWebhooks]=useState<Webhook[]>([]);
   const [policies,setPolicies]=useState<ApprovalPolicy[]>([]);
@@ -61,6 +63,9 @@ export default function PlatformControlView({token,mode}:Props){
     setMessage('');
     try{
       if(mode==='platform')setSettings(await call<Setting[]>(token,'/platform/settings'));
+      // GET /platform/plugins has existed from the start and no screen ever called it, so an operator
+      // could not tell a production-ready adapter from a template without reading the server source.
+      if(mode==='platform')setPlugins(await optionalAuthorization(call<RegisteredPlugin[]>(token,'/platform/plugins'),[] as RegisteredPlugin[]));
       if(mode==='custom-fields')setFields(await call<CustomField[]>(token,'/platform/custom-fields'));
       if(mode==='webhooks')setWebhooks(await call<Webhook[]>(token,'/platform/webhooks'));
       if(mode==='webhooks')setDeliveries(await call<WebhookDelivery[]>(token,'/platform/webhook-deliveries?limit=100'));
@@ -93,6 +98,16 @@ export default function PlatformControlView({token,mode}:Props){
 
   return <section className="stack">
     {mode==='platform'&&<>
+      <Panel eyebrow="ADAPTER REGISTRY" title="Katalog Plugin" badge={`${plugins.filter((row)=>row.productionReady).length} siap produksi / ${plugins.length} terdaftar`}>
+        <p className="sectionHelp">Daftar adapter yang terpasang di server ini beserta kapabilitas dan status kesiapan. <strong>Belum siap produksi</strong> berarti template integrasi, bukan sesuatu yang boleh dipakai untuk transaksi nyata.</p>
+        <Table head={['Adapter','Tipe','Versi','Kesiapan','Kapabilitas']} rows={plugins.map((row)=>[
+          <span key={`${row.id}-id`}><strong>{row.id}</strong><small>{row.description}</small></span>,
+          row.type,
+          row.version,
+          <span key={`${row.id}-ready`} className={row.productionReady ? 'okText' : 'mutedInline'}>{row.productionReady ? 'SIAP PRODUKSI' : 'BELUM SIAP'}</span>,
+          <span key={`${row.id}-caps`}>{row.capabilities.join(', ')}</span>,
+        ])} empty="Belum ada adapter terdaftar"/>
+      </Panel>
       <Panel eyebrow="SYSTEM SETTINGS" title="Konfigurasi Runtime" badge={`${settings.length} setting`}>
         <form className="formStack" onSubmit={saveSetting}>
           <div className="grid2"><label>Namespace<input required value={settingForm.namespace} onChange={(e)=>setSettingForm({...settingForm,namespace:e.target.value})}/></label><label>Key<input required value={settingForm.key} onChange={(e)=>setSettingForm({...settingForm,key:e.target.value})}/></label></div>

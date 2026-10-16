@@ -82,6 +82,29 @@ export default function BranchSyncView({ token }: { token: string }) {
   }
   // Acknowledging arrival records what was physically counted. It does not post inventory — that stays
   // with the existing receive flow — so the panel says so rather than implying the goods are booked in.
+  /**
+   * Record that the goods physically left the source branch.
+   *
+   * The panel could acknowledge arrival and abandon a transfer but never record the departure, so the
+   * first leg of a transfer between branches had no operator control at all — the only things an
+   * operator could do were the second step and giving up. The service already guarded this correctly:
+   * it refuses anything not SHIPPED or PARTIALLY_RECEIVED, because recording a departure earlier
+   * would claim goods are in the van while they are still on the shelf.
+   *
+   * Like arrival, this records a fact about the physical world. It does not post inventory; that
+   * stays behind receiveTransfer under `inventory.transfer`, which this permission deliberately does
+   * not carry.
+   */
+  async function recordDeparture(transferId: string) {
+    setBusy(true);
+    try {
+      await req(token, `/branch-transfer/transfers/${transferId}/departure`, { method: 'POST' });
+      await loadContinuity();
+      setMsg(`Keberangkatan transfer ${transferId} dicatat. Barang sudah di jalan; stok tetap belum diposting.`);
+    } catch (err) { setMsg(err instanceof Error ? err.message : 'Gagal mencatat keberangkatan'); }
+    finally { setBusy(false); }
+  }
+
   async function ackArrival(transferId: string, receivedQuantity: number) {
     setBusy(true);
     try {
@@ -329,6 +352,7 @@ export default function BranchSyncView({ token }: { token: string }) {
                   void ackArrival(t.transferId, Number(el?.value ?? 0));
                 }}>Konfirmasi</button>
                 <button type="button" className="secondary" disabled={busy} onClick={() => { setAbandon(t); setAbandonReason(''); }}>Batalkan</button>
+                <button type="button" className="secondary" disabled={busy} onClick={() => { void recordDeparture(t.transferId); }}>Catat keberangkatan</button>
               </div>
             : <span key={`${t.transferId}-none`}>-</span>,
         ])}
