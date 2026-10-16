@@ -247,6 +247,38 @@ test("GitHub runs the harness, and the operator's machine never does", () => {
   assert.match(workflow, /no evidence file; a run that produced nothing is not a pass/, 'an empty run must fail the job');
 });
 
+test('every credential the workflow supplies reaches the scenario that needs it', () => {
+  const workflow = read('.github/workflows/k6-stress.yml');
+  const runner = read('scripts/run-k6-stress.mjs');
+
+  // The scenarios read short names because that is natural in a k6 script; the workflow supplies prefixed
+  // ones. Nothing bridged the two, so every automatic run reached k6 with no token and the harness would
+  // have reported a fast number for a request refused at the auth guard. Four executions of this harness
+  // died on or just before that gap, which is the argument for checking the names against each other
+  // rather than trusting that someone wired them.
+  const supplied = [...workflow.matchAll(/K6_STRESS_(TOKEN|SKU|CUSTOMER_ID|WAREHOUSE_ID)\b/g)].map((m) => m[0]);
+  assert.ok(new Set(supplied).size >= 4, `the workflow must supply all four, found ${[...new Set(supplied)].join(', ')}`);
+
+  for (const name of new Set(supplied)) {
+    assert.ok(
+      runner.includes(`'${name}'`),
+      `the runner must bridge ${name}; a workflow value nothing reads is the exact defect that stopped four runs`,
+    );
+  }
+
+  // The bridge is typed, not a blanket copy: the token is required, so a run without one must stop
+  // before k6 starts rather than measure the auth guard.
+  assert.match(runner, /credential\('TOKEN', 'K6_STRESS_TOKEN'\)/, 'the token must come through the bridge');
+  assert.match(runner, /if \(!token\)/, 'a run with no token must refuse outright');
+  assert.match(runner, /K6_BIN/, 'the local binary override must survive, so the harness can be checked without installing k6');
+
+  // The health check has to come first: spawning k6 against an unreachable API measures the network.
+  assert.ok(
+    runner.indexOf('health check failed') < runner.indexOf('credential('),
+    'reachability must be established before the credential bridge is used, and before k6 spawns',
+  );
+});
+
 test('the catalogue scenario sends the query the till actually sends', () => {
   // `apps/pos/lib/catalog.ts` builds `new URLSearchParams({ limit: String(pageSize) })`, adds `cursor`
   // only when there is one, and `CATALOG_PAGE_SIZE` is 100. There is no `offset` parameter anywhere in
