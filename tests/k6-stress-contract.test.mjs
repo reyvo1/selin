@@ -186,6 +186,9 @@ test("GitHub runs the harness, and the operator's machine never does", () => {
 
   // The automatic run must own its target. A load test pointed at anything that matters is the thing
   // this harness exists to prevent, so the default target is the API the job starts and seeds itself.
+  const example = read('.env.local.example');
+  assert.match(example, /^SEED_MODE=demo$/m, 'the disposable instance runs the demo seed, which fixes the admin address');
+
   assert.match(workflow, /Start a disposable API for an automatic run/, 'an automatic run must bring up its own target');
   assert.match(workflow, /if: github\.event_name != 'workflow_dispatch'/, 'and only the automatic path does that');
   assert.match(workflow, /TARGET="http:\/\/127\.0\.0\.1:4000\/api\/v1"/, 'the automatic target must be the local disposable instance');
@@ -202,7 +205,16 @@ test("GitHub runs the harness, and the operator's machine never does", () => {
   assert.match(workflow, /openssl rand/, 'the load credential must be generated inside the run');
   assert.match(workflow, /SEED_ADMIN_PASSWORD=\$\{LOAD_PASSWORD\}/, 'and must override the seed password, not inherit it');
   assert.match(workflow, /refusing to authenticate with the published demo password/, 'and must refuse the published default outright');
-  assert.match(workflow, /example\.invalid/, 'on an address RFC 2606 reserves, so the credential cannot be phished back');
+  // Replacing the line rather than appending a second definition: which duplicate key survives is a
+  // dotenv-version detail, and a credential should not depend on one.
+  assert.match(workflow, /sed -i '\/\^SEED_ADMIN_PASSWORD=\/d' \.env/, 'the published password must be removed from the file, not just overridden later');
+  assert.doesNotMatch(workflow, /example\.invalid/, 'no address may be assumed; the seed decides it');
+
+  // The admin address is whatever `SEED_MODE` in `.env.local.example` actually produces. It is `demo`,
+  // and in demo mode `prisma/seed.ts` reads `admin@toko360.local` as a literal and ignores
+  // `SEED_ADMIN_EMAIL` entirely — so logging in with any other address is a 401 on every run.
+  assert.match(workflow, /SEED_ADMIN_EMAIL="admin@toko360\.local"/, 'the login address must be the one demo mode seeds');
+  assert.match(workflow, /SEED_MODE=demo/, 'and the mode this relies on must be named, so a change to the example file breaks the gate');
 
   // The field names are the application's, not invented: `POST /auth/login` takes `{email, password}`
   // and answers `accessToken`. A rename here would send an empty Authorization header instead of a

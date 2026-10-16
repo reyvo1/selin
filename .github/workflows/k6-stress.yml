@@ -153,13 +153,20 @@ jobs:
             exit 1
           fi
           cp .env.local.example .env
-          # `example.invalid` is reserved by RFC 2606 and cannot resolve, so a credential minted here
-          # can never be phished back at a real mailbox.
-          SEED_ADMIN_EMAIL="k6-load@example.invalid"
+          # Replace the seeded admin password rather than append a second definition. `db:local:prepare`
+          # loads this file with `dotenv -e ../../.env`, and which of two identical keys survives depends
+          # on the dotenv version, so leaving `Admin123!` in the file and hoping a later line wins is not a
+          # thing to rely on for a credential.
+          sed -i '/^SEED_ADMIN_PASSWORD=/d' .env
+          # `.env.local.example` sets `SEED_MODE=demo`, and in demo mode the seed fixes the admin address
+          # to `admin@toko360.local` regardless of `SEED_ADMIN_EMAIL` — `apps/api/prisma/seed.ts` reads
+          # that address as a literal and only consults the environment in bootstrap mode. The first
+          # execution of this workflow got a 401 because it logged in with an address the seed had never
+          # created. `.local` is reserved by RFC 6762 and cannot resolve, so nothing can be delivered to it.
+          SEED_ADMIN_EMAIL="admin@toko360.local"
           {
             echo ""
             echo "# Written by .github/workflows/k6-stress.yml for this run only."
-            echo "SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL}"
             echo "SEED_ADMIN_PASSWORD=${LOAD_PASSWORD}"
             echo "T360_UAT_ENVIRONMENT=GITHUB_K6_LOAD"
           } >> .env
