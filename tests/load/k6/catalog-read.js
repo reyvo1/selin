@@ -21,10 +21,14 @@ import { Rate, Trend } from 'k6/metrics';
 const BASE = __ENV.BASE_URL || 'http://127.0.0.1:4000/api/v1';
 const TOKEN = __ENV.TOKEN || '';
 const PAGES = Number(__ENV.PAGES || '3');
+// Read out of apps/pos/lib/catalog.ts rather than chosen here: the page size is the application's
+// decision, and a load test that asks for a different one measures a query the till never sends.
+const CATALOG_PAGE_SIZE = 100;
 
 // Trend so a slow endpoint is named in the report rather than hidden inside one aggregate p95.
 const catalogLatency = new Trend('toko360_catalog_latency', true);
 const listLatency = new Trend('toko360_list_latency', true);
+const searchLatency = new Trend('toko360_search_latency', true);
 const unauthorized = new Rate('toko360_unauthorized');
 
 // Deliberately small. The first version of this file defaulted to 10 VUs over 75 seconds and was run
@@ -51,6 +55,7 @@ export const options = {
     http_req_duration: ['p(95)<800', 'p(99)<2000'],
     'toko360_unauthorized': ['rate==0'],
     'toko360_catalog_latency': ['p(95)<600'],
+    'toko360_search_latency': ['p(95)<900'],
     'toko360_list_latency': ['p(95)<600'],
   },
 };
@@ -83,35 +88,55 @@ export function setup() {
 }
 
 export default function () {
-  // 1. The POS catalogue. This is the endpoint a cashier hits on every scan-driven page turn, and it
-  //    is the one AGENTS.md obliges to paginate.
-  const catalog = get('/products', { limit: 50, cursor: `__CURSOR_${__VU}_${__ITER}` });
+  // 1. The POS catalogue, in the EXACT shape the till sends it.
+  //
+  //    `apps/pos/lib/catalog.ts` builds `new URLSearchParams({ limit: String(pageSize) })` and adds
+  //    `cursor` only when there is one, with `CATALOG_PAGE_SIZE = 100`. There is no `offset`
+  //    parameter anywhere in the POS client. An earlier version of this scenario used `limit=50` and
+  //    paged with `offset`, which measured a query shape the application never issues — a load number
+  //    for a request no cashier ever makes.
+  const catalog = get('/products', { limit: CATALOG_PAGE_SIZE });
   const catalogOk = classify(catalog) === 200;
   catalogLatency.add(catalog.timings.duration);
   check(catalog, { 'catalog returns 200': () => catalogOk });
 
+  let nextCursor = null;
   if (catalogOk) {
     const items = catalog.json('items') || [];
-    check(catalog, { 'catalog is paginated, not unbounded': () => Array.isArray(items) && items.length <= 50 });
+    // Bounded by the page size the client asks for. This is the assertion AGENTS.md's pagination
+    // obligation actually reduces to, and it is the one that fails when the limit stops working.
+    check(catalog, { 'catalog honours the requested page size': () => Array.isArray(items) && items.length <= CATALOG_PAGE_SIZE });
     check(catalog, {
       'catalog rows carry an id the next page can be built from': () => items.length === 0 || typeof items[0].id === 'string',
     });
+    nextCursor = (catalog.json('pageInfo') || {}).nextCursor || null;
   }
 
-  // 2. Walking pages. A cursor that is ignored returns page 1 forever and looks perfectly healthy in
-  //    a smoke test, so the walk is asserted rather than assumed.
-  for (let page = 0; page < PAGES; page += 1) {
-    const listed = get('/products', { limit: 20, offset: page * 20 });
+  // 2. Walk the cursor the way the till does. The client takes `pageInfo.nextCursor` and feeds it
+  //    back as `cursor`. A server that ignored the cursor would return page 1 forever and look
+  //    perfectly healthy, so the walk asserts that the rows actually change.
+  const firstIds = catalogOk ? (catalog.json('items') || []).slice(0, 3).map((row) => row.id).join(',') : '';
+  for (let page = 0; page < PAGES && nextCursor; page += 1) {
+    const listed = get('/products', { limit: CATALOG_PAGE_SIZE, cursor: nextCursor });
     listLatency.add(listed.timings.duration);
-    const ok = classify(listed) === 200;
-    check(listed, { 'product page returns 200': () => ok });
-    if (!ok) break;
+    if (classify(listed) !== 200) { check(listed, { 'product page returns 200': () => false }); break; }
     const rows = listed.json('items') || [];
     if (rows.length === 0) break;
-    check(listed, { 'a page past the end is empty rather than repeated': () => page === 0 || rows[0].id !== '__SAME_ROW__' });
+    const theseIds = rows.slice(0, 3).map((row) => row.id).join(',');
+    check(listed, {
+      'a cursor walk returns different rows, so the cursor is not ignored': () => page > 0 || theseIds !== firstIds,
+    });
+    nextCursor = (listed.json('pageInfo') || {}).nextCursor || null;
   }
 
-  // 3. Aggregation-backed reads. These are where a missing index hurts most and where a dashboard
+  // 3. The search path, which is the one that leaves the client: `searchCatalog` sends `search` to
+  //    the server because a client-side filter can only search what the device already downloaded.
+  //    Under load that is a different query, so it is exercised rather than assumed.
+  const search = get('/products', { search: 'a', limit: CATALOG_PAGE_SIZE });
+  searchLatency.add(search.timings.duration);
+  check(search, { 'server-side search is not a server error': () => classify(search) !== 500 });
+
+  // 4. Aggregation-backed reads. These are where a missing index hurts most and where a dashboard
   //    quietly times out rather than failing.
   for (const path of ['/reports/dashboard', '/reports/inventory-valuation', '/reports/cash-flow', '/reports/trial-balance']) {
     const report = get(path);

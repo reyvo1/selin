@@ -121,31 +121,183 @@ test('a heavy profile cannot be aimed at a workstation by accident', () => {
   }
 });
 
-test('the heavy profile runs on a GitHub runner, never on a push or a pull request', () => {
+test('R6 has a load scenario, because its probe cannot be one', () => {
+  // The operator named this gap and it is real, and it is WIDER than R6. The release chain has one
+  // load gate — `scripts/load-test.mjs --url /api/v1/health` — so the only endpoint proven to survive
+  // load anywhere in this repository is the liveness probe. `r6ScaleAi` is a functional probe that
+  // calls each route once, in sequence: correct, but silent about speed.
+  const r6 = read('tests/load/k6/r6-scale.js');
+
+  // These are R6's actual routes, read out of scripts/ci-r6-scale-ai-probe.mjs rather than guessed.
+  // A guessed path 404s, and a 404 satisfies a `< 500` check — the same silent-gap shape this
+  // repository keeps closing findings about.
+  for (const route of ['/analytics/daily-summaries/materialize', '/analytics/daily-summaries', '/retention/policies', '/retention/archive-runs', '/operator-assistant/query', '/marketplace-orders/import']) {
+    assert.ok(r6.includes(route), `R6 scenario must exercise ${route}, the route its functional probe calls`);
+  }
+
+  // A latency budget per family, because one aggregate p95 across an aggregation and a warehouse list
+  // hides whichever one is slow.
+  for (const metric of ['toko360_r6_aggregation_latency', 'toko360_r6_retention_latency', 'toko360_r6_assistant_latency', 'toko360_r6_import_latency']) {
+    assert.ok(r6.includes(`new Trend('${metric}'`), `${metric} needs its own trend`);
+    assert.match(r6, new RegExp(`'${metric}': \\['p\\(95\\)<`), `${metric} needs a threshold`);
+  }
+
+  // A business refusal is not a transport failure. Counting 409 and 422 as errors forces the
+  // thresholds to be loosened until a wrong answer looks right.
+  assert.ok(r6.includes('toko360_r6_business_rejections'), 'business refusals must be classified apart from errors');
+  assert.match(r6, /http_req_failed: \['rate<0\.05'\]/, 'and must not be counted as transport failures');
+
+  // It performs bounded writes, so it must be idempotent per iteration and must say so.
+  assert.match(r6, /idempotencyKey: key/, 'each materialize carries its own key');
+  assert.ok(r6.includes('Deliberately bounded') || r6.includes('deliberately bounded'), 'the write volume must be called out as bounded, or a run looks like a throughput claim');
+
+  // Reachable by name, and not as the default: the default stays the read scenario.
+  assert.match(packageJson.scripts['test:load:k6:r6'], /--scenario r6/, 'the R6 scenario must be runnable by name');
+  assert.doesNotMatch(packageJson.scripts['test:load:k6'], /--scenario r6/, 'and must not become the default');
+  assert.match(runner, /r6: 'r6-scale\.js'/, 'and the runner must map the name to its file');
+});
+
+test('an unknown scenario fails loudly instead of falling back to the read one', () => {
+  // A scenario name built as a filename would silently run the read scenario, and a stress run would
+  // report a number for a scenario nobody asked for.
+  assert.match(runner, /unknown scenario/, 'the runner must reject a name it does not know');
+  assert.ok(!runner.includes("scenario === 'write' ? 'checkout-write.js' : 'catalog-read.js'"),
+    'the fallback shape must be gone');
+});
+
+test("GitHub runs the harness, and the operator's machine never does", () => {
   const workflow = read('.github/workflows/k6-stress.yml');
-  // Dispatch-only is the whole mechanism. A `push` or `pull_request` trigger would let an ordinary
-  // commit start a load run on whatever machine the runner lands on.
-  const triggerBlock = workflow.slice(0, workflow.indexOf('permissions:'));
-  assert.ok(!/^\s{2}push:/m.test(triggerBlock), 'the stress workflow must not trigger on push');
-  assert.ok(!/^\s{2}pull_request:/m.test(triggerBlock), 'the stress workflow must not trigger on pull_request');
-  assert.match(triggerBlock, /workflow_dispatch:/, 'it must be manually dispatched');
+  const trigger = workflow.slice(0, workflow.indexOf('permissions:'));
 
-  // The runner must refuse a production-shaped target on CI too, not only locally.
-  assert.match(workflow, /production|prod/, 'CI must refuse a production-shaped host');
-  assert.match(workflow, /K6_STRESS_ALLOWED_HOST/, 'and the approved host must be an explicit repository variable, not any host');
+  // This is the correction the operator asked for. Dispatch-only meant the harness had never run at
+  // all, which is the same failure as the never-run ci.yml job that carried a 92-test failure. The
+  // automatic profile runs on GitHub's disposable runner, so it costs the operator nothing.
+  assert.match(trigger, /^\s{2}pull_request:/m, 'the default profile must run on pull requests');
+  assert.match(trigger, /^\s{2}push:/m, 'and on push to the mainline');
+  assert.match(trigger, /workflow_dispatch:/, 'the heavy profile stays available by hand');
+
+  // An automatic run has no `inputs`, so every step must resolve the profile from the resolve step
+  // rather than read `inputs.*` directly — otherwise the scenario steps compare against an empty string
+  // and skip themselves, and the workflow passes having measured nothing.
+  assert.match(workflow, /id: profile/, 'there must be a step that resolves the profile');
+  assert.match(workflow, /\$\{\{ github\.event_name \}\}" = "workflow_dispatch"/, 'which distinguishes a manual run from an automatic one');
+  assert.match(workflow, /SCENARIO="read"[\s\S]*VUS="\d+"/, 'and supplies a default profile for the automatic path');
+  assert.ok(!/if: inputs\.scenario/.test(workflow), 'no step may branch on inputs.scenario directly');
+
+  // The automatic run must own its target. A load test pointed at anything that matters is the thing
+  // this harness exists to prevent, so the default target is the API the job starts and seeds itself.
+  const example = read('.env.local.example');
+  assert.match(example, /^SEED_MODE=demo$/m, 'the disposable instance runs the demo seed, which fixes the admin address');
+
+  assert.match(workflow, /Start a disposable API for an automatic run/, 'an automatic run must bring up its own target');
+  assert.match(workflow, /if: github\.event_name != 'workflow_dispatch'/, 'and only the automatic path does that');
+  assert.match(workflow, /TARGET="http:\/\/127\.0\.0\.1:4000\/api\/v1"/, 'the automatic target must be the local disposable instance');
+
+  // A load run without a session measures the auth guard, not the query. Minting one is therefore part
+  // of the automatic path.
+  assert.match(workflow, /Mint a load-test session for an automatic run/, 'an automatic run must have a session');
+  assert.match(workflow, /K6_STRESS_TOKEN=\$\{TOKEN\}/, 'the minted token must reach the run');
+
+  // The credential is generated inside the run, for an instance the job owns and destroys. An earlier
+  // version asked the operator to configure a secret, which made every automatic run fail until it did;
+  // a version before that would have fallen back to the published demo password, which is worse. Both
+  // properties are kept: generated per run, and never the published default.
+  assert.match(workflow, /openssl rand/, 'the load credential must be generated inside the run');
+  assert.match(workflow, /SEED_ADMIN_PASSWORD=\$\{LOAD_PASSWORD\}/, 'and must override the seed password, not inherit it');
+  assert.match(workflow, /refusing to authenticate with the published demo password/, 'and must refuse the published default outright');
+  // Replacing the line rather than appending a second definition: which duplicate key survives is a
+  // dotenv-version detail, and a credential should not depend on one.
+  assert.match(workflow, /sed -i '\/\^SEED_ADMIN_PASSWORD=\/d' \.env/, 'the published password must be removed from the file, not just overridden later');
+  assert.doesNotMatch(workflow, /example\.invalid/, 'no address may be assumed; the seed decides it');
+
+  // The admin address is whatever `SEED_MODE` in `.env.local.example` actually produces. It is `demo`,
+  // and in demo mode `prisma/seed.ts` reads `admin@toko360.local` as a literal and ignores
+  // `SEED_ADMIN_EMAIL` entirely — so logging in with any other address is a 401 on every run.
+  assert.match(workflow, /SEED_ADMIN_EMAIL="admin@toko360\.local"/, 'the login address must be the one demo mode seeds');
+  assert.match(workflow, /SEED_MODE=demo/, 'and the mode this relies on must be named, so a change to the example file breaks the gate');
+
+  // The field names are the application's, not invented: `POST /auth/login` takes `{email, password}`
+  // and answers `accessToken`. A rename here would send an empty Authorization header instead of a
+  // legible 401, and the run would report a suspiciously fast number.
+  assert.match(workflow, /POST "\$\{T360_API_URL\}\/auth\/login"/, 'the login route must be the real one');
+  assert.match(workflow, /j\.accessToken/, 'and the token field must be the real one');
+
+  // Production refusal holds on both paths, and the approved-host rule applies to manual runs only,
+  // since an automatic run owns its target and has no approved host to match.
   const guard = workflow.slice(workflow.indexOf('Refuse a production-shaped target'), workflow.indexOf('name: Read stress'));
-  assert.match(guard, /set -euo pipefail/, 'the guard step must run with strict shell options, or a failure does not stop it');
-  assert.ok((guard.match(/exit 1/g) ?? []).length >= 3, 'every refusal branch must exit non-zero, not only log');
-  assert.match(guard, /::error::/, 'and must mark the job failed where a reader will see it');
+  assert.match(guard, /set -euo pipefail/, 'the guard must run with strict shell options');
+  assert.ok((guard.match(/exit 1/g) ?? []).length >= 2, 'every refusal branch must exit non-zero');
+  assert.match(guard, /K6_STRESS_ALLOWED_HOST/, 'a manual run must be pinned to an approved host');
+  // The pin applies to the manual path only, and the automatic path asserts the opposite instead: that it
+  // targets the instance it started. The second execution stopped here, on the approved-host variable
+  // being unset, because the pin had been left on both paths.
+  assert.match(guard, /github\.event_name \}\}\" != \"workflow_dispatch/, 'the approved-host pin must apply to the manual path only');
+  assert.match(guard, /\$\{HOST\}" != "127\.0\.0\.1/, 'and an automatic run must prove it targets the instance it started');
+  assert.ok(
+    guard.indexOf('K6_STRESS_ALLOWED_HOST') > guard.indexOf('!= "workflow_dispatch"'),
+    'the approved-host check must come after the automatic path returns',
+  );
 
-  // Two concurrent load runs against one target measure each other's load.
-  assert.match(workflow, /^concurrency:/m, 'concurrency must be pinned');
+  // A superseded pull-request run measures source nobody will ship.
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/,
+    'a new push must supersede the previous PR run, since a manual run against a shared target must not cancel');
 
-  // A run that produced nothing is not a pass, and the evidence must reach the run summary so a
-  // reviewer reads the numbers rather than a green tick.
   assert.match(workflow, /upload-artifact/, 'evidence must be published');
-  assert.match(workflow, /GITHUB_STEP_SUMMARY/, 'and shown in the job summary');
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/, 'and the profile must be shown in the summary, so a number is never read without what it was taken under');
   assert.match(workflow, /no evidence file; a run that produced nothing is not a pass/, 'an empty run must fail the job');
+});
+
+test('every credential the workflow supplies reaches the scenario that needs it', () => {
+  const workflow = read('.github/workflows/k6-stress.yml');
+  const runner = read('scripts/run-k6-stress.mjs');
+
+  // The scenarios read short names because that is natural in a k6 script; the workflow supplies prefixed
+  // ones. Nothing bridged the two, so every automatic run reached k6 with no token and the harness would
+  // have reported a fast number for a request refused at the auth guard. Four executions of this harness
+  // died on or just before that gap, which is the argument for checking the names against each other
+  // rather than trusting that someone wired them.
+  const supplied = [...workflow.matchAll(/K6_STRESS_(TOKEN|SKU|CUSTOMER_ID|WAREHOUSE_ID)\b/g)].map((m) => m[0]);
+  assert.ok(new Set(supplied).size >= 4, `the workflow must supply all four, found ${[...new Set(supplied)].join(', ')}`);
+
+  for (const name of new Set(supplied)) {
+    assert.ok(
+      runner.includes(`'${name}'`),
+      `the runner must bridge ${name}; a workflow value nothing reads is the exact defect that stopped four runs`,
+    );
+  }
+
+  // The bridge is typed, not a blanket copy: the token is required, so a run without one must stop
+  // before k6 starts rather than measure the auth guard.
+  assert.match(runner, /credential\('TOKEN', 'K6_STRESS_TOKEN'\)/, 'the token must come through the bridge');
+  assert.match(runner, /if \(!token\)/, 'a run with no token must refuse outright');
+  assert.match(runner, /K6_BIN/, 'the local binary override must survive, so the harness can be checked without installing k6');
+
+  // The health check has to come first: spawning k6 against an unreachable API measures the network.
+  assert.ok(
+    runner.indexOf('health check failed') < runner.indexOf('credential('),
+    'reachability must be established before the credential bridge is used, and before k6 spawns',
+  );
+});
+
+test('the catalogue scenario sends the query the till actually sends', () => {
+  // `apps/pos/lib/catalog.ts` builds `new URLSearchParams({ limit: String(pageSize) })`, adds `cursor`
+  // only when there is one, and `CATALOG_PAGE_SIZE` is 100. There is no `offset` parameter anywhere in
+  // the POS client. An earlier version of this scenario used `limit=50` and paged with `offset`, so it
+  // measured a query shape the application never issues.
+  const catalog = read('tests/load/k6/catalog-read.js');
+  assert.match(catalog, /const CATALOG_PAGE_SIZE = 100;/, 'the page size must come from the application, not be chosen here');
+  assert.match(catalog, /limit: CATALOG_PAGE_SIZE/, 'and must be used for the catalogue request');
+  assert.doesNotMatch(catalog, /offset:/, 'the POS client never sends offset; paging this way measures a query no cashier makes');
+
+  // The walk has to follow `pageInfo.nextCursor`, because a server that ignored the cursor would
+  // return page 1 forever and look perfectly healthy.
+  assert.match(catalog, /pageInfo'\) \|\| \{\}\)\.nextCursor/, 'the walk must follow pageInfo.nextCursor');
+  assert.match(catalog, /cursor is not ignored/, 'and must assert the rows actually change');
+
+  // The search path leaves the client: `searchCatalog` sends `search` to the server because a
+  // client-side filter can only search what the device downloaded. That is a different query.
+  assert.match(catalog, /search: 'a'/, 'the server-side search path must be exercised');
+  assert.ok(catalog.includes("new Trend('toko360_search_latency'"), 'with its own budget');
 });
 
 test('the scripts are reachable and named', () => {
@@ -153,7 +305,8 @@ test('the scripts are reachable and named', () => {
   // filename in package.json is what the runner actually promises, and keeps the npm surface short.
   assert.match(packageJson.scripts['test:load:k6'] || '', /--scenario read/, 'the read scenario must be the default');
   assert.match(packageJson.scripts['test:load:k6:write'] || '', /--scenario write/, 'the write scenario must be reachable, even though it is not the default');
-  assert.match(runner, /scenario === 'write' \? 'checkout-write\.js' : 'catalog-read\.js'/, 'and the runner must map both scenario names to their files');
+  assert.match(runner, /const SCENARIOS = \{[\s\S]*?read: 'catalog-read\.js'[\s\S]*?write: 'checkout-write\.js'/,
+    'the runner must map every scenario name to its file explicitly');
   // The default must be read. A stress default that writes is the whole failure this file exists to prevent.
   assert.doesNotMatch(packageJson.scripts['test:load:k6'], /--allow-writes/, 'the default entry point must not opt into writes');
 });

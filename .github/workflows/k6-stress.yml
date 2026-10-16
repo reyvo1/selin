@@ -1,13 +1,25 @@
 name: k6 Stress
 
-# Deliberately dispatch-only. There is no `push` and no `pull_request` trigger.
+# THE LOAD RUNS HERE, ON A DISPOSABLE RUNNER, NEVER ON A LAPTOP.
 #
-# A load run is destructive against the machine it runs on. The first time this harness was run it
-# pointed at a laptop with 10 virtual users over 75 seconds and froze it — not because 10 users is a
-# lot, but because a laptop is also running the editor, the browser and the operator's work. So the
-# heavy profile lives here, on a disposable runner, and has to be asked for by name. Nothing in an
-# ordinary push can start it.
+# The first time this harness was run it pointed at the operator's machine: 10 virtual users for 75
+# seconds, against a development-mode API, while that machine was also running the editor, the browser
+# and the agent. It froze. Not because 10 users is a lot, but because a workstation is not a load
+# target and a number taken there describes that workstation.
+#
+# So the split is by profile, not by trigger:
+#
+#   - The DEFAULT profile (small) runs on every pull request and on push to main. It runs on GitHub's
+#     disposable runner, so it costs the operator nothing, and it is what makes the harness an actual
+#     gate rather than a script nobody has ever run. A harness that only exists behind a manual
+#     dispatch has never run, and an unrun gate is not a gate.
+#   - The HEAVY profile (capacity, per the operator's decision) stays dispatch-only and is asked for by
+#     name.
 on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
   workflow_dispatch:
     inputs:
       scenario:
@@ -17,6 +29,7 @@ on:
         type: choice
         options:
           - read
+          - r6
           - write
       vus:
         description: 'Concurrent virtual users (write scenario defaults to 3)'
@@ -39,9 +52,10 @@ permissions:
   contents: read
 
 concurrency:
-  # Two load runs against one target measure each other's load.
+  # Two load runs against one target measure each other's load. On a pull request, superseding is
+  # right: a new push makes the previous run's numbers a measurement of source nobody will ship.
   group: k6-stress-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   stress:
@@ -53,6 +67,57 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      # On a pull request or a push there are no `inputs` at all, so a step reading `inputs.scenario`
+      # compares against the empty string and skips itself — a workflow that silently does nothing on
+      # the events it was added for. Resolve the effective profile once, here, so no later step has to
+      # think about it and an automatic run cannot quietly no-op.
+      - name: Resolve the profile for this event
+        id: profile
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SCENARIO="${{ inputs.scenario }}"
+            VUS="${{ inputs.vus }}"
+            RAMP="${{ inputs.ramp }}"
+            DURATION="${{ inputs.duration }}"
+            HEAVY="--allow-heavy"
+            TARGET="${{ inputs.base_url }}"
+          else
+            # The default profile. Small enough to be unremarkable on a shared runner, large enough
+            # that a missing index on the catalogue or on the aggregation shows up as p95 rather than as
+            # one lucky request.
+            SCENARIO="read"
+            VUS="5"
+            RAMP="20s"
+            DURATION="30s"
+            HEAVY=""
+            # On an automatic run the target is the API this job starts and seeds itself. That is what
+            # makes an automatic run possible at all without pointing a load test at anything that
+            # matters — a self-contained disposable target is the only safe default here.
+            TARGET="http://127.0.0.1:4000/api/v1"
+          fi
+          {
+            echo "scenario=${SCENARIO}"
+            echo "vus=${VUS}"
+            echo "ramp=${RAMP}"
+            echo "duration=${DURATION}"
+            echo "heavy=${HEAVY}"
+            echo "target=${TARGET}"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### k6 stress"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| trigger | ${{ github.event_name }} |"
+            echo "| scenario | ${SCENARIO} |"
+            echo "| virtual users | ${VUS} |"
+            echo "| ramp | ${RAMP} |"
+            echo "| hold | ${DURATION} |"
+            echo "| heavy override | ${HEAVY:-no} |"
+            echo "| target | ${TARGET} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # k6 from the official binary. No npm wrapper: a load generator should not be a dependency of
       # the thing it measures, and a version bump should be a deliberate line in this file.
@@ -69,18 +134,114 @@ jobs:
 
       - run: npm ci
 
-      # No database is prepared here. This run measures an existing deployment; it never builds one.
-      # Preparing a schema would mean measuring a freshly-pushed empty database, which tells you
-      # nothing about production behaviour and risks the target in the other direction.
-
-      - name: Refuse a production-shaped target before anything connects
+      # An automatic run has to own its target, so it brings one up: SQLite prepared and seeded, then
+      # the API started on 127.0.0.1:4000. This is a disposable instance created by this job, which is
+      # the only reason pointing a load test at it is safe. A dispatch run targets a deployment the
+      # operator named, and skips all of this.
+      - name: Start a disposable API for an automatic run
+        if: github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
-          HOST=$(node -e "console.log(new URL(process.argv[1]).hostname)" "${{ inputs.base_url }}")
+          # The credential for this instance is generated here, per run, and never leaves the runner.
+          # `.env.local.example` ships `SEED_ADMIN_PASSWORD=Admin123!` for local demo use; that is a
+          # published default, so it is overwritten rather than inherited. `ci-prepare-github-simulation`
+          # requires at least 14 characters, so a shorter random string would fail the seed in a way
+          # that reads as a harness bug.
+          LOAD_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)"
+          if [ "${#LOAD_PASSWORD}" -lt 14 ]; then
+            echo "::error::generated load password is too short for the seed"
+            exit 1
+          fi
+          cp .env.local.example .env
+          # Replace the seeded admin password rather than append a second definition. `db:local:prepare`
+          # loads this file with `dotenv -e ../../.env`, and which of two identical keys survives depends
+          # on the dotenv version, so leaving `Admin123!` in the file and hoping a later line wins is not a
+          # thing to rely on for a credential.
+          sed -i '/^SEED_ADMIN_PASSWORD=/d' .env
+          # `.env.local.example` sets `SEED_MODE=demo`, and in demo mode the seed fixes the admin address
+          # to `admin@toko360.local` regardless of `SEED_ADMIN_EMAIL` — `apps/api/prisma/seed.ts` reads
+          # that address as a literal and only consults the environment in bootstrap mode. The first
+          # execution of this workflow got a 401 because it logged in with an address the seed had never
+          # created. `.local` is reserved by RFC 6762 and cannot resolve, so nothing can be delivered to it.
+          SEED_ADMIN_EMAIL="admin@toko360.local"
+          {
+            echo ""
+            echo "# Written by .github/workflows/k6-stress.yml for this run only."
+            echo "SEED_ADMIN_PASSWORD=${LOAD_PASSWORD}"
+            echo "T360_UAT_ENVIRONMENT=GITHUB_K6_LOAD"
+          } >> .env
+          # The same values reach the mint step through the environment rather than through a second
+          # copy of the password in this file.
+          echo "SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL}" >> "$GITHUB_ENV"
+          echo "SEED_ADMIN_PASSWORD=${LOAD_PASSWORD}" >> "$GITHUB_ENV"
+          npm run db:local:prepare
+          npm run build -w @toko360/worker
+          npm run dev -w @toko360/api &
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4000/api/v1/health >/dev/null 2>&1; then
+              echo "disposable API ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::the disposable API never became healthy"
+          exit 1
+
+      # A load run needs a session, and an anonymous run is refused at the auth guard before the query
+      # ever runs — which measures the guard and then reports a fast number for a request that was
+      # never served. So mint a real session against the instance this job owns.
+      #
+      # `apps/api/src/auth/auth.controller.ts` exposes `POST /auth/login` taking `{email, password}`,
+      # and `auth.service.ts` returns `accessToken`. The runner expects that field name, so renaming it
+      # here would silently produce an empty Authorization header rather than an obvious 401.
+      - name: Mint a load-test session for an automatic run
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          T360_API_URL: http://127.0.0.1:4000/api/v1
+        run: |
+          set -euo pipefail
+          if [ -z "${SEED_ADMIN_EMAIL:-}" ] || [ -z "${SEED_ADMIN_PASSWORD:-}" ]; then
+            echo "::error::no load credential reached this step"
+            exit 1
+          fi
+          if [ "${SEED_ADMIN_PASSWORD}" = "Admin123!" ]; then
+            echo "::error::refusing to authenticate with the published demo password"
+            exit 1
+          fi
+          TOKEN=$(curl -fsS -X POST "${T360_API_URL}/auth/login" \
+            -H 'content-type: application/json' \
+            -d "{\"email\":\"${SEED_ADMIN_EMAIL}\",\"password\":\"${SEED_ADMIN_PASSWORD}\"}" \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);process.stdout.write(j.accessToken||'')})")
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::could not mint a load-test session against the disposable instance"
+            exit 1
+          fi
+          echo "K6_STRESS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
+          echo "load session minted"
+
+      - name: Refuse a production-shaped target before anything connects
+        env:
+          TARGET: ${{ steps.profile.outputs.target }}
+        run: |
+          set -euo pipefail
+          HOST=$(node -e "console.log(new URL(process.argv[1]).hostname)" "$TARGET")
           echo "target host: ${HOST}"
           if printf '%s' "${HOST}" | grep -Eq '(^|[.-])(prod|production|live)([.-]|$)|(^|\.)toko360\.com$'; then
             echo "::error::refusing to load test ${HOST}; it looks like production"
             exit 1
+          fi
+          # The production-shaped refusal above applies to both paths. The approved-host pin applies only
+          # to a dispatch run, because that is the only path that targets something this repository does
+          # not own. An automatic run points at the loopback instance this job started, which nobody needs
+          # to authorise; requiring a repository variable for it made every automatic run fail before k6
+          # ran, which is how the second execution of this workflow stopped with the variable unset.
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            if [ "${HOST}" != "127.0.0.1" ]; then
+              echo "::error::an automatic run must target the instance it started (127.0.0.1), not ${HOST}"
+              exit 1
+            fi
+            echo "automatic run: target is this job's own instance on the loopback interface"
+            exit 0
           fi
           if [ -z "${{ vars.K6_STRESS_ALLOWED_HOST }}" ]; then
             echo "::error::repository variable K6_STRESS_ALLOWED_HOST is not set."
@@ -94,9 +255,14 @@ jobs:
           fi
 
       - name: Read stress
-        if: inputs.scenario == 'read'
+        if: steps.profile.outputs.scenario == 'read'
         env:
-          K6_STRESS_TOKEN: ${{ secrets.K6_STRESS_READ_TOKEN }}
+          TARGET: ${{ steps.profile.outputs.target }}
+          VUS: ${{ steps.profile.outputs.vus }}
+          RAMP: ${{ steps.profile.outputs.ramp }}
+          DURATION: ${{ steps.profile.outputs.duration }}
+          HEAVY: ${{ steps.profile.outputs.heavy }}
+          K6_STRESS_TOKEN: ${{ env.K6_STRESS_TOKEN || secrets.K6_STRESS_READ_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${K6_STRESS_TOKEN}" ]; then
@@ -105,19 +271,50 @@ jobs:
             exit 1
           fi
           npm run test:load:k6 -- \
-            --base-url "${{ inputs.base_url }}" \
-            --allow-nonproduction --allow-heavy \
-            --vus "${{ inputs.vus }}" \
-            --ramp "${{ inputs.ramp }}" \
-            --duration "${{ inputs.duration }}"
+            --base-url "$TARGET" \
+            --allow-nonproduction $HEAVY \
+            --vus "$VUS" \
+            --ramp "$RAMP" \
+            --duration "$DURATION"
+
+      # R6 is the surface the release chain never loaded: its functional probe calls each route once,
+      # in sequence, and the one load gate in the chain points at /api/v1/health. This step is where
+      # that gets covered. It performs bounded writes (materialize, marketplace import), each keyed per
+      # iteration, so it is not a write opt-in scenario and does not need one.
+      - name: R6 scale stress
+        if: steps.profile.outputs.scenario == 'r6'
+        env:
+          TARGET: ${{ steps.profile.outputs.target }}
+          VUS: ${{ steps.profile.outputs.vus }}
+          RAMP: ${{ steps.profile.outputs.ramp }}
+          DURATION: ${{ steps.profile.outputs.duration }}
+          HEAVY: ${{ steps.profile.outputs.heavy }}
+          K6_STRESS_TOKEN: ${{ env.K6_STRESS_TOKEN || secrets.K6_STRESS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${K6_STRESS_TOKEN}" ]; then
+            echo "::error::secret K6_STRESS_READ_TOKEN is not configured."
+            exit 1
+          fi
+          npm run test:load:k6:r6 -- \
+            --base-url "$TARGET" \
+            --allow-nonproduction $HEAVY \
+            --vus "$VUS" \
+            --ramp "$RAMP" \
+            --duration "$DURATION"
 
       # The write scenario is a SEPARATE job so that choosing it is an explicit act in the Actions UI
       # rather than a consequence of the read one. It creates real sales, journals and stock movements
       # on whatever host is approved, and it needs its own credential because a read role must not be
       # able to write.
       - name: Write stress
-        if: inputs.scenario == 'write'
+        if: steps.profile.outputs.scenario == 'write'
         env:
+          TARGET: ${{ steps.profile.outputs.target }}
+          VUS: ${{ steps.profile.outputs.vus }}
+          RAMP: ${{ steps.profile.outputs.ramp }}
+          DURATION: ${{ steps.profile.outputs.duration }}
+          HEAVY: ${{ steps.profile.outputs.heavy }}
           K6_STRESS_TOKEN: ${{ secrets.K6_STRESS_WRITE_TOKEN }}
           K6_STRESS_SKU: ${{ vars.K6_STRESS_SKU }}
           K6_STRESS_CUSTOMER_ID: ${{ vars.K6_STRESS_CUSTOMER_ID }}
@@ -131,13 +328,13 @@ jobs:
               exit 1
             fi
           done
-          echo "::warning::this creates real sales, journals and stock movements on ${{ inputs.base_url }}"
+          echo "::warning::this creates real sales, journals and stock movements on ${TARGET}"
           npm run test:load:k6:write -- \
-            --base-url "${{ inputs.base_url }}" \
-            --allow-nonproduction --allow-heavy --allow-writes \
-            --vus "${{ inputs.vus }}" \
-            --ramp "${{ inputs.ramp }}" \
-            --duration "${{ inputs.duration }}"
+            --base-url "$TARGET" \
+            --allow-nonproduction $HEAVY --allow-writes \
+            --vus "$VUS" \
+            --ramp "$RAMP" \
+            --duration "$DURATION"
 
       - name: Publish stress evidence
         if: always()

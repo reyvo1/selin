@@ -29,7 +29,16 @@ const flag = (name) => process.argv.includes(`--${name}`);
 
 const scenario = argument('scenario', 'read');
 const baseUrl = argument('base-url', 'http://127.0.0.1:4000/api/v1');
-const scriptPath = path.join(ROOT, 'tests/load/k6', scenario === 'write' ? 'checkout-write.js' : 'catalog-read.js');
+const SCENARIOS = {
+  read: 'catalog-read.js',
+  r6: 'r6-scale.js',
+  write: 'checkout-write.js',
+};
+const scenarioFile = SCENARIOS[scenario];
+if (!scenarioFile) {
+  fail(`unknown scenario '${scenario}'. Known: ${Object.keys(SCENARIOS).join(', ')}`);
+}
+const scriptPath = path.join(ROOT, 'tests/load/k6', scenarioFile);
 const outputPath = path.join(ROOT, 'handoff/quality', `k6-${scenario}-latest.json`);
 const expectedSource = argument('expected-source-fingerprint', '');
 const expectedDbHost = argument('expected-db-host', '');
@@ -142,6 +151,30 @@ if (health && health.ok) {
   fail(`health check failed against ${baseUrl}. A stress run against an unreachable API measures the network, not the application.`);
 }
 
+// The scenarios read short names (`TOKEN`, `SKU`) because that is what a k6 script naturally uses, but the
+// workflow supplies prefixed ones (`K6_STRESS_TOKEN`, `K6_STRESS_SKU`). Nothing bridged the two, so every
+// automatic run reached k6 with no token at all and reported a fast, meaningless number: the first four
+// executions of this harness all died here or just before it. `K6_STRESS_TOKEN` is also the better name to
+// configure, because a bare `TOKEN` in a CI environment is one unrelated step away from being set.
+//
+// Both spellings are accepted so a local run and a CI run behave the same. Every name is spelled out
+// rather than built with a template, so the contract test can grep the exact string the workflow
+// supplies — a workflow value nothing reads is the defect that stopped four runs.
+const credential = (short, prefixed) => process.env[prefixed] || process.env[short];
+const token = credential('TOKEN', 'K6_STRESS_TOKEN');
+const sku = credential('SKU', 'K6_STRESS_SKU');
+const customerId = credential('CUSTOMER_ID', 'K6_STRESS_CUSTOMER_ID');
+const warehouseId = credential('WAREHOUSE_ID', 'K6_STRESS_WAREHOUSE_ID');
+
+if (!token) {
+  console.error(
+    'No load-test credential reached k6. Set K6_STRESS_TOKEN (or TOKEN for a local run).\n' +
+      'An unauthenticated run is refused at the auth guard before the query runs, which measures the\n' +
+      'guard rather than the application.',
+  );
+  process.exit(1);
+}
+
 const env = {
   ...process.env,
   BASE_URL: baseUrl,
@@ -149,11 +182,14 @@ const env = {
   VUS: String(requestedVus),
   RAMP: rampSeconds,
   DURATION: holdSeconds,
-  ...(process.env.TOKEN ? { TOKEN: process.env.TOKEN } : {}),
+  ...(token ? { TOKEN: token } : {}),
   ...(scenario === 'write' ? { ALLOW_WRITES: flag('allow-writes') ? 'yes' : 'no' } : {}),
-  ...(process.env.SKU ? { SKU: process.env.SKU } : {}),
-  ...(process.env.CUSTOMER_ID ? { CUSTOMER_ID: process.env.CUSTOMER_ID } : {}),
-  ...(process.env.WAREHOUSE_ID ? { WAREHOUSE_ID: process.env.WAREHOUSE_ID } : {}),
+  // R6 performs bounded writes (materialize, import) and they are idempotent per iteration, so it is
+  // not a write opt-in scenario. It is called out here because the distinction matters when reading a
+  // run: this one touches data, the read one does not.
+  ...(sku ? { SKU: sku } : {}),
+  ...(customerId ? { CUSTOMER_ID: customerId } : {}),
+  ...(warehouseId ? { WAREHOUSE_ID: warehouseId } : {}),
 };
 
 console.log('\n--- k6 ---');
