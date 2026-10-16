@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "storefront",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "CLOSED",
   "risk": "LOW",
   "owner": "unassigned",
   "featureFlag": "",
@@ -37,5 +37,13 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-16T16:00:29.495Z",
-  "updatedAt": "2026-10-16T16:02:03.183Z"
+  "updatedAt": "2026-10-16T16:05:41.349Z",
+  "stagingEvidence": [
+    "PR #17 merged ke main, 6/6 check hijau (policy, repo tests, SQLite, PostgreSQL, stress).",
+    "Test baru 4/4 + visual lama 15/15 hijau."
+  ],
+  "releaseEvidence": [
+    "PR #17 merged ke main sebagai squash; semua check hijau.",
+    "tests/storefront-dark-neutral.test.mjs 4/4; product-imagery + f12r2 15/15."
+  ]
 }
