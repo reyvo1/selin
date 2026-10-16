@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "procurement",
   "wave": "W2",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -55,9 +55,14 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T15:14:06.000Z",
-  "updatedAt": "2026-10-16T14:52:33.872Z",
+  "updatedAt": "2026-10-16T14:56:58.493Z",
   "stagingEvidence": [
     "tests/operator-surface-completeness.test.mjs: 17 pass, 0 fail — mencakup route cancel PO, permission purchase.cancel, idempotency header, refusal, audit CANCEL_PURCHASE_ORDER, seed grant, admin wiring, absence PATCH.",
+    "npm run workflow:validate lulus."
+  ],
+  "releaseEvidence": [
+    "PR #10 merged ke main: fase STAGING, semua check hijau (policy, repo tests, SQLite, PostgreSQL, stress).",
+    "tests/operator-surface-completeness.test.mjs: 17 pass, 0 fail.",
     "npm run workflow:validate lulus."
   ]
 }
