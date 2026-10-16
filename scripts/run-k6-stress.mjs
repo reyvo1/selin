@@ -29,7 +29,16 @@ const flag = (name) => process.argv.includes(`--${name}`);
 
 const scenario = argument('scenario', 'read');
 const baseUrl = argument('base-url', 'http://127.0.0.1:4000/api/v1');
-const scriptPath = path.join(ROOT, 'tests/load/k6', scenario === 'write' ? 'checkout-write.js' : 'catalog-read.js');
+const SCENARIOS = {
+  read: 'catalog-read.js',
+  r6: 'r6-scale.js',
+  write: 'checkout-write.js',
+};
+const scenarioFile = SCENARIOS[scenario];
+if (!scenarioFile) {
+  fail(`unknown scenario '${scenario}'. Known: ${Object.keys(SCENARIOS).join(', ')}`);
+}
+const scriptPath = path.join(ROOT, 'tests/load/k6', scenarioFile);
 const outputPath = path.join(ROOT, 'handoff/quality', `k6-${scenario}-latest.json`);
 const expectedSource = argument('expected-source-fingerprint', '');
 const expectedDbHost = argument('expected-db-host', '');
@@ -151,6 +160,9 @@ const env = {
   DURATION: holdSeconds,
   ...(process.env.TOKEN ? { TOKEN: process.env.TOKEN } : {}),
   ...(scenario === 'write' ? { ALLOW_WRITES: flag('allow-writes') ? 'yes' : 'no' } : {}),
+  // R6 performs bounded writes (materialize, import) and they are idempotent per iteration, so it is
+  // not a write opt-in scenario. It is called out here because the distinction matters when reading a
+  // run: this one touches data, the read one does not.
   ...(process.env.SKU ? { SKU: process.env.SKU } : {}),
   ...(process.env.CUSTOMER_ID ? { CUSTOMER_ID: process.env.CUSTOMER_ID } : {}),
   ...(process.env.WAREHOUSE_ID ? { WAREHOUSE_ID: process.env.WAREHOUSE_ID } : {}),

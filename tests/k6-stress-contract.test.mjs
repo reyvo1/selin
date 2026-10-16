@@ -121,6 +121,50 @@ test('a heavy profile cannot be aimed at a workstation by accident', () => {
   }
 });
 
+test('R6 has a load scenario, because its probe cannot be one', () => {
+  // The operator named this gap and it is real, and it is WIDER than R6. The release chain has one
+  // load gate — `scripts/load-test.mjs --url /api/v1/health` — so the only endpoint proven to survive
+  // load anywhere in this repository is the liveness probe. `r6ScaleAi` is a functional probe that
+  // calls each route once, in sequence: correct, but silent about speed.
+  const r6 = read('tests/load/k6/r6-scale.js');
+
+  // These are R6's actual routes, read out of scripts/ci-r6-scale-ai-probe.mjs rather than guessed.
+  // A guessed path 404s, and a 404 satisfies a `< 500` check — the same silent-gap shape this
+  // repository keeps closing findings about.
+  for (const route of ['/analytics/daily-summaries/materialize', '/analytics/daily-summaries', '/retention/policies', '/retention/archive-runs', '/operator-assistant/query', '/marketplace-orders/import']) {
+    assert.ok(r6.includes(route), `R6 scenario must exercise ${route}, the route its functional probe calls`);
+  }
+
+  // A latency budget per family, because one aggregate p95 across an aggregation and a warehouse list
+  // hides whichever one is slow.
+  for (const metric of ['toko360_r6_aggregation_latency', 'toko360_r6_retention_latency', 'toko360_r6_assistant_latency', 'toko360_r6_import_latency']) {
+    assert.ok(r6.includes(`new Trend('${metric}'`), `${metric} needs its own trend`);
+    assert.match(r6, new RegExp(`'${metric}': \\['p\\(95\\)<`), `${metric} needs a threshold`);
+  }
+
+  // A business refusal is not a transport failure. Counting 409 and 422 as errors forces the
+  // thresholds to be loosened until a wrong answer looks right.
+  assert.ok(r6.includes('toko360_r6_business_rejections'), 'business refusals must be classified apart from errors');
+  assert.match(r6, /http_req_failed: \['rate<0\.05'\]/, 'and must not be counted as transport failures');
+
+  // It performs bounded writes, so it must be idempotent per iteration and must say so.
+  assert.match(r6, /idempotencyKey: key/, 'each materialize carries its own key');
+  assert.ok(r6.includes('Deliberately bounded') || r6.includes('deliberately bounded'), 'the write volume must be called out as bounded, or a run looks like a throughput claim');
+
+  // Reachable by name, and not as the default: the default stays the read scenario.
+  assert.match(packageJson.scripts['test:load:k6:r6'], /--scenario r6/, 'the R6 scenario must be runnable by name');
+  assert.doesNotMatch(packageJson.scripts['test:load:k6'], /--scenario r6/, 'and must not become the default');
+  assert.match(runner, /r6: 'r6-scale\.js'/, 'and the runner must map the name to its file');
+});
+
+test('an unknown scenario fails loudly instead of falling back to the read one', () => {
+  // A scenario name built as a filename would silently run the read scenario, and a stress run would
+  // report a number for a scenario nobody asked for.
+  assert.match(runner, /unknown scenario/, 'the runner must reject a name it does not know');
+  assert.ok(!runner.includes("scenario === 'write' ? 'checkout-write.js' : 'catalog-read.js'"),
+    'the fallback shape must be gone');
+});
+
 test('the heavy profile runs on a GitHub runner, never on a push or a pull request', () => {
   const workflow = read('.github/workflows/k6-stress.yml');
   // Dispatch-only is the whole mechanism. A `push` or `pull_request` trigger would let an ordinary
@@ -153,7 +197,8 @@ test('the scripts are reachable and named', () => {
   // filename in package.json is what the runner actually promises, and keeps the npm surface short.
   assert.match(packageJson.scripts['test:load:k6'] || '', /--scenario read/, 'the read scenario must be the default');
   assert.match(packageJson.scripts['test:load:k6:write'] || '', /--scenario write/, 'the write scenario must be reachable, even though it is not the default');
-  assert.match(runner, /scenario === 'write' \? 'checkout-write\.js' : 'catalog-read\.js'/, 'and the runner must map both scenario names to their files');
+  assert.match(runner, /const SCENARIOS = \{[\s\S]*?read: 'catalog-read\.js'[\s\S]*?write: 'checkout-write\.js'/,
+    'the runner must map every scenario name to its file explicitly');
   // The default must be read. A stress default that writes is the whole failure this file exists to prevent.
   assert.doesNotMatch(packageJson.scripts['test:load:k6'], /--allow-writes/, 'the default entry point must not opt into writes');
 });

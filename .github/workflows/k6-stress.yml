@@ -17,6 +17,7 @@ on:
         type: choice
         options:
           - read
+          - r6
           - write
       vus:
         description: 'Concurrent virtual users (write scenario defaults to 3)'
@@ -105,6 +106,27 @@ jobs:
             exit 1
           fi
           npm run test:load:k6 -- \
+            --base-url "${{ inputs.base_url }}" \
+            --allow-nonproduction --allow-heavy \
+            --vus "${{ inputs.vus }}" \
+            --ramp "${{ inputs.ramp }}" \
+            --duration "${{ inputs.duration }}"
+
+      # R6 is the surface the release chain never loaded: its functional probe calls each route once,
+      # in sequence, and the one load gate in the chain points at /api/v1/health. This step is where
+      # that gets covered. It performs bounded writes (materialize, marketplace import), each keyed per
+      # iteration, so it is not a write opt-in scenario and does not need one.
+      - name: R6 scale stress
+        if: inputs.scenario == 'r6'
+        env:
+          K6_STRESS_TOKEN: ${{ secrets.K6_STRESS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${K6_STRESS_TOKEN}" ]; then
+            echo "::error::secret K6_STRESS_READ_TOKEN is not configured."
+            exit 1
+          fi
+          npm run test:load:k6:r6 -- \
             --base-url "${{ inputs.base_url }}" \
             --allow-nonproduction --allow-heavy \
             --vus "${{ inputs.vus }}" \
