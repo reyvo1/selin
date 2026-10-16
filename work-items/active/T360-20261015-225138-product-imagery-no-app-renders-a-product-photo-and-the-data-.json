@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "catalog",
   "wave": "W0",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -64,5 +64,9 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T15:13:38.000Z",
-  "updatedAt": "2026-10-16T04:20:00.000Z"
+  "updatedAt": "2026-10-16T15:07:27.917Z",
+  "stagingEvidence": [
+    "tests/product-imagery.test.mjs + tests/f12r2-modern-visual-contract.test.mjs: 15 pass, 0 fail.",
+    "npm run workflow:validate lulus."
+  ]
 }
