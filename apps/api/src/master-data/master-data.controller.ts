@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -21,6 +22,23 @@ export class MasterDataController {
   @Get('categories') @Permissions('master_data.view') categories(@CurrentUser() user: AuthUser, @Query('search') search?: string) { return this.service.categories(user, search); }
   @Roles('SUPER_ADMIN','OWNER','ADMIN') @Post('categories') @Permissions('master_data.manage') createCategory(@Body() dto: CreateCategoryDto, @CurrentUser() user: AuthUser) { return this.service.createCategory(dto, user); }
   @Roles('SUPER_ADMIN','OWNER','ADMIN') @Patch('categories/:id') @Permissions('master_data.manage') updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto, @CurrentUser() user: AuthUser) { return this.service.updateCategory(id, dto, user); }
+  @Roles('SUPER_ADMIN','OWNER','ADMIN') @Post('categories/:id/image') @Permissions('master_data.manage')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  uploadCategoryImage(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string; size: number } | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @CurrentUser() user: AuthUser,
+    @Req() request: { protocol?: string; headers?: Record<string, string | string[] | undefined>; get?: (name: string) => string | undefined },
+  ) {
+    const forwardedProto = request.headers?.['x-forwarded-proto'];
+    const protocol = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(',')[0]?.trim()
+      ?? request.protocol
+      ?? 'http';
+    const host = request.get?.('host') ?? request.headers?.['host'];
+    const hostValue = Array.isArray(host) ? host[0] : host ?? '';
+    return this.service.uploadCategoryImage(id, file, idempotencyKey, user, { protocol, host: hostValue });
+  }
 
   @Get('customers') @Permissions('customer.view') customers(@CurrentUser() user: AuthUser, @Query('search') search?: string) { return this.service.customers(user, search); }
   @Roles('SUPER_ADMIN','OWNER','ADMIN','CASHIER') @Post('customers') @Permissions('customer.manage') createCustomer(@Body() dto: CreateCustomerDto, @CurrentUser() user: AuthUser) { return this.service.createCustomer(dto, user); }

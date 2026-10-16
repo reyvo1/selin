@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { IsBoolean, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsHttpImageUrl } from '../../common/validation/is-http-image-url';
 
 export const MASTER_REFERENCE_TYPES = ['BRAND','UNIT','BANK','COURIER','PAYMENT_METHOD'] as const;
 
@@ -9,6 +10,7 @@ export class CreateCategoryDto {
   @ApiPropertyOptional() @IsOptional() @IsString() parentId?: string;
   @ApiPropertyOptional({ default: 0 }) @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @ApiPropertyOptional({ default: true }) @IsOptional() @IsBoolean() isActive?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsHttpImageUrl() imageUrl?: string;
 }
 export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {}
 

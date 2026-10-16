@@ -37,6 +37,9 @@ async function bootstrap() {
   app.useStaticAssets(resolve(process.env.PRODUCT_IMAGE_DIR ?? 'uploads/product-images'), {
     prefix: '/media/product-images/',
   });
+  app.useStaticAssets(resolve(process.env.CATEGORY_IMAGE_DIR ?? 'uploads/category-images'), {
+    prefix: '/media/category-images/',
+  });
   // Header yang diizinkan pada preflight harus lengkap. Default Nest hanya mencantumkan header
   // "simple" plus Authorization. Aplikasi Admin (page.tsx:196) mengirim `Content-Type:
   // application/json` pada SETIAP request lewat authFetch, jadi preflight menanyakan
