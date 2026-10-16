@@ -74,7 +74,29 @@ say "POSTGRES_SCHEMA_PREPARE"
 DATABASE_URL="$SCRATCH_URL" npm run db:postgres:prepare
 PREPARE=$?
 
+# Restore the SQLite client. `db:postgres:prepare` regenerates the client from the PostgreSQL schema and
+# leaves it that way, so the very next local run — `npm run dev -w @toko360/api` against the `file:`
+# URL in .env — dies with "the URL must start with the protocol postgresql://". That is the identical
+# defect this session already fixed in ci.yml, reached from the other direction: there the workflow
+# swapped to PostgreSQL and left it; here this script did.
+#
+# Restored on every path, including the failure paths, and a failure to restore is reported rather than
+# swallowed — a silently wrong Prisma Client is worse than a loud one.
+restore_sqlite_client() {
+  say "restore SQLite Prisma Client"
+  if npm run db:local:generate >/dev/null 2>&1; then
+    echo "restored"
+  else
+    echo "FAILED to restore the SQLite Prisma Client."
+    echo "  Until this is run, any local SQLite command will fail with a datasource protocol error:"
+    echo "    npm run db:local:generate"
+    RESTORE_FAILED=1
+  fi
+}
+
 # --- 3. report only what was observed ------------------------------------------------------
+restore_sqlite_client
+
 say "RESULT"
 if [ "$REHEARSE" -eq 0 ]; then
   echo "PASS  the product-imagery migration applies on PostgreSQL and lands at the current schema"
@@ -89,6 +111,14 @@ fi
 
 say "cleanup"
 psql "$ADMIN_URL" -c "DROP DATABASE IF EXISTS \"${SCRATCH_DB}\";" >/dev/null 2>&1 && echo "scratch database dropped"
+
+if [ "${RESTORE_FAILED:-0}" -ne 0 ]; then
+  echo
+  echo "The SQLite Prisma Client was NOT restored. Treat every local run after this as broken until"
+  echo "  npm run db:local:generate"
+  echo "  succeeds."
+  exit 1
+fi
 
 if [ "$REHEARSE" -ne 0 ] || [ "$PREPARE" -ne 0 ]; then
   echo
