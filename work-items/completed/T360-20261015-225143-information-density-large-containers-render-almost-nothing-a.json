@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "ui-shell",
   "wave": "W0",
-  "phase": "STAGING",
+  "phase": "CLOSED",
   "risk": "LOW",
   "owner": "openai",
   "featureFlag": "",
@@ -44,8 +44,13 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T14:51:43.930Z",
-  "updatedAt": "2026-10-16T15:10:52.072Z",
+  "updatedAt": "2026-10-16T15:14:24.150Z",
   "stagingEvidence": [
+    "tests/operator-surface-completeness.test.mjs: 17 pass, 0 fail.",
+    "npm run workflow:validate lulus."
+  ],
+  "releaseEvidence": [
+    "PR #15 merged ke main: fase STAGING 225143 + CLOSED 225138, semua check hijau.",
     "tests/operator-surface-completeness.test.mjs: 17 pass, 0 fail.",
     "npm run workflow:validate lulus."
   ]
