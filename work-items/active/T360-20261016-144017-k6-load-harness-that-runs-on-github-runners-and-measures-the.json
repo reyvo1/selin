@@ -4,7 +4,7 @@
   "type": "performance",
   "module": "performance",
   "wave": "W6",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "HIGH",
   "owner": "unassigned",
   "featureFlag": "",
@@ -48,5 +48,5 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-16T06:40:17.205Z",
-  "updatedAt": "2026-10-16T14:32:25.768Z"
+  "updatedAt": "2026-10-16T14:32:35.577Z"
 }
