@@ -228,7 +228,15 @@ test("GitHub runs the harness, and the operator's machine never does", () => {
   assert.match(guard, /set -euo pipefail/, 'the guard must run with strict shell options');
   assert.ok((guard.match(/exit 1/g) ?? []).length >= 2, 'every refusal branch must exit non-zero');
   assert.match(guard, /K6_STRESS_ALLOWED_HOST/, 'a manual run must be pinned to an approved host');
-  assert.match(guard, /workflow_dispatch" \] && \[ "\$\{HOST\}" != "\$\{\{ vars\.K6_STRESS_ALLOWED_HOST \}\}"/, 'and that pin must apply to the manual path only, since an automatic run owns its target');
+  // The pin applies to the manual path only, and the automatic path asserts the opposite instead: that it
+  // targets the instance it started. The second execution stopped here, on the approved-host variable
+  // being unset, because the pin had been left on both paths.
+  assert.match(guard, /github\.event_name \}\}\" != \"workflow_dispatch/, 'the approved-host pin must apply to the manual path only');
+  assert.match(guard, /\$\{HOST\}" != "127\.0\.0\.1/, 'and an automatic run must prove it targets the instance it started');
+  assert.ok(
+    guard.indexOf('K6_STRESS_ALLOWED_HOST') > guard.indexOf('!= "workflow_dispatch"'),
+    'the approved-host check must come after the automatic path returns',
+  );
 
   // A superseded pull-request run measures source nobody will ship.
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/,

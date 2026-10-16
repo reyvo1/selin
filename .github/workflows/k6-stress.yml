@@ -230,13 +230,26 @@ jobs:
             echo "::error::refusing to load test ${HOST}; it looks like production"
             exit 1
           fi
+          # The production-shaped refusal above applies to both paths. The approved-host pin applies only
+          # to a dispatch run, because that is the only path that targets something this repository does
+          # not own. An automatic run points at the loopback instance this job started, which nobody needs
+          # to authorise; requiring a repository variable for it made every automatic run fail before k6
+          # ran, which is how the second execution of this workflow stopped with the variable unset.
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            if [ "${HOST}" != "127.0.0.1" ]; then
+              echo "::error::an automatic run must target the instance it started (127.0.0.1), not ${HOST}"
+              exit 1
+            fi
+            echo "automatic run: target is this job's own instance on the loopback interface"
+            exit 0
+          fi
           if [ -z "${{ vars.K6_STRESS_ALLOWED_HOST }}" ]; then
             echo "::error::repository variable K6_STRESS_ALLOWED_HOST is not set."
             echo "Set it to the exact hostname this stress run is permitted to hit. An unset variable"
             echo "means nobody has authorised a target, which is not the same as any host being fine."
             exit 1
           fi
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${HOST}" != "${{ vars.K6_STRESS_ALLOWED_HOST }}" ]; then
+          if [ "${HOST}" != "${{ vars.K6_STRESS_ALLOWED_HOST }}" ]; then
             echo "::error::${HOST} is not the approved stress target (${{ vars.K6_STRESS_ALLOWED_HOST }})"
             exit 1
           fi
