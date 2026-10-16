@@ -18,8 +18,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 SCRATCH_DB="${T360_PG_SCRATCH_DB:-t360_local_gate}"
-ADMIN_URL="${T360_PG_ADMIN_URL:-postgres://postgres@localhost:5432/postgres}"
-SCRATCH_URL="postgres://postgres@localhost:5432/${SCRATCH_DB}"
+
+# Peer authentication over the unix socket maps the OS user to a role of the same name, which is the
+# only way this works without a password and without sudo. The default was `postgres`, which forced
+# either an interactive password prompt or `sudo -u postgres` — and the script's whole point is that
+# an operator can run it unattended.
+#
+# T360_PG_ADMIN_URL still wins when set, so a CI job or a remote server can point this anywhere.
+PG_USER_NAME="${T360_PG_USER:-$(id -un)}"
+ADMIN_URL="${T360_PG_ADMIN_URL:-postgresql://${PG_USER_NAME}@localhost/postgres?host=/var/run/postgresql}"
+SCRATCH_URL="${T360_PG_ADMIN_URL:-postgresql://${PG_USER_NAME}@localhost/${SCRATCH_DB}?host=/var/run/postgresql}"
 
 say() { printf '\n=== %s ===\n' "$1"; }
 
@@ -27,6 +35,16 @@ say() { printf '\n=== %s ===\n' "$1"; }
 case "$SCRATCH_DB" in
   *prod*|*live*|*tokofinal*) echo "REFUSING: scratch database name '$SCRATCH_DB' looks production-like." >&2; exit 2 ;;
 esac
+
+# Refuse early rather than half-run: the whole gate depends on being able to create a scratch
+# database, and discovering that halfway through leaves a stray database behind.
+if ! psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
+  echo "REFUSING: cannot connect as '${PG_USER_NAME}' over the unix socket."
+  echo "  Peer authentication maps the OS user to a role of the same name. Create it once:"
+  echo "    sudo -u postgres psql -c \"CREATE ROLE ${PG_USER_NAME} LOGIN SUPERUSER;\""
+  echo "  or point T360_PG_ADMIN_URL at a database this user can already reach."
+  exit 2
+fi
 
 if ! pg_isready -q 2>/dev/null; then
   echo "REFUSING: no PostgreSQL server is answering."
@@ -37,6 +55,7 @@ fi
 
 say "server"
 pg_isready || exit 2
+psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -tAc "SELECT current_user || ' via peer auth on the unix socket'" || exit 2
 
 # --- 1. a clean scratch database ----------------------------------------------------------
 say "scratch database ${SCRATCH_DB}"

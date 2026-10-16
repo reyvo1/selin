@@ -140,8 +140,9 @@ Two gates caught real mistakes in this work rather than confirming it:
 
 ## Not proven
 
-- **PostgreSQL migration rehearsal** for the product-imagery migration: no `T360_MIGRATION_DATABASE_URL`
-  here. SQLite rehearsal passed.
+- ~~**PostgreSQL migration rehearsal** for the product-imagery migration~~ — **now PASS.** It ran on a
+  real server on 2026-10-16 through `scripts/run-local-postgres-gates.sh`, and independently inside the
+  GitHub container PostgreSQL integration job on PR #1. SQLite rehearsal had already passed.
 - **No GitHub workflow has run** against this source; `uat:pre-github:local` was not run.
 - **The service-worker fix is proven by reading the guard, not by exercising offline mode** in a
   browser. A live offline-navigation test would be the stronger proof.
