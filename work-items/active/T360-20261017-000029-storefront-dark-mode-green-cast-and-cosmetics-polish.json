@@ -1,0 +1,41 @@
+{
+  "id": "T360-20261017-000029",
+  "title": "storefront dark mode green cast and cosmetics polish",
+  "type": "bug",
+  "module": "storefront",
+  "wave": "W7",
+  "phase": "VERIFICATION",
+  "risk": "LOW",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "Dark mode storefront memakai permukaan slate netral via token --sf-surface/--sf-border/--sf-text; emerald hanya untuk aksen (nav aktif, badge, fokus, hover)."
+  ],
+  "acceptanceCriteria": [
+    "Tidak ada literal hijau (#101c18 dkk) di rule dark; shell dark tanpa radial emerald; aksen emerald tetap ada; test 4/4 hijau; visual lama 15/15 tetap hijau."
+  ],
+  "testPlan": [
+    "tests/storefront-dark-neutral.test.mjs (4 test) + tests/product-imagery.test.mjs + tests/f12r2-modern-visual-contract.test.mjs."
+  ],
+  "migrationPlan": "Tidak ada perubahan database; perbarui bila dampak database berubah.",
+  "rollbackPlan": "Revert commit CSS; token dan light mode tidak tersentuh.",
+  "monitoringPlan": "Pantau laporan visual pengguna setelah rilis; tidak ada metric baru.",
+  "securityNotes": "Perubahan murni kosmetik; tidak ada autentikasi, data, atau permission tersentuh.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-16T16:00:29.495Z",
+  "updatedAt": "2026-10-16T16:02:03.183Z"
+}
