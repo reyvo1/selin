@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "branch-sync",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "unassigned",
   "featureFlag": "",
@@ -37,5 +37,12 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-16T16:37:56.601Z",
-  "updatedAt": "2026-10-16T16:40:02.724Z"
+  "updatedAt": "2026-10-16T16:49:27.619Z",
+  "stagingEvidence": [
+    "PR #21: test dan tsc hijau; satu check CI sempat merah karena test lama mengunci bentuk bocor, diperbaiki ke bentuk aman."
+  ],
+  "releaseEvidence": [
+    "PR #21 merged ke main sebagai squash; 6/6 check hijau (policy, repo tests, SQLite, PostgreSQL, stress).",
+    "tests/security-sync-hardening.test.mjs 5/5; tsc api+worker bersih."
+  ]
 }
