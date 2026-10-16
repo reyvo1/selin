@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "navigation",
   "wave": "W1",
-  "phase": "VERIFICATION",
+  "phase": "STAGING",
   "risk": "MEDIUM",
   "owner": "openai",
   "featureFlag": "",
@@ -48,5 +48,5 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-15T14:51:44.255Z",
-  "updatedAt": "2026-10-15T17:50:22.956Z"
+  "updatedAt": "2026-10-16T14:42:45.930Z"
 }
