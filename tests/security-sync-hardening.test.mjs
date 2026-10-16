@@ -19,9 +19,12 @@ const productsService = read('apps/api/src/products/products.service.ts');
 const workerIndex = read('apps/worker/src/index.ts');
 const branchSyncService = read('apps/api/src/branch-sync/branch-sync.service.ts');
 
-test('respons produk anonim membuang costPrice produk dan variant', () => {
+test('respons produk anonim membuang costPrice produk, variant, dan nested variant', () => {
   assert.match(productsService, /costPrice: _costPrice/);
   assert.match(productsService, /costPrice: _variantCost/);
+  assert.match(productsService, /costPrice: _nestedCost/);
+  assert.match(productsService, /return stripPublicCost\(pricedProduct\)/);
+  assert.match(productsService, /pricedItems\.map\(\(item\) => stripPublicCost\(item\)\)/);
   assert.ok(!productsService.includes('salePrice: _'), 'harga jual tidak boleh ikut dibuang');
 });
 
