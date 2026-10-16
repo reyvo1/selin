@@ -31,6 +31,11 @@ export function imageStorageRoot(): string {
   return resolve(process.env.PRODUCT_IMAGE_DIR ?? 'uploads/product-images');
 }
 
+/** Root kategori terpisah supaya lifecycle file-nya tidak tercampur dengan produk. */
+export function categoryImageStorageRoot(): string {
+  return resolve(process.env.CATEGORY_IMAGE_DIR ?? 'uploads/category-images');
+}
+
 /** Segmen path yang aman: UUID dan id internal lolos apa adanya, sisanya dinetralkan. */
 export function safeImageSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 160);
@@ -72,9 +77,9 @@ export function buildImageStorageKey(companyId: string, productId: string, exten
  * config build-time), sehingga satu server cabang di LAN menjawab dengan alamat
  * LAN-nya sendiri dan hasil `http://...` lolos validator IsHttpImageUrl.
  */
-export function buildPublicImageUrl(protocol: string, host: string, storageKey: string): string {
+export function buildPublicImageUrl(protocol: string, host: string, storageKey: string, prefix = '/media/product-images/'): string {
   const proto = protocol === 'https' ? 'https' : 'http';
   const cleanHost = (host ?? '').split(',')[0].trim();
   if (!cleanHost || /[\s<>"]/.test(cleanHost)) fail('Host request tidak valid untuk URL foto.');
-  return `${proto}://${cleanHost}/media/product-images/${storageKey}`;
+  return `${proto}://${cleanHost}${prefix}${storageKey}`;
 }

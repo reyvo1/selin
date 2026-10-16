@@ -1,0 +1,41 @@
+{
+  "id": "T360-20261017-010002",
+  "title": "foto kategori dan subkategori via upload perangkat atau URL",
+  "type": "feature",
+  "module": "master-data",
+  "wave": "W7",
+  "phase": "VERIFICATION",
+  "risk": "MEDIUM",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "Foto kategori boleh dari file perangkat atau URL http(s); kolom imageUrl nullable expand-only di 3 dialek; file JPEG/PNG/WEBP maks 5 MiB, magic byte, nama acak, tenant-scoped; root dan URL prefix terpisah dari produk; idempotency scope category-image; permission master_data.manage."
+  ],
+  "acceptanceCriteria": [
+    "Kolom Category.imageUrl ada di 3 schema + DB lokal; POST /master-data/categories/:id/image mengisi imageUrl; admin ada picker+pratinjau kategori; test 8/8 hijau; tsc api+admin bersih; prisma generate+push lokal OK."
+  ],
+  "testPlan": [
+    "tests/category-image-upload.test.mjs (8 test: schema x3, DTO, create/update, route, static, UI) + tsc + generate/push lokal."
+  ],
+  "migrationPlan": "Tidak ada perubahan database; perbarui bila dampak database berubah.",
+  "rollbackPlan": "Revert commit; kolom nullable tidak merusak data; endpoint hilang, URL manual tetap jalan.",
+  "monitoringPlan": "Pantau error upload dan direktori uploads/; sertakan kolom pada migrasi production expand-only berikutnya.",
+  "securityNotes": "Permission master_data.manage; magic-byte; path traversal ditolak; nama UUID; /media publik via capability URL acak.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-16T17:00:02.571Z",
+  "updatedAt": "2026-10-16T17:13:11.067Z"
+}

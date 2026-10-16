@@ -1,7 +1,11 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../auth/auth.types';
 import { normalizeTenderPolicy, tenderPolicyMetadata } from '../common/tender-policy';
+import { beginIdempotent, completeIdempotent, hashPayload } from '../common/idempotency';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateBranchDto, CreateCategoryDto, CreateCustomerDto, CreateProductBarcodeDto, CreateProductPriceDto, CreateProductUnitDto, CreateProductVariantDto,
@@ -9,6 +13,13 @@ import {
   UpdateBranchDto, UpdateCategoryDto, UpdateCustomerDto, UpdateProductBarcodeDto, UpdateProductPriceDto, UpdateProductUnitDto, UpdateProductVariantDto,
   UpdateReferenceDto, UpdateWarehouseDto, UpdateWarehouseLocationDto,
 } from './dto/master-data.dto';
+import {
+  buildImageStorageKey,
+  buildPublicImageUrl,
+  categoryImageStorageRoot,
+  validateImageBytes,
+  type UploadedImageFile,
+} from '../products/product-image.util';
 
 type DbClient = Prisma.TransactionClient | PrismaService;
 type Scope = { companyId: string; branchId: string };
@@ -198,6 +209,7 @@ export class MasterDataService {
             slug,
             sortOrder: dto.sortOrder ?? 0,
             isActive: dto.isActive ?? true,
+            imageUrl: dto.imageUrl?.trim() || null,
           },
           include: {
             parent: { select: { id: true, name: true, slug: true, isActive: true } },
@@ -237,6 +249,7 @@ export class MasterDataService {
 
         const data: Prisma.CategoryUpdateInput = {};
         if (dto.name !== undefined) data.name = nextName;
+        if (dto.imageUrl !== undefined) data.imageUrl = dto.imageUrl?.trim() || null;
         if (dto.slug !== undefined) {
           const nextSlug = this.slug(dto.slug);
           if (!nextSlug) throw new BadRequestException('Slug kategori tidak valid.');
@@ -266,8 +279,66 @@ export class MasterDataService {
     }
   }
 
-  customers(user: AuthUser, search?: string) {
-    const scope = this.scope(user); const q = search?.trim();
+  // Upload foto kategori/subkategori dari perangkat operator. Pola yang sama dengan
+  // upload foto produk: validasi isi -> tulis disk (nama acak, flag wx) -> transaksi DB
+  // (idempotency scope 'category-image' + update imageUrl + audit). File yatim dibersihkan
+  // bila transaksi gagal.
+  async uploadCategoryImage(
+    id: string,
+    file: UploadedImageFile | undefined,
+    idempotencyKey: string | undefined,
+    user: AuthUser,
+    hostInfo: { protocol: string; host: string },
+  ) {
+    const scope = this.scope(user);
+    if (!file || !file.buffer || file.buffer.length === 0) throw new BadRequestException('File foto wajib diunggah.');
+    const key = (idempotencyKey ?? '').trim();
+    if (!key) throw new BadRequestException('Idempotency-Key wajib diisi.');
+    let extension: string;
+    try {
+      extension = validateImageBytes(file.buffer, file.mimetype).extension;
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : 'File gambar tidak valid.');
+    }
+    const fileHash = createHash('sha256').update(file.buffer).digest('hex');
+    const payload = { categoryId: id, fileHash };
+    const prior = await this.prisma.idempotencyReceipt.findUnique({
+      where: { companyId_scope_key: { companyId: scope.companyId, scope: 'category-image', key } },
+    });
+    if (prior && prior.status === 'COMPLETED' && prior.requestHash === hashPayload(payload)) {
+      return (prior.response as unknown as { id: string; imageUrl: string }) ?? null;
+    }
+    const storageKey = buildImageStorageKey(scope.companyId, id, extension);
+    const root = categoryImageStorageRoot();
+    const absolute = resolve(root, storageKey);
+    if (absolute !== root && !absolute.startsWith(`${root}/`)) throw new BadRequestException('Lokasi foto tidak valid.');
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, file.buffer, { flag: 'wx' });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const receipt = await beginIdempotent(tx, { companyId: scope.companyId, scope: 'category-image', key, payload });
+        if (receipt.replay) {
+          if (receipt.status === 'COMPLETED') return receipt.response;
+          throw new BadRequestException('Upload dengan Idempotency-Key ini masih diproses.');
+        }
+        const category = await tx.category.findFirst({ where: { id, companyId: scope.companyId } });
+        if (!category) throw new NotFoundException('Kategori tidak ditemukan.');
+        const imageUrl = buildPublicImageUrl(hostInfo.protocol, hostInfo.host, storageKey, '/media/category-images/');
+        await tx.category.update({ where: { id: category.id }, data: { imageUrl } });
+        await this.audit(tx, user, 'UPLOAD_CATEGORY_IMAGE', 'Category', category.id, {
+          byteLength: file.buffer.length, storageKey,
+        });
+        const response = { id: category.id, imageUrl };
+        await completeIdempotent(tx, { companyId: scope.companyId, scope: 'category-image', key, resourceType: 'Category', resourceId: category.id, response });
+        return response;
+      });
+    } catch (error) {
+      await unlink(absolute).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  customers(user: AuthUser, search?: string) {    const scope = this.scope(user); const q = search?.trim();
     return this.prisma.customer.findMany({ where: { companyId: scope.companyId, ...(q ? { OR: [{ name: { contains: q } }, { phone: { contains: q } }, { email: { contains: q } }] } : {}) }, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: 500 });
   }
 
