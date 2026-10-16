@@ -104,7 +104,7 @@
     "ci:preflight:local": "npm run workflow:validate && npm run validate:repo && npm run db:local:generate && npm run build -w @toko360/worker && npm run test:dependency-free",
     "ci:security:proposal": "node scripts/ci-propose-security-dependency-refresh.mjs",
     "uat:pre-github:local": "node scripts/run-local-candidate-gate.mjs",
-    "audit:full:repo": "node scripts/audit-full-repository.mjs && npm run audit:product:completeness && npm run audit:endpoint:coverage && npm run audit:admin:contextual && npm run audit:canonical:ownership && npm run audit:p5:visual",
+    "audit:full:repo": "npm run audit:p5:visual && node scripts/audit-full-repository.mjs && npm run audit:product:completeness && npm run audit:endpoint:coverage && npm run audit:admin:contextual && npm run audit:canonical:ownership",
     "audit:boot": "bash scripts/boot-probe.sh",
     "ci:api:sweep": "node scripts/ci-runtime-api-sweep.mjs",
     "ci:ui:audit": "node scripts/ci-ui-source-audit.mjs",
