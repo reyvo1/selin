@@ -262,9 +262,23 @@ export class ProductsService {
       }))),
     })));
     if (user) return { ...page, items: pricedItems };
+    // Respons publik (storefront, kiosk, tanpa login) tidak boleh membawa HPP.
+    // Full row Prisma memuat costPrice di produk dan di tiap variant, dan kode di atas
+    // hanya membuang companyId — sehingga modal setiap SKU bisa dibaca siapa saja.
+    // Harga jual/effectiveSalePrice tetap publik (memang untuk ditampilkan); yang
+    // dibuang hanya biaya. Authenticated (kasir/admin) tidak berubah.
     return {
       ...page,
-      items: pricedItems.map(({ companyId: _companyId, ...item }) => item),
+      items: pricedItems.map((item) => {
+        const { companyId: _companyId, costPrice: _costPrice, ...rest } = item;
+        return {
+          ...rest,
+          variants: (rest.variants ?? []).map((variant) => {
+            const { costPrice: _variantCost, ...variantRest } = variant;
+            return variantRest;
+          }),
+        };
+      }),
     };
   }
 
