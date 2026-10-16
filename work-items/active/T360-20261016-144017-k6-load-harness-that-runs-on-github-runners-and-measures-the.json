@@ -21,21 +21,32 @@
     "performance": "NONE"
   },
   "businessRules": [
-    "ISI aturan bisnis dan invariant modul."
+    "Beban tidak pernah dijalankan dari mesin developer; semua eksekusi k6 di GitHub runner (pull_request/push/dispatch).",
+    "Profil berat r6 hanya via workflow_dispatch dengan K6_STRESS_ALLOWED_HOST dan token khusus; tanpa itu job gagal.",
+    "Target otomatis hanya 127.0.0.1 (API disposable yang di-seed per-run); host lain ditolak sebelum mint token.",
+    "Kredensial seed acak per-run (openssl rand >=14 char); tidak ditulis ke source atau log.",
+    "Password demo Admin123! ditolak saat mint; token dari /auth/login (accessToken).",
+    "Katalog mengikuti query aplikasi asli: limit=100, cursor via pageInfo.nextCursor, tanpa offset."
   ],
   "acceptanceCriteria": [
-    "ISI hasil terukur yang harus tercapai."
+    "Run otomatis (read, 5 VU, ramp 20s, hold 30s) lulus di runner: 14197 req, p95 22ms, 0% error, 100% checks.",
+    "Artifact handoff/quality/k6-read-latest.json terbit.",
+    "Test kontrak tests/k6-stress-contract.test.mjs 13/13.",
+    "workflow:validate (62 item, 8 wave) dan validate:repo lulus.",
+    "PR #4 dan #5 merged ke main, semua check hijau termasuk job stress."
   ],
   "testPlan": [
-    "ISI unit/integration/e2e/concurrency/security test yang diperlukan."
+    "tests/k6-stress-contract.test.mjs — 13 test: profil, trigger workflow, guard host, bridge env, mint, health-first.",
+    "Eksekusi nyata k6-stress.yml di GitHub: 4 run gagal (env/host/token), 1 run PASS, run ulang di push main PASS.",
+    "Verifikasi lokal dotenv: kunci duplikat terakhir menang; password diganti via sed agar deterministik."
   ],
   "migrationPlan": "Tidak ada perubahan database; perbarui bila dampak database berubah.",
-  "rollbackPlan": "Jelaskan feature flag, rollback deployment, dan compensating operation bila transaksi sudah diposting.",
-  "monitoringPlan": "Jelaskan metric, log, alert, dan masa observasi setelah rilis.",
-  "securityNotes": "Jelaskan autentikasi, permission, tenant scope, data sensitif, dan audit trail.",
+  "rollbackPlan": "Revert commit workflow ke versi dispatch-only; tidak ada perubahan database atau data produksi.",
+  "monitoringPlan": "Pantau durasi dan hasil job stress pada setiap PR; alert bila job gagal 2 run berturut-turut.",
+  "securityNotes": "Token hanya dari login per-run dengan password acak; secret staging (K6_STRESS_READ_TOKEN/WRITE_TOKEN) via GitHub secrets; tidak ada kredensial di repo.",
   "documentation": [
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-16T06:40:17.205Z",
-  "updatedAt": "2026-10-16T09:44:35.864Z"
+  "updatedAt": "2026-10-16T14:32:25.768Z"
 }
