@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "master-data",
   "wave": "W7",
-  "phase": "VERIFICATION",
+  "phase": "CLOSED",
   "risk": "MEDIUM",
   "owner": "unassigned",
   "featureFlag": "",
@@ -37,5 +37,13 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-16T17:00:02.571Z",
-  "updatedAt": "2026-10-16T17:13:11.067Z"
+  "updatedAt": "2026-10-16T17:17:23.995Z",
+  "stagingEvidence": [
+    "PR #23 merged ke main, 6/6 check hijau.",
+    "validate:repo lulus (1271 files, 202 models)."
+  ],
+  "releaseEvidence": [
+    "PR #23 merged ke main sebagai squash; semua check hijau.",
+    "tests/category-image-upload.test.mjs 8/8."
+  ]
 }
