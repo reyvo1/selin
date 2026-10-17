@@ -15,9 +15,8 @@
     "byClass": {
       "DEVICE_INGEST": 1,
       "NODE_PROTOCOL": 22,
-      "UI_GAP": 8,
       "PROVIDER_CALLBACK": 1,
-      "SUPERSEDED": 2
+      "SUPERSEDED": 1
     }
   },
   "entries": [

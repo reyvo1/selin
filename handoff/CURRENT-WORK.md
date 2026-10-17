@@ -20,12 +20,16 @@
 - Local terakhir: `npm test` **1972/1972 pass, 0 fail**; `tsc --noEmit` api+admin bersih;
   `validate:repo` 1271 files / 202 models; `workflow:validate` 67 item / 8 wave. main `f5f3913`.
 - **Yang tetap terbuka (bukan kode sesi ini):**
-  1. **8 `UI_GAP` endpoint** (terukur `frontend-endpoint-coverage`): branch-transfer detail+departure,
-     digital-services transaction detail, bulk `offline-transactions`, `platform/automation-jobs/:id`,
-     dan `scan`/`submit`/`discard` mobile opname — belum jadi work item.
-  2. **Human Stage-20 / `audit:A-07`** — gerbang visual manusia, `productReady=false`.
-  3. **R6 heavy stress** butuh secret `K6_STRESS_ALLOWED_HOST` + `K6_STRESS_READ_TOKEN`/`WRITE_TOKEN`,
+  1. **Human Stage-20 / `audit:A-07`** — gerbang visual manusia, `productReady=false`.
+  2. **R6 heavy stress** butuh secret `K6_STRESS_ALLOWED_HOST` + `K6_STRESS_READ_TOKEN`/`WRITE_TOKEN`,
      lalu `workflow_dispatch` manual.
+- **Koreksi audit 17 Okt:** 8 `UI_GAP` yang dicatat handoff 15 Okt **sudah tertutup semua** (PR #1,
+  16 Okt, dari working tree sesi yang terputus): transfer detail+departure (`branch-sync.tsx`),
+  digital-services detail (`ppob-workspace.tsx`), bulk offline-transactions (`r3-operations.tsx`),
+  automation-jobs/:id (`platform-control.tsx`), dan scan/submit/discard opname via PWA
+  `apps/pos/public/stock-count/app.js:191/238/273`. Ledger kini **0 UI_GAP**, 25 entri
+  (22 NODE_PROTOCOL, 1 DEVICE_INGEST, 1 PROVIDER_CALLBACK, 1 SUPERSEDED), audit `baseline agreed`.
+  `summary.byClass` di ledger yang stale (menyebut UI_GAP:8) ikut dikoreksi agar konsisten.
 - Branch lokal lama (`docs/*closeout`, `fix/audit-chain-source-binding`, `performance/k6-*`,
   `release/*R8*`) sudah disupersed oleh main (squash-merge) — isinya versi lama kode; aman dihapus bila
   diperlukan, tidak ada kerja unik tertinggal di sana.
