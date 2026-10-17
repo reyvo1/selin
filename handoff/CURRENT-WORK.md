@@ -1,5 +1,40 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-17 — Sesi 17 Okt: 8 PR ditutup, 0 work item aktif, 1972 test hijau
+
+- Active work item: **none** (`work-items/active/` kosong). Completed: **67**. `workflow:validate` lulus.
+- Ditutup sesi ini (PR #17–#24, semua 6/6 check hijau):
+  - `T360-20261017-000029` **dark mode storefront netral** (PR #17/#18): 14 literal hijau → token `--sf-*`;
+    test baru `storefront-dark-neutral` (4/4). Tanpa cast kehijauan di `[data-theme='dark']`.
+  - `T360-20261017-001644` **upload foto produk** (PR #19/#20): `POST /products/:id/image` multipart,
+    5 MiB, magic byte, key UUID tenant-scoped, `Idempotency-Key`, audit `UPLOAD_PRODUCT_IMAGE`,
+    compensating unlink, static `/media/product-images/`. Test `product-image-upload` (9/9).
+  - `T360-20261017-003756` **costPrice bocor di respons publik** (PR #21): helper `stripPublicCost()`
+    dipakai `list()` + `findOne()` (produk, variant, units, barcodes).
+  - `T360-20261017-003757` **sync FAILED tidak antre ulang** (PR #22): `requeueDueSyncEvents()` di
+    worker `tick()`, ambang 8, audit `SYNC_EVENT_REQUEUED_AUTO`.
+  - `T360-20261017-010002` **foto kategori/subkategori** (PR #23/#24): kolom `Category.imageUrl`
+    nullable di 3 dialek, `POST /master-data/categories/:id/image` (scope `category-image`,
+    audit `UPLOAD_CATEGORY_IMAGE`, root/prefix `/media/category-images/` terpisah), picker+pratinjau
+    admin. Test `category-image-upload` (8/8).
+- Local terakhir: `npm test` **1972/1972 pass, 0 fail**; `tsc --noEmit` api+admin bersih;
+  `validate:repo` 1271 files / 202 models; `workflow:validate` 67 item / 8 wave. main `f5f3913`.
+- **Yang tetap terbuka (bukan kode sesi ini):**
+  1. **Human Stage-20 / `audit:A-07`** — gerbang visual manusia, `productReady=false`.
+  2. **R6 heavy stress** butuh secret `K6_STRESS_ALLOWED_HOST` + `K6_STRESS_READ_TOKEN`/`WRITE_TOKEN`,
+     lalu `workflow_dispatch` manual.
+- **Koreksi audit 17 Okt:** 8 `UI_GAP` yang dicatat handoff 15 Okt **sudah tertutup semua** (PR #1,
+  16 Okt, dari working tree sesi yang terputus): transfer detail+departure (`branch-sync.tsx`),
+  digital-services detail (`ppob-workspace.tsx`), bulk offline-transactions (`r3-operations.tsx`),
+  automation-jobs/:id (`platform-control.tsx`), dan scan/submit/discard opname via PWA
+  `apps/pos/public/stock-count/app.js:191/238/273`. Ledger kini **0 UI_GAP**, 25 entri
+  (22 NODE_PROTOCOL, 1 DEVICE_INGEST, 1 PROVIDER_CALLBACK, 1 SUPERSEDED), audit `baseline agreed`.
+  `summary.byClass` di ledger yang stale (menyebut UI_GAP:8) ikut dikoreksi agar konsisten.
+- Branch lokal lama (`docs/*closeout`, `fix/audit-chain-source-binding`, `performance/k6-*`,
+  `release/*R8*`) sudah disupersed oleh main (squash-merge) — isinya versi lama kode; aman dihapus bila
+  diperlukan, tidak ada kerja unik tertinggal di sana.
+
+
 ## 2026-10-15 — A-17 CLOSED; controller granularity hid 34 unreachable endpoints (CLOSED)
 
 - Active work item: none. Last closed: `T360-20261015-164416` (A-17).
