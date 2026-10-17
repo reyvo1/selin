@@ -1,0 +1,41 @@
+{
+  "id": "T360-20261017-115949",
+  "title": "session handoff 17 oktober dan koreksi ledger ui gap",
+  "type": "documentation",
+  "module": "documentation",
+  "wave": "W0",
+  "phase": "IMPLEMENTATION",
+  "risk": "LOW",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "Session handoff wajib diperbarui tiap pindah sesi (AGENTS.md 6); ledger endpoint-coverage hanya boleh diedit manusia; summary.byClass harus konsisten dengan entries."
+  ],
+  "acceptanceCriteria": [
+    "handoff/CURRENT-WORK.md memuat status 17 Okt dengan koreksi 8 UI_GAP sudah tertutup; summary baseline sinkron dengan entries (25); audit endpoint coverage tetap PASS; test 11/11 hijau; PR lolos pull-request-policy."
+  ],
+  "testPlan": [
+    "tests/frontend-endpoint-coverage.test.mjs (11/11); npm run audit:endpoint:coverage baseline agreed; npm run workflow:validate."
+  ],
+  "migrationPlan": "Tidak ada perubahan database; perbarui bila dampak database berubah.",
+  "rollbackPlan": "Revert commit; ledger dan handoff kembali ke kondisi sebelumnya, tanpa dampak runtime.",
+  "monitoringPlan": "Audit endpoint coverage dijalankan tiap CI; selisih ledger vs pengukuran menggagalkan gate.",
+  "securityNotes": "Tanpa kredensial; perubahan dokumen dan field summary non-otoritatif.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-17T03:59:49.714Z",
+  "updatedAt": "2026-10-17T04:00:16.604Z"
+}
