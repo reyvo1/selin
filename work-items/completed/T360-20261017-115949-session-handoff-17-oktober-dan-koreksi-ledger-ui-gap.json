@@ -4,7 +4,7 @@
   "type": "documentation",
   "module": "documentation",
   "wave": "W0",
-  "phase": "IMPLEMENTATION",
+  "phase": "CLOSED",
   "risk": "LOW",
   "owner": "unassigned",
   "featureFlag": "",
@@ -37,5 +37,11 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-17T03:59:49.714Z",
-  "updatedAt": "2026-10-17T04:00:16.604Z"
+  "updatedAt": "2026-10-17T04:03:21.499Z",
+  "stagingEvidence": [
+    "PR #25 merged ke main, 6/6 check hijau; pull-request-policy lolos dengan work item ID tercantum."
+  ],
+  "releaseEvidence": [
+    "PR #25 merged ke main sebagai squash; audit:endpoint:coverage baseline agreed (25); frontend-endpoint-coverage test 11/11."
+  ]
 }
