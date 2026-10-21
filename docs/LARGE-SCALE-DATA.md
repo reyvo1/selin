@@ -110,6 +110,10 @@ Urutan prioritas pencarian:
 2. SKU exact match.
 3. SKU prefix match.
 4. Nama menggunakan PostgreSQL trigram/full-text search.
+
+Implementasi PostgreSQL: `database/postgresql/post-migration/001-trigram-product-search.sql`
+(ekstensi `pg_trgm` + GIN index pada `Product.name`/`ProductVariant.name`) ikut masuk ke
+`database/postgresql/releases/0001_baseline.sql`. SQLite development tetap memakai `LIKE`.
 5. Search engine terpisah hanya ketika PostgreSQL tidak lagi cukup.
 
 Larangan:
@@ -321,6 +325,10 @@ Alur:
 
 Ekspor besar juga memakai streaming dan background job. Hindari membuat seluruh file di RAM.
 
+Ekspor CSV interaktif (misalnya daftar produk) dibatasi 10.000 baris pertama dan response wajib membawa
+`rowLimit`, `rowCount`, serta `truncated`; UI menampilkan peringatan saat hasil terpotong. Ekspor penuh
+untuk katalog lebih besar harus melalui background job/report job, bukan menaikkan batas diam-diam.
+
 ## 18. Retention dan archiving
 
 Kategori data:
@@ -332,6 +340,13 @@ Kategori data:
 Data finansial dan transaksi mengikuti kebijakan hukum serta akuntansi yang berlaku. Data tidak boleh dihapus hanya untuk mempercepat sistem tanpa persetujuan kebijakan retention.
 
 Outbox, notification delivery, session, dan log teknis dapat memiliki retention lebih pendek setelah status final.
+
+Retensi teknis dijalankan otomatis oleh worker pada setiap tick menggunakan ambang di
+`config/performance-budget.json` (`retentionDays`): outbox `DISPATCHED`, webhook `DELIVERED`,
+notification final, log pengiriman slip gaji, dan payload mentah perangkat absensi dinull-kan tanpa
+menghapus event bisnisnya. Batas batch dan feature flag: `RETENTION_AUTO_ENABLED`,
+`RETENTION_BATCH_SIZE`. Data bisnis/finansial tetap memakai `DataRetentionPolicy` dan
+`DataArchiveRun` yang dijalankan terkontrol, bukan oleh tick ini.
 
 ## 19. Hybrid central-edge
 
@@ -394,6 +409,8 @@ Jalankan bertahap pada staging. Jangan melakukan destructive load test pada prod
 - switch feature flag setelah data siap;
 - hapus format lama pada rilis berikutnya;
 - setiap migration memiliki rollback/recovery plan.
+- baseline PostgreSQL dihasilkan deterministik dari schema: `npm run db:baseline:postgres`;
+  CI/test memverifikasi tidak ada drift dengan `npm run db:baseline:postgres:check`.
 
 ## 23. Tahapan implementasi
 

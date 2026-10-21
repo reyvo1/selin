@@ -134,7 +134,9 @@
     "audit:ui:domain-depth": "node scripts/audit-ui-domain-surface-depth.mjs",
     "uat:browser:fresh": "node scripts/fresh-state-uat.mjs",
     "ci:peripherals:simulation": "node --experimental-strip-types scripts/ci-peripheral-contract-simulation.mjs",
-    "ci:w3:postgres-probe": "node scripts/ci-w3-cash-postgres-probe.mjs"
+    "ci:w3:postgres-probe": "node scripts/ci-w3-cash-postgres-probe.mjs",
+    "db:baseline:postgres": "node scripts/build-postgres-baseline.mjs",
+    "db:baseline:postgres:check": "node scripts/build-postgres-baseline.mjs --check"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
