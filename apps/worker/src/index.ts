@@ -1,7 +1,7 @@
 import { createDecipheriv, createHash, createHmac } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -1084,6 +1084,73 @@ async function expirePendingStorefrontOrders(): Promise<void> {
   }
 }
 
+type RetentionDays = Record<string, number>;
+
+function retentionDaysFromBudget(): RetentionDays {
+  try {
+    const parsed = JSON.parse(readFileSync(resolve(process.cwd(), 'config/performance-budget.json'), 'utf8')) as { retentionDays?: RetentionDays };
+    return parsed.retentionDays ?? {};
+  } catch {
+    return {};
+  }
+}
+
+const RETENTION_MAX_BATCHES = 20;
+
+async function pruneBatches(
+  batch: number,
+  selectIds: (take: number) => Promise<Array<{ id: string }>>,
+  remove: (ids: string[]) => Promise<{ count: number }>,
+): Promise<number> {
+  let removed = 0;
+  for (let round = 0; round < RETENTION_MAX_BATCHES; round += 1) {
+    const rows = await selectIds(batch);
+    if (!rows.length) break;
+    const result = await remove(rows.map((row) => row.id));
+    removed += result.count;
+    if (rows.length < batch) break;
+  }
+  return removed;
+}
+
+async function runRetentionTick(): Promise<void> {
+  if (process.env.RETENTION_AUTO_ENABLED === 'false') return;
+  const batch = Math.min(Math.max(Number(process.env.RETENTION_BATCH_SIZE ?? 500) || 500, 1), 5000);
+  const days = retentionDaysFromBudget();
+  const cutoff = (key: string, fallback: number) => {
+    const value = Number(days[key]);
+    const window = Number.isFinite(value) && value > 0 ? value : fallback;
+    return new Date(Date.now() - window * 86_400_000);
+  };
+  const outbox = await pruneBatches(
+    batch,
+    (take) => prisma.eventOutbox.findMany({ where: { status: 'DISPATCHED', publishedAt: { lt: cutoff('completedOutbox', 30) } }, select: { id: true }, orderBy: { publishedAt: 'asc' }, take }),
+    (ids) => prisma.eventOutbox.deleteMany({ where: { id: { in: ids } } }),
+  );
+  const webhookDeliveries = await pruneBatches(
+    batch,
+    (take) => prisma.webhookDelivery.findMany({ where: { status: 'DELIVERED', deliveredAt: { lt: cutoff('successfulWebhookDelivery', 30) } }, select: { id: true }, orderBy: { deliveredAt: 'asc' }, take }),
+    (ids) => prisma.webhookDelivery.deleteMany({ where: { id: { in: ids } } }),
+  );
+  const notifications = await pruneBatches(
+    batch,
+    (take) => prisma.notification.findMany({ where: { status: { in: ['SENT', 'DELIVERED'] }, createdAt: { lt: cutoff('technicalNotificationLog', 90) } }, select: { id: true }, orderBy: { createdAt: 'asc' }, take }),
+    (ids) => prisma.notification.deleteMany({ where: { id: { in: ids } } }),
+  );
+  const payslipDeliveries = await pruneBatches(
+    batch,
+    (take) => prisma.employeeNotificationDelivery.findMany({ where: { payrollResultId: { not: null }, status: { in: ['SENT', 'DELIVERED'] }, sentAt: { lt: cutoff('successfulPayslipDeliveryLog', 365) } }, select: { id: true }, orderBy: { sentAt: 'asc' }, take }),
+    (ids) => prisma.employeeNotificationDelivery.deleteMany({ where: { id: { in: ids } } }),
+  );
+  const rawAttendancePayloads = await pruneBatches(
+    batch,
+    (take) => prisma.attendanceEvent.findMany({ where: { createdAt: { lt: cutoff('rawAttendanceDevicePayload', 90) }, sourcePayload: { not: Prisma.DbNull } }, select: { id: true }, orderBy: { createdAt: 'asc' }, take }),
+    (ids) => prisma.attendanceEvent.updateMany({ where: { id: { in: ids } }, data: { sourcePayload: Prisma.DbNull } }),
+  );
+  const total = outbox + webhookDeliveries + notifications + payslipDeliveries + rawAttendancePayloads;
+  if (total > 0) console.log(`[retention] outbox=${outbox} webhookDeliveries=${webhookDeliveries} notifications=${notifications} payslipDeliveries=${payslipDeliveries} rawAttendancePayloads=${rawAttendancePayloads}`);
+}
+
 async function tick(): Promise<void> {
   await expirePendingStorefrontOrders();
   await processLoyaltyExpiries();
@@ -1097,6 +1164,7 @@ async function tick(): Promise<void> {
   await processAutomationJobs();
   await processReportSchedules();
   await processReportJobs();
+  await runRetentionTick();
 }
 
 

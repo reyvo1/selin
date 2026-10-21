@@ -331,13 +331,16 @@ export class ProductsService {
 
   async exportCsv(user: AuthUser) {
     const scope = this.requireTenantScope(user);
+    const rowLimit = 10000;
     const rows = await this.prisma.product.findMany({
-      where: { companyId: scope.companyId }, include: { category: { select: { slug: true } } }, orderBy: [{ sku: 'asc' }, { id: 'asc' }], take: 10000,
+      where: { companyId: scope.companyId }, include: { category: { select: { slug: true } } }, orderBy: [{ sku: 'asc' }, { id: 'asc' }], take: rowLimit + 1,
     });
+    const truncated = rows.length > rowLimit;
+    const exported = truncated ? rows.slice(0, rowLimit) : rows;
     const escape = (value: unknown) => { const raw = value == null ? '' : String(value); return /[",\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw; };
     const headers = ['sku','name','barcode','unit','costPrice','salePrice','retailCeilingPrice','minStock','brandCode','categorySlug','productType','trackBatch','trackExpiry','trackSerial','isActive'];
-    const content = [headers.join(','), ...rows.map((row) => [row.sku,row.name,row.barcode,row.unit,row.costPrice,row.salePrice,row.retailCeilingPrice,row.minStock,row.brandCode,row.category?.slug,row.productType,row.trackBatch,row.trackExpiry,row.trackSerial,row.isActive].map(escape).join(','))].join('\n');
-    return { fileName: `products-${new Date().toISOString().slice(0,10)}.csv`, mimeType: 'text/csv;charset=utf-8', content: `\uFEFF${content}` };
+    const content = [headers.join(','), ...exported.map((row) => [row.sku,row.name,row.barcode,row.unit,row.costPrice,row.salePrice,row.retailCeilingPrice,row.minStock,row.brandCode,row.category?.slug,row.productType,row.trackBatch,row.trackExpiry,row.trackSerial,row.isActive].map(escape).join(','))].join('\n');
+    return { fileName: `products-${new Date().toISOString().slice(0,10)}.csv`, mimeType: 'text/csv;charset=utf-8', content: `\uFEFF${content}`, rowCount: exported.length, rowLimit, truncated };
   }
 
   private normalizeBulkRow(row: BulkProductRowDto) {
