@@ -4,6 +4,7 @@ import { AccountingCoreService, OperationalTaxLineInput } from '../accounting-co
 import { AuthUser } from '../auth/auth.types';
 import { nextDocumentNumber } from '../common/numbering';
 import { consumeAvailableLocationStock } from '../common/location-inventory';
+import { consumeProductBatchesFefo } from '../common/batch-fefo';
 import { serializableTx } from '../common/serializable-tx';
 import { beginIdempotent, completeIdempotent } from '../common/idempotency';
 import { decodeCursor, parsePageLimit, toCursorPage } from '../common/pagination';
@@ -1139,7 +1140,7 @@ export class SalesService {
       if (totalDiscount.greaterThan(rawSubtotal)) throw new BadRequestException('Diskon melebihi subtotal.');
       let netTotal = new Prisma.Decimal(0), taxTotal = new Prisma.Decimal(0), total = new Prisma.Decimal(0);
       const taxGroups = new Map<string, { base: Prisma.Decimal; tax: Prisma.Decimal }>();
-      const prepared = [] as Array<{ productId: string; variantId: string | null; productUnitId: string | null; quantity: number; unitPrice: Prisma.Decimal; unitCost: Prisma.Decimal; unitCode: string; unitQuantity: number; quantityFactor: number; sourceBarcode: string | null; subtotal: Prisma.Decimal; netSubtotal: Prisma.Decimal; taxAmount: Prisma.Decimal; grossSubtotal: Prisma.Decimal; taxCodeId?: string; productName: string }>;
+      const prepared = [] as Array<{ productId: string; variantId: string | null; productUnitId: string | null; quantity: number; unitPrice: Prisma.Decimal; unitCost: Prisma.Decimal; unitCode: string; unitQuantity: number; quantityFactor: number; sourceBarcode: string | null; subtotal: Prisma.Decimal; netSubtotal: Prisma.Decimal; taxAmount: Prisma.Decimal; grossSubtotal: Prisma.Decimal; taxCodeId?: string; trackBatch: boolean; productName: string }>;
       let allocatedDiscount = new Prisma.Decimal(0);
       for (const [index, item] of raw.entries()) {
         const share = rawSubtotal.isZero()
@@ -1174,6 +1175,7 @@ export class SalesService {
           taxAmount: calc.tax,
           grossSubtotal: calc.gross,
           taxCodeId: calc.taxCode?.id,
+          trackBatch: item.product.trackBatch,
           productName: item.product.name,
         });
         if (calc.taxCode && calc.tax.greaterThan(0)) {
@@ -1235,7 +1237,7 @@ export class SalesService {
       const sale = await tx.sale.create({ data: {
         number: await nextDocumentNumber(tx, { companyId: scope.companyId, branchId: scope.branchId, documentType: 'SALE', prefix: 'POS' }), branchId: scope.branchId, warehouseId: warehouse.id, customerId: dto.customerId,
         cashierShiftId, subtotal: rawSubtotal, discount: totalDiscount, tax: taxTotal, serviceFee, total: saleTotal, costTotal, createdAt: occurredAt,
-        items: { create: prepared.map(({ productName, ...item }) => item) },
+        items: { create: prepared.map(({ productName, trackBatch, ...item }) => item) },
       } });
       if (promotion.rule && promoDiscount.greaterThan(0)) {
         await this.promotions.recordRedemption(tx, scope, promotion.rule.id, dto.customerId, 'Sale', sale.id, promoDiscount);
@@ -1247,6 +1249,7 @@ export class SalesService {
           data: { quantity: { decrement: item.quantity }, available: { decrement: item.quantity } },
         });
         for (const allocation of allocations) await tx.inventoryMovement.create({ data: { warehouseId: warehouse.id, productId: item.productId, locationId: allocation.locationId, type: 'SALE', quantity: -allocation.quantity, balanceAfter: inventory.quantity, referenceType: 'Sale', referenceId: sale.id, createdAt: occurredAt } });
+        if (item.trackBatch) await consumeProductBatchesFefo(tx, { warehouseId: warehouse.id, productId: item.productId, quantity: item.quantity });
       }
       const payments: Array<{ id: string }> = [];
       for (const requested of requestedPayments) {

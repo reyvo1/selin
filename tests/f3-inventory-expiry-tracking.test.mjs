@@ -26,10 +26,16 @@ test('F3 goods receipt fails closed for missing or expired traceability data', (
 });
 
 test('F3 fulfillment uses FEFO and never consumes expired batches', () => {
-  const service = read('apps/api/src/orders/orders.service.ts');
+  const service = read('apps/api/src/common/batch-fefo.ts');
   assert.match(service, /expiryDate: \{ gt: now \}/);
   assert.match(service, /const batches = \[\.\.\.expiringBatches, \.\.\.nonExpiringBatches\]/);
   assert.match(service, /orderBy: \[\{ expiryDate: 'asc' \}, \{ createdAt: 'asc' \}\]/);
+});
+
+test('F3 POS checkout consumes batch stock with the shared FEFO helper', () => {
+  const sales = read('apps/api/src/sales/sales.service.ts');
+  assert.match(sales, /import \{ consumeProductBatchesFefo \} from '\.\.\/common\/batch-fefo'/);
+  assert.match(sales, /if \(item\.trackBatch\) await consumeProductBatchesFefo\(tx, \{ warehouseId: warehouse\.id, productId: item\.productId, quantity: item\.quantity \}\)/);
 });
 
 test('F3 batch pre-registration and operator UI enforce expiry configuration', () => {
