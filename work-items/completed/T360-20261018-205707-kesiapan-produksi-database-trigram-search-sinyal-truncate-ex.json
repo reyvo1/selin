@@ -1,0 +1,55 @@
+{
+  "id": "T360-20261018-205707",
+  "title": "kesiapan produksi database trigram search sinyal truncate export baseline migrasi postgresql dan retensi teknis otomatis",
+  "type": "performance",
+  "module": "performance",
+  "wave": "W7",
+  "phase": "CLOSED",
+  "risk": "MEDIUM",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "Pencarian nama produk memakai trigram PostgreSQL (GIN pg_trgm) di production; SQLite development tetap LIKE.",
+    "Baseline migration PostgreSQL dihasilkan deterministik dari schema + post-migration SQL dan diperiksa drift-nya.",
+    "Export CSV interaktif dibatasi 10.000 baris dan wajib mengembalikan rowLimit/rowCount/truncated; UI menampilkan peringatan.",
+    "Retensi worker hanya menyentuh log teknis berstatus final sesuai retentionDays; payload mentah absensi dinull-kan tanpa menghapus event."
+  ],
+  "acceptanceCriteria": [
+    "npm run db:baseline:postgres:check lulus pada worktree bersih; baseline memuat 202 tabel + pg_trgm + 5 index retensi.",
+    "Export 10.002 baris menghasilkan truncated=true, rowCount=10000, isi 10.001 baris (header+data).",
+    "Worker memangkas hanya 5 tabel teknis, batch<=5000, maks 20 putaran, flag RETENTION_AUTO_ENABLED=false menghentikan retensi.",
+    "19 test baru hijau, suite penuh 1991/1991, tsc api/worker/admin bersih, workflow:validate lulus."
+  ],
+  "testPlan": [
+    "tests/postgres-production-baseline.test.mjs (6), tests/product-export-truncation-signal.test.mjs (5), tests/retention-auto-worker.test.mjs (8); verifikasi baseline --check di worktree terisolasi; npm test full."
+  ],
+  "migrationPlan": "Perubahan schema expand-only berupa 5 index; SQLite dev memakai alur db push lokal. Production menerapkan database/postgresql/releases/0001_baseline.sql (regenerasi via npm run db:baseline:postgres); tabel existing besar memakai CREATE INDEX CONCURRENTLY sesuai catatan post-migration.",
+  "rollbackPlan": "Set RETENTION_AUTO_ENABLED=false lalu restart worker; DROP INDEX index baru bila mengganggu write; revert commit dan regenerasi baseline dari schema sebelumnya. Tidak ada mutasi data bisnis sehingga tidak perlu compensating transaction.",
+  "monitoringPlan": "Log [retention] per tick saat ada baris terpangkas; pantau durasi tick worker, slow query >500ms, dan bloat/dead tuple via scripts/profile-postgres-indexes.mjs; CI menjalankan baseline --check untuk mendeteksi drift schema.",
+  "securityNotes": "Tidak ada secret baru. Retensi berjalan lintas tenant hanya untuk log teknis (outbox/webhook/notification/log slip/payload mentah) tanpa menyentuh data bisnis; tenant scope endpoint export tidak berubah; baseline SQL tidak memuat kredensial.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-18T12:57:07.286Z",
+  "updatedAt": "2026-10-21T04:27:27.907Z",
+  "stagingEvidence": [
+    "PR #27 merged ke main, 6/6 check hijau (pull-request-policy, manifest-policy, repo/local-profile, SQLite integration, PostgreSQL integration, stress).",
+    "Worktree terisolasi: db:baseline:postgres:check sinkron, prisma validate PG valid, 19/19 test baru hijau."
+  ],
+  "releaseEvidence": [
+    "PR #27 squash-merge ke main sebagai df1ecbd.",
+    "npm test 1991/1991 pass; tsc api/worker/admin bersih; workflow:validate 70 item/8 wave."
+  ]
+}
