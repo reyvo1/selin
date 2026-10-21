@@ -4,7 +4,7 @@
   "type": "bug",
   "module": "batch-serial",
   "wave": "W1",
-  "phase": "IMPLEMENTATION",
+  "phase": "CLOSED",
   "risk": "HIGH",
   "owner": "unassigned",
   "featureFlag": "",
@@ -46,5 +46,13 @@
     "docs/DEVELOPMENT-KIT.md"
   ],
   "createdAt": "2026-10-17T11:32:16.386Z",
-  "updatedAt": "2026-10-21T04:35:36.633Z"
+  "updatedAt": "2026-10-21T04:43:43.942Z",
+  "stagingEvidence": [
+    "PR #29 merged dengan 6/6 check hijau: pull-request-policy, manifest-policy, Repository and local-profile tests, No-Docker local SQLite integration, GitHub container PostgreSQL integration, stress.",
+    "Full suite di worktree bersih: 1996/1996 pass (run pertama sempat 1 kegagalan flaky yang tidak terulang pada rerun penuh; CI hijau)."
+  ],
+  "releaseEvidence": [
+    "PR #29 squash-merge ke main sebagai 9dd3f76.",
+    "Test runtime FEFO 4/4 + F3 6/6; tsc API bersih; baseline PostgreSQL sinkron dengan schema."
+  ]
 }

@@ -1,5 +1,21 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-21 (lanjutan) — POS sale mengonsumsi batch FEFO
+
+- Ditutup: `T360-20261017-193216` (module batch-serial, HIGH). `SalesService.create` kini memanggil
+  helper `consumeProductBatchesFefo` di dalam transaksi untuk setiap item `trackBatch`; helper
+  diekstrak dari `orders.service`. Batch expired tidak pernah dijual, batch terdekat kedaluwarsa
+  dikonsumsi lebih dulu, dan transaksi gagal tertutup bila stok batch bebas kurang. Tidak ada
+  perubahan schema: kolom `SaleItem.trackBatch` yang vestigial dibatalkan.
+- Evidence PR #29 (6/6 check, squash `9dd3f76`): test runtime `tests/fefo-pos-sale-batch-runtime.test.mjs`
+  (4) + F3 (6) = 10/10; replay offline/functional/core POS 18/18; tsc API bersih; baseline PostgreSQL
+  sinkron; suite penuh **1996/1996** (rerun; run pertama sempat 1 kegagalan flaky yang tidak terulang).
+- Committed: `main` `9dd3f76` (+ closure PR ini); 70 work item completed, 0 active.
+- Sisa lokal belum dikomit (bukan bagian FEFO, dari sesi 17 Okt): `.gitignore` (`.aider*`),
+  `config/p5-full-ui-root-audit.json`, `docs/P5-FULL-UI-ROOT-AUDIT.md`; tidak mengubah kode.
+- Tetap terbuka (manusia): Human Stage-20; R6 heavy stress (secret/variable `K6_STRESS_*`);
+  kredensial provider eksternal (Telegram, PPOB/pembayaran).
+
 ## 2026-10-21 — Kesiapan produksi database: baseline migrasi, trigram, retensi, export
 
 - Ditutup: `T360-20261018-205707` **kesiapan produksi database** (PR #27, 6/6 check hijau, squash `df1ecbd`).
