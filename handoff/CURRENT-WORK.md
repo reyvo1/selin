@@ -1,5 +1,30 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-21 — Kesiapan produksi database: baseline migrasi, trigram, retensi, export
+
+- Ditutup: `T360-20261018-205707` **kesiapan produksi database** (PR #27, 6/6 check hijau, squash `df1ecbd`).
+  Implementasi: (1) baseline PostgreSQL versioned `database/postgresql/releases/0001_baseline.sql`
+  (202 tabel) + `scripts/build-postgres-baseline.mjs` dan `npm run db:baseline:postgres[:check]`;
+  (2) trigram `pg_trgm` GIN pada `Product.name`/`ProductVariant.name` lewat
+  `database/postgresql/post-migration/001-trigram-product-search.sql` (SQLite tetap LIKE);
+  (3) export CSV produk berbatas eksplisit `rowLimit/rowCount/truncated` + peringatan admin;
+  (4) retensi teknis otomatis worker (outbox/webhook/notification/log slip/payload mentah absensi)
+  dengan ambang `config/performance-budget.json`, batch ≤5000, `RETENTION_AUTO_ENABLED`;
+  (5) 5 index pendukung retensi di 3 dialek schema. Test baru 19/19; suite penuh **1991/1991**.
+- **Catatan wajib:** setiap perubahan schema (termasuk pekerjaan batch/FEFO yang sedang berjalan) harus
+  menjalankan `npm run db:baseline:postgres` agar `db:baseline:postgres:check` (dipakai test/CI) tidak
+  melaporkan drift. Baseline yang dikomit saat ini = schema HEAD + 5 index retensi + trigram.
+- **Pekerjaan paralel belum dikomit (bukan sesi ini):** work item `T360-20261017-193216`
+  (POS sale belum mengonsumsi batch/FEFO) + `apps/api/src/common/batch-fefo.ts`, perubahan
+  `orders/sales`, `SaleItem.trackBatch`, `.aider*` masih ada sebagai perubahan working tree di
+  `/home/ivo/Desktop/tokofinal`. Jangan `git reset --hard`/checkout paksa; pekerjaan itu harus
+  masuk PR sendiri dan meregenerasi baseline setelah schema-nya final.
+- Status committed: `main` `df1ecbd` (+ closure PR ini); 69 work item completed, 0 active di repo;
+  `workflow:validate` 69 item / 8 wave; `npm test` 1991/1991 pada branch.
+- **Tetap terbuka (manusia):** Human Stage-20 / `audit:A-07` (`productReady=false`); R6 heavy stress
+  butuh variable `K6_STRESS_ALLOWED_HOST` + secret `K6_STRESS_READ_TOKEN`/`WRITE_TOKEN` lalu
+  `workflow_dispatch`; uji live provider eksternal (token Telegram, PPOB/pembayaran).
+
 ## 2026-10-17 — Sesi 17 Okt: 8 PR ditutup, 0 work item aktif, 1972 test hijau
 
 - Active work item: **none** (`work-items/active/` kosong). Completed: **67**. `workflow:validate` lulus.
