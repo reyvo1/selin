@@ -1,0 +1,50 @@
+{
+  "id": "T360-20261017-193216",
+  "title": "pos sale tidak mengonsumsi batch sehingga stok batch dan inventori drift",
+  "type": "bug",
+  "module": "batch-serial",
+  "wave": "W1",
+  "phase": "IMPLEMENTATION",
+  "risk": "HIGH",
+  "owner": "unassigned",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "HIGH",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "LOW",
+    "security": "NONE",
+    "performance": "LOW"
+  },
+  "businessRules": [
+    "Batch dengan tanggal kedaluwarsa terdekat dikonsumsi lebih dulu; batch yang sudah kedaluwarsa tidak pernah dikonsumsi.",
+    "Penjualan produk trackBatch wajib memiliki stok batch bebas yang cukup; bila kurang, seluruh transaksi gagal (fail closed) tanpa mutasi parsial.",
+    "Invariant pasca-penjualan: Inventory.quantity harus sama dengan jumlah InventoryBatch.quantity untuk produk trackBatch.",
+    "Mutasi batch memakai updateMany bersyarat (quantity >= reserved + take) sehingga aman terhadap concurrency dan retry."
+  ],
+  "acceptanceCriteria": [
+    "POS menjual 25 unit produk trackBatch: batch EARLY habis, LATE berkurang, batch expired utuh, Inventory dan sum batch sama-sama turun 25.",
+    "Penjualan melebihi stok batch bebas ditolak tanpa meninggalkan Sale, movement, atau perubahan batch parsial.",
+    "Produk non-batch tetap dapat dijual dan tidak menyentuh InventoryBatch.",
+    "Test F3 + runtime FEFO hijau, tsc API bersih, dan baseline PostgreSQL tidak berubah."
+  ],
+  "testPlan": [
+    "tests/fefo-pos-sale-batch-runtime.test.mjs: eksekusi SalesService nyata pada SQLite untuk FEFO, expired, invariant stok, fail closed, dan produk non-batch.",
+    "tests/f3-inventory-expiry-tracking.test.mjs: memastikan checkout POS memakai helper FEFO bersama.",
+    "tests/offline-pos-replay.test.mjs: replay offline idempotent tidak menggandakan penjualan/batch consumption.",
+    "tsc --noEmit API dan suite penuh."
+  ],
+  "migrationPlan": "Tidak ada perubahan database. Kolom SaleItem.trackBatch yang vestigial dibatalkan sehingga baseline PostgreSQL dan ketiga schema tidak berubah.",
+  "rollbackPlan": "Revert commit lalu redeploy. Bila batch sudah terlanjur tidak dikonsumsi pada penjualan lama, rekonsiliasi dengan membandingkan Inventory.quantity terhadap SUM(InventoryBatch.quantity) per produk trackBatch dan koreksi melalui penyesuaian batch yang diaudit.",
+  "monitoringPlan": "Pantau selisih Inventory.quantity vs SUM(InventoryBatch.quantity) per produk trackBatch; alert bila selisih bukan nol. Log penolakan \"Stok batch bebas tidak mencukupi\" untuk mendeteksi batch yang belum dipraregistrasi.",
+  "securityNotes": "Tidak ada perubahan autentikasi, permission, atau tenant scope. Konsumsi batch berjalan di dalam transaksi penjualan yang sudah tenant-scoped dan tidak menulis data sensitif baru.",
+  "documentation": [
+    "docs/DEVELOPMENT-KIT.md"
+  ],
+  "createdAt": "2026-10-17T11:32:16.386Z",
+  "updatedAt": "2026-10-21T04:35:36.633Z"
+}

@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { AccountingCoreService, OperationalTaxLineInput } from '../accounting-core/accounting-core.service';
 import { AuthUser } from '../auth/auth.types';
 import { nextDocumentNumber } from '../common/numbering';
+import { consumeProductBatchesFefo } from '../common/batch-fefo';
 import { consumeLocationReservations, releaseLocationReservations, reserveLocationStock } from '../common/location-inventory';
 import { serializableTx } from '../common/serializable-tx';
 import { beginIdempotent, completeIdempotent } from '../common/idempotency';
@@ -775,30 +776,7 @@ export class OrdersService {
   }
 
   private async consumeBatches(tx: Prisma.TransactionClient, warehouseId: string, productId: string, quantity: number) {
-    let remaining = quantity;
-    const now = new Date();
-    const expiringBatches = await tx.inventoryBatch.findMany({
-      where: { warehouseId, productId, quantity: { gt: 0 }, expiryDate: { gt: now } },
-      orderBy: [{ expiryDate: 'asc' }, { createdAt: 'asc' }],
-    });
-    const nonExpiringBatches = await tx.inventoryBatch.findMany({
-      where: { warehouseId, productId, quantity: { gt: 0 }, expiryDate: null },
-      orderBy: { createdAt: 'asc' },
-    });
-    const batches = [...expiringBatches, ...nonExpiringBatches];
-    for (const batch of batches) {
-      if (remaining <= 0) break;
-      const free = Math.max(0, batch.quantity - batch.reserved);
-      if (!free) continue;
-      const take = Math.min(free, remaining);
-      const changed = await tx.inventoryBatch.updateMany({
-        where: { id: batch.id, quantity: { gte: batch.reserved + take } },
-        data: { quantity: { decrement: take } },
-      });
-      if (changed.count !== 1) throw new BadRequestException('Stok batch berubah saat fulfillment. Ulangi proses pengiriman.');
-      remaining -= take;
-    }
-    if (remaining > 0) throw new BadRequestException('Stok batch bebas tidak mencukupi untuk pengiriman.');
+    return consumeProductBatchesFefo(tx, { warehouseId, productId, quantity });
   }
 
   async ship(id: string, dto: DispatchOrderDto, user: AuthUser) {
