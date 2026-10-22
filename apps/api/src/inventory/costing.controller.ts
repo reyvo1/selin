@@ -5,11 +5,15 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { Permissions } from '../auth/permissions.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { InventoryCostingPolicyService } from './costing-policy.service';
+import { InventoryCostingReportService } from './costing-report.service';
 import { CreateCostingPolicyDto } from './dto/costing.dto';
 
 @ApiTags('inventory-costing') @ApiBearerAuth() @Controller('inventory/costing')
 export class InventoryCostingController {
-  constructor(private readonly policies: InventoryCostingPolicyService) {}
+  constructor(
+    private readonly policies: InventoryCostingPolicyService,
+    private readonly reports: InventoryCostingReportService,
+  ) {}
 
   @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('policies')
   listPolicies(
@@ -35,5 +39,29 @@ export class InventoryCostingController {
   @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('valuation')
   valuation(@CurrentUser() user: AuthUser, @Query('warehouseId') warehouseId?: string, @Query('productId') productId?: string) {
     return this.policies.valuation(user, { warehouseId, productId });
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('layers')
+  layers(
+    @CurrentUser() user: AuthUser,
+    @Query('warehouseId') warehouseId?: string,
+    @Query('productId') productId?: string,
+    @Query('batchKey') batchKey?: string,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.reports.layers(user, { warehouseId, productId, batchKey, status, limit, cursor });
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('reconciliation')
+  reconciliation(
+    @CurrentUser() user: AuthUser,
+    @Query('warehouseId') warehouseId?: string,
+    @Query('productId') productId?: string,
+    @Query('limit') limit?: string,
+    @Query('onlyDifferences') onlyDifferences?: string,
+  ) {
+    return this.reports.reconciliation(user, { warehouseId, productId, limit, onlyDifferences });
   }
 }

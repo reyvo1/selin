@@ -28,6 +28,7 @@ const { AdvancedInventoryService } = await load('apps/api/src/advanced-inventory
 const { ManufacturingService } = await load('apps/api/src/manufacturing/manufacturing.service.ts', opts);
 const { AssetsService } = await load('apps/api/src/assets/assets.service.ts', opts);
 const { InventoryCostingPolicyService } = await load('apps/api/src/inventory/costing-policy.service.ts', opts);
+const { InventoryCostingReportService } = await load('apps/api/src/inventory/costing-report.service.ts', opts);
 
 const accounting = new AccountingCoreService(prisma);
 const sales = new SalesService(prisma, accounting, new StockAlertService(prisma),
@@ -38,6 +39,7 @@ const advanced = new AdvancedInventoryService(prisma, accounting, new InventoryC
 const manufacturing = new ManufacturingService(prisma, accounting, new InventoryCostingService());
 const assets = new AssetsService(prisma, accounting, new InventoryCostingService());
 const costingPolicies = new InventoryCostingPolicyService(prisma);
+const costingReports = new InventoryCostingReportService(prisma);
 
 const COMPANY = 'acme';
 const USER = 'u-1';
@@ -695,4 +697,48 @@ test('costing policy API stores a DRAFT, activates a forward-effective policy, a
 test('costing policy API rejects activation of a backdated policy', async () => {
   const draft = await costingPolicies.create(user, { method: 'MOVING_AVERAGE', mode: 'SHADOW', effectiveFrom: day(-2).toISOString() });
   await assert.rejects(() => costingPolicies.activate(approver, draft.id), /masa lalu/);
+});
+
+
+test('costing layers and reconciliation are tenant-scoped and expose quantity/value differences', async () => {
+  const PRODUCT = 'p-report';
+  const MISMATCH = 'p-report-mismatch';
+  await prisma.product.createMany({ data: [
+    { id: PRODUCT, companyId: COMPANY, sku: 'RPT-1', name: 'Report', costPrice: 100, salePrice: 200, unit: 'PCS' },
+    { id: MISMATCH, companyId: COMPANY, sku: 'RPT-2', name: 'Report Mismatch', costPrice: 100, salePrice: 200, unit: 'PCS' },
+  ] });
+  await prisma.inventory.createMany({ data: [
+    { warehouseId: WAREHOUSE, productId: PRODUCT, quantity: 4, available: 4 },
+    { warehouseId: WAREHOUSE, productId: MISMATCH, quantity: 3, available: 3 },
+  ] });
+  await prisma.inventoryCostState.createMany({ data: [
+    { companyId: COMPANY, branchId: BRANCH, warehouseId: WAREHOUSE, productId: PRODUCT, batchKey: '', method: 'MOVING_AVERAGE', quantity: 4, value: 400, averageCost: 100 },
+    { companyId: COMPANY, branchId: BRANCH, warehouseId: WAREHOUSE, productId: MISMATCH, batchKey: '', method: 'MOVING_AVERAGE', quantity: 2, value: 200, averageCost: 100 },
+  ] });
+  await prisma.inventoryCostLayer.create({ data: {
+    companyId: COMPANY, branchId: BRANCH, warehouseId: WAREHOUSE, productId: PRODUCT, batchKey: '', method: 'MOVING_AVERAGE',
+    sourceEventId: 'report-layer-event', receivedAt: day(-1), originalQty: 4, remainingQty: 4,
+    unitCost: 100, originalValue: 400, remainingValue: 400, status: 'OPEN',
+  } });
+
+  const layers = await costingReports.layers(user, { productId: PRODUCT });
+  assert.equal(layers.items.length, 1);
+  assert.equal(layers.items[0].remainingQty, 4);
+  assert.equal(layers.items[0].remainingValue, '400.00');
+
+  const matched = await costingReports.reconciliation(user, { productId: PRODUCT });
+  assert.equal(matched.totals.stateQuantity, 4);
+  assert.equal(matched.totals.inventoryQuantity, 4);
+  assert.equal(matched.totals.quantityDifference, 0);
+  assert.equal(matched.totals.matched, true);
+  assert.equal(matched.byWarehouse[0].valueDifference, '0.00');
+
+  const mismatch = await costingReports.reconciliation(user, { productId: MISMATCH, onlyDifferences: 'true' });
+  assert.equal(mismatch.byWarehouse.length, 1);
+  assert.equal(mismatch.byWarehouse[0].quantityDifference, -1);
+  assert.equal(mismatch.byWarehouse[0].matched, false);
+
+  const otherBranch = await costingReports.reconciliation({ ...user, branchId: 'br-other' }, {});
+  assert.equal(otherBranch.byWarehouse.length, 0);
+  assert.equal(otherBranch.totals.stateQuantity, 0);
 });

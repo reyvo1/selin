@@ -15,15 +15,19 @@
   manage. Test statis mengunci matriks ini. `rebuild` belum punya endpoint.
 - Valuasi read-only mengagregasi `InventoryCostState` per warehouse dengan scope
   company/branch dari token; belum ada rekonsiliasi state vs inventory vs GL.
-- Test bertambah menjadi **15 static + 13 runtime PASS**; `quality:fast` PASS
-  **2024/2024 test**, lint, `db:local:prepare`, worker build.
+- Layer explorer dan rekonsiliasi read-only ditambahkan:
+  `GET /inventory/costing/layers` (pagination, filter warehouse/product/batch/status)
+  dan `GET /inventory/costing/reconciliation` (state vs Inventory per warehouse,
+  plus nilai layer OPEN bila ada). Rekonsiliasi vs GL belum tersedia.
+- Test bertambah menjadi **15 static + 14 runtime PASS**; `quality:fast` PASS
+  **2025/2025 test**, lint, `db:local:prepare`, worker build.
 - Commit `2bb91b3` pada branch
   `feature/T360-20261021-134120-costing-engine-dan-valuasi`, sudah dipush ke
   `origin`. Tiga file lama (`.gitignore`, `config/p5-full-ui-root-audit.json`,
   `docs/P5-FULL-UI-ROOT-AUDIT.md`) tetap tidak di-commit karena bukan bagian
   work item.
-- Berikutnya: rebuild SHADOW/backfill, rekonsiliasi, layer/reconciliation API,
-  lalu uji aktivasi flag pada database TEST.
+- Berikutnya: rebuild SHADOW/backfill, rekonsiliasi vs GL, lalu uji aktivasi
+  flag pada database TEST.
 
 ## 2026-10-21 (lanjutan 8) — Transfer dan opname memakai costing
 

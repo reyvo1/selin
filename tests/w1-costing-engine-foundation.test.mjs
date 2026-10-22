@@ -208,6 +208,12 @@ test('costing policy API is permissioned, tenant-scoped, and blocks backdated ac
   assert.match(controller, /@Permissions\('inventory\.costing\.manage'\) @Post\('policies'\)/);
   assert.match(controller, /@Permissions\('inventory\.costing\.manage'\) @Post\('policies\/:id\/activate'\)/);
   assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('valuation'\)/);
+  assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('layers'\)/);
+  assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('reconciliation'\)/);
+  const reportService = read('apps/api/src/inventory/costing-report.service.ts');
+  assert.match(reportService, /branchId: scope\.branchId/);
+  assert.match(reportService, /groupBy\(\{ by: \['warehouseId'\]/);
+  assert.match(reportService, /quantityDifference/);
   assert.match(seed, /'inventory\.costing\.view','inventory\.costing\.manage','inventory\.costing\.rebuild'/);
   const adminMatrix = seed.slice(seed.indexOf("['ADMIN', ["), seed.indexOf("['CASHIER'"));
   const warehouseMatrix = seed.slice(seed.indexOf("['WAREHOUSE', ["), seed.indexOf("['PURCHASING'"));
@@ -223,6 +229,7 @@ test('costing policy API is permissioned, tenant-scoped, and blocks backdated ac
   assert.match(policyService, /action: 'COSTING_POLICY_CREATED'/);
   assert.match(policyService, /action: 'COSTING_POLICY_ACTIVATED'/);
   assert.match(read('apps/api/src/inventory/inventory.module.ts'), /InventoryCostingController/);
+  assert.match(read('apps/api/src/inventory/inventory.module.ts'), /InventoryCostingReportService/);
 });
 
 test('ADR is accepted and the costing work item entered IMPLEMENTATION', () => {

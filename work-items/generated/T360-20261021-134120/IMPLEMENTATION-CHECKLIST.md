@@ -24,6 +24,7 @@
 - [x] Perbarui dokumentasi dan feature flag.
 - [x] Integrasi writer receipt, sale, order, retur penjualan/order, purchase return, transfer, opname, produksi, dan maintenance (2026-10-21).
 - [x] API policy costing (DRAFT/activate), guard maker-checker, permission, audit, dan valuasi read-only (2026-10-22).
+- [x] Layer explorer dan rekonsiliasi state vs Inventory/layer OPEN read-only (2026-10-22).
 
 ## Verification
 

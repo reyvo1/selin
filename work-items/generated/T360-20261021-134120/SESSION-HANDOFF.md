@@ -100,8 +100,9 @@
 
 ## Belum dikerjakan
 
-- Rebuild SHADOW/backfill, rekonsiliasi state vs inventory vs GL, layer API,
-  dan endpoint rebuild/rebuild-runs.
+- Rebuild SHADOW/backfill dan endpoint rebuild/rebuild-runs.
+- Rekonsiliasi vs GL dan layer explorer FIFO/LIFO; layer/reconciliation
+  state vs Inventory sudah tersedia read-only.
 - FIFO/LIFO layer/consumption masih ditolak service; P0 baru moving average.
 - Negative stock policy dan penanganan state negatif end-to-end.
 - PostgreSQL migration rehearsal (butuh `T360_MIGRATION_DATABASE_URL`).
@@ -111,8 +112,8 @@
 ## Hasil quality gate
 
 - `node scripts/workflow.mjs validate`: PASS 73 work item / 8 delivery wave.
-- `npm run validate:repo`: PASS 1311 files / 208 Prisma models.
-- `npm run quality:fast`: PASS 2024/2024 test, lint, `db:local:prepare`,
+- `npm run validate:repo`: PASS 1312 files / 208 Prisma models.
+- `npm run quality:fast`: PASS 2025/2025 test, lint, `db:local:prepare`,
   dan worker build.
 - `npm run db:migrations:rehearse:sqlite`: PASS 1 migration.
 - `npm run db:baseline:postgres:check`: PASS (baseline sinkron).
@@ -128,8 +129,9 @@
 - Policy ACTIVE melalui API belum mengaktifkan feature flag dan belum
   menjalankan rebuild/backfill; flag tetap harus dinyalakan terpisah setelah
   rekonsiliasi.
-- Valuasi API hanya membaca state saat ini; belum ada rekonsiliasi state vs
-  inventory vs GL atau layer explorer.
+- Valuasi API hanya membaca state saat ini. Rekonsiliasi state vs Inventory
+  dan layer OPEN sudah ada; rekonsiliasi vs GL belum, dan layer FIFO/LIFO
+  belum diimplementasikan.
 - Pesanan lama yang sudah dikirim sebelum integrasi ini tidak memiliki ISSUE
   event; retur order ACTIVE untuk pesanan tersebut akan fail-closed sampai
   backfill/opening dijalankan. Pada mode SHADOW/flag OFF tanpa trace, quantity
@@ -151,5 +153,4 @@
 
 1. Implementasikan rebuild SHADOW/backfill ISSUE untuk pesanan/transfer lama
    dan opening cost state.
-2. Rekonsiliasi state vs inventory vs GL, layer/reconciliation API, lalu uji
-   aktivasi flag pada database TEST.
+2. Rekonsiliasi vs GL, lalu uji aktivasi flag pada database TEST.
