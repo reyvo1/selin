@@ -50,6 +50,7 @@ const { AccountingCoreService } = await load('apps/api/src/accounting-core/accou
 const { StockAlertService } = await load('apps/api/src/sales/stock-alert.service.ts', opts);
 const { PromotionsService } = await load('apps/api/src/promotions/promotions.service.ts', opts);
 const { SupervisorApprovalService } = await load('apps/api/src/supervisor-approval/supervisor-approval.service.ts', opts);
+const { InventoryCostingService } = await load('apps/api/src/inventory/costing.service.ts', opts);
 const { SalesService } = await load('apps/api/src/sales/sales.service.ts', opts);
 const { OperationsControlService } = await load('apps/api/src/operations-control/operations-control.service.ts', opts);
 const { ReportsService } = await load('apps/api/src/reports/reports.service.ts', opts);
@@ -57,12 +58,12 @@ const { MultiOutletService } = await load('apps/api/src/reports/multi-outlet.ser
 const { ReturnsService } = await load('apps/api/src/returns/returns.service.ts', opts);
 
 const accounting = new AccountingCoreService(prisma);
-const sales = new SalesService(prisma, accounting, new StockAlertService(prisma), new PromotionsService(prisma), new SupervisorApprovalService(prisma));
+const sales = new SalesService(prisma, accounting, new StockAlertService(prisma), new PromotionsService(prisma), new SupervisorApprovalService(prisma), new InventoryCostingService());
 const operations = new OperationsControlService(prisma);
 const reports = new ReportsService(prisma);
 const multiOutlet = new MultiOutletService(prisma);
 const storefrontCustomers = { resolveBranchByCode: async () => { throw new Error('storefront resolution must not be reached by this path'); } };
-const returns = new ReturnsService(prisma, accounting, operations, storefrontCustomers);
+const returns = new ReturnsService(prisma, accounting, operations, storefrontCustomers, new InventoryCostingService());
 
 const COMPANY = 'acme';
 const USER = 'u-1';

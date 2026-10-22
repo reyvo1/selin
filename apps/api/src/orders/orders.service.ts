@@ -15,6 +15,7 @@ import { resolveSellingUnitLine } from '../common/transaction-uom';
 import { PrismaService } from '../prisma/prisma.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { StorefrontCustomerService } from '../storefront-customer/storefront-customer.service';
+import { InventoryCostingService, costingPayloadHash } from '../inventory/costing.service';
 import { CancelOrderDto, ConfirmOrderPaymentDto, CreateOrderDto, DispatchOrderDto, PayOrderDto } from './dto/create-order.dto';
 
 type TenantScope = { companyId: string; branchId: string };
@@ -28,6 +29,7 @@ export class OrdersService {
     private readonly config: ConfigService,
     private readonly storefrontCustomers: StorefrontCustomerService,
     private readonly promotions: PromotionsService,
+    private readonly costing: InventoryCostingService,
   ) {}
 
   private requireTenantScope(user: AuthUser): TenantScope {
@@ -813,13 +815,19 @@ export class OrdersService {
       const deferred = ['COD','INVOICE'].includes(payment.method);
       if (!prepaid && !deferred) throw new BadRequestException('Pesanan elektronik belum terkonfirmasi dibayar dan tidak dapat dikirim.');
 
-      const costTotal = order.items.reduce((sum, item) => sum.add(new Prisma.Decimal(item.unitCost).mul(item.quantity)), new Prisma.Decimal(0));
+      const occurredAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, occurredAt);
+      const costingEnabled = costingMode !== null;
+      const costingActive = costingMode === 'ACTIVE';
+      let costTotal = order.items.reduce((sum, item) => sum.add(new Prisma.Decimal(item.unitCost).mul(item.quantity)), new Prisma.Decimal(0));
+      if (costingActive) costTotal = new Prisma.Decimal(0);
       const taxGroups = new Map<string, { base: Prisma.Decimal; tax: Prisma.Decimal }>();
       const fulfillmentQuantities = new Map<string, { quantity: number; productName: string }>();
       for (const item of order.items) {
         const current = fulfillmentQuantities.get(item.productId);
         fulfillmentQuantities.set(item.productId, { quantity: (current?.quantity ?? 0) + item.quantity, productName: item.product.name });
       }
+      const firstMovementByProduct = new Map<string, string>();
       for (const [productId, value] of fulfillmentQuantities) {
         const allocations = await consumeLocationReservations(tx, { sourceType: 'Order', sourceId: order.id, warehouseId: order.warehouseId, productId, quantity: value.quantity });
         const changed = await tx.inventory.updateMany({
@@ -828,13 +836,18 @@ export class OrdersService {
         });
         if (changed.count !== 1) throw new BadRequestException(`Stok/reservasi ${value.productName} tidak lagi mencukupi.`);
         const inventory = await tx.inventory.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: order.warehouseId, productId } } });
-        for (const allocation of allocations) await tx.inventoryMovement.create({ data: {
-          warehouseId: order.warehouseId, productId, locationId: allocation.locationId, type: 'ONLINE_ORDER', quantity: -allocation.quantity,
-          balanceAfter: inventory.quantity, referenceType: 'Order', referenceId: order.id,
-        } });
+        for (const allocation of allocations) {
+          const movement = await tx.inventoryMovement.create({ data: {
+            warehouseId: order.warehouseId, productId, locationId: allocation.locationId, type: 'ONLINE_ORDER', quantity: -allocation.quantity,
+            balanceAfter: inventory.quantity, referenceType: 'Order', referenceId: order.id, occurredAt,
+          } });
+          if (!firstMovementByProduct.has(productId)) firstMovementByProduct.set(productId, movement.id);
+        }
       }
       for (const item of order.items) {
-        if (item.product.trackBatch) await this.consumeBatches(tx, order.warehouseId, item.productId, item.quantity);
+        const batchConsumptions = item.product.trackBatch
+          ? await this.consumeBatches(tx, order.warehouseId, item.productId, item.quantity)
+          : [];
         if (item.product.trackSerial) {
           const serials = await tx.inventorySerial.findMany({ where: { warehouseId: order.warehouseId, productId: item.productId, status: 'RESERVED', referenceType: 'Shipment', referenceId: shipment.id }, take: item.quantity + 1 });
           if (serials.length !== item.quantity) throw new BadRequestException(`Serial ${item.product.name} harus discan tepat ${item.quantity} unit sebelum shipment.`);
@@ -844,6 +857,41 @@ export class OrdersService {
         if (item.taxCodeId && new Prisma.Decimal(item.taxAmount).greaterThan(0)) {
           const group = taxGroups.get(item.taxCodeId) ?? { base: new Prisma.Decimal(0), tax: new Prisma.Decimal(0) };
           group.base = group.base.add(item.netSubtotal); group.tax = group.tax.add(item.taxAmount); taxGroups.set(item.taxCodeId, group);
+        }
+        if (!costingEnabled) continue;
+        const costParts = batchConsumptions.length > 0
+          ? batchConsumptions.map((batch) => ({ batchKey: batch.batchNumber, quantity: batch.quantity }))
+          : [{ batchKey: '', quantity: item.quantity }];
+        let lineCost = new Prisma.Decimal(0);
+        for (const part of costParts) {
+          const sourceLineKey = batchConsumptions.length > 0 ? `${item.id}:${part.batchKey}` : item.id;
+          const result = await this.costing.recordIssue(tx, {
+            companyId: scope.companyId,
+            branchId: scope.branchId,
+            warehouseId: order.warehouseId,
+            productId: item.productId,
+            batchKey: part.batchKey,
+            sourceType: 'Order',
+            sourceId: order.id,
+            sourceLineKey,
+            operationKey: `order-cost:${order.id}:${item.id}:${part.batchKey || 'none'}:v1`,
+            payloadHash: costingPayloadHash({
+              version: 1,
+              orderId: order.id,
+              orderItemId: item.id,
+              batchKey: part.batchKey,
+              quantity: part.quantity,
+              occurredAt: occurredAt.toISOString(),
+            }),
+            movementId: firstMovementByProduct.get(item.productId),
+            occurredAt,
+            quantity: part.quantity,
+          });
+          lineCost = lineCost.add(result.cost);
+        }
+        if (costingActive) {
+          costTotal = costTotal.add(lineCost);
+          await tx.orderItem.update({ where: { id: item.id }, data: { unitCost: lineCost.div(item.quantity).toDecimalPlaces(6) } });
         }
       }
 
@@ -865,7 +913,7 @@ export class OrdersService {
           netAmount: item.netSubtotal, taxAmount: item.taxAmount, grossAmount: item.grossSubtotal, taxCodeId: item.taxCodeId ?? undefined,
         })),
         taxLines,
-        context: { warehouseId: order.warehouseId, shipmentId: shipment.id, paymentId: payment.id, paymentMethod: payment.method },
+        context: { warehouseId: order.warehouseId, shipmentId: shipment.id, paymentId: payment.id, paymentMethod: payment.method, costingMode },
       });
 
       let taxDocumentId: string | undefined;
@@ -880,7 +928,7 @@ export class OrdersService {
         } });
         taxDocumentId = doc.id;
       }
-      const now = new Date();
+      const now = occurredAt;
       await tx.shipment.update({ where: { id: shipment.id }, data: {
         status: isPickup ? 'PICKED_UP' : 'IN_TRANSIT', carrier: isPickup ? 'STORE_PICKUP' : (dto.carrier?.trim() || (dto.ownFleet ? 'OWN_FLEET' : shipment.carrier)), service: isPickup ? (order.shippingMethodCode ?? 'PICKUP') : (dto.service?.trim() || shipment.service),
         trackingNumber: isPickup ? `PICKUP-${order.number}` : dto.trackingNumber?.trim(), gatePassId: isPickup ? null : dto.gatePassId, pickedUpAt: now,

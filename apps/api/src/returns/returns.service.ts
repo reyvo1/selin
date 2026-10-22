@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma, TaxTransactionDirection } from '@prisma/client';
 import { AccountingCoreService } from '../accounting-core/accounting-core.service';
 import { AuthUser } from '../auth/auth.types';
@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmReturnDto, CreatePurchaseReturnDto, CreateSaleReturnDto } from './dto/returns.dto';
 import { ConfirmOrderReturnDto, CreateCustomerOrderReturnDto, RejectOrderReturnDto } from './dto/order-return.dto';
 import { StorefrontCustomerService } from '../storefront-customer/storefront-customer.service';
+import { InventoryCostingService, costingPayloadHash } from '../inventory/costing.service';
 
 type DbClient = Prisma.TransactionClient | PrismaService;
 type TenantScope = { companyId: string; branchId: string };
@@ -57,6 +58,7 @@ export class ReturnsService {
     private readonly accounting: AccountingCoreService,
     private readonly operations: OperationsControlService,
     private readonly storefrontCustomers: StorefrontCustomerService,
+    private readonly costing: InventoryCostingService,
   ) {}
 
   private requireTenantScope(user: AuthUser): TenantScope {
@@ -507,6 +509,9 @@ export class ReturnsService {
       await this.assertConfirmation(tx, user, scope, confirmationId, 'SaleReturn', row.id);
       const warehouse = await this.assertWarehouse(tx, user, scope, row.warehouseId);
       await this.assertReturnTaxCodes(tx, user, scope, row.items.map((item) => item.taxCodeId));
+      const postedAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, postedAt);
+      const restocked: Array<{ item: (typeof row.items)[number]; movementId: string; saleItemId: string | null }> = [];
       for (const item of row.items.filter((item) => item.restock && item.condition === 'GOOD')) {
         const locationStock = await depositLocationStock(tx, { warehouseId: row.warehouseId, productId: item.productId, quantity: item.quantity });
         const inventory = await tx.inventory.upsert({
@@ -519,7 +524,7 @@ export class ReturnsService {
           },
           update: { quantity: { increment: item.quantity }, available: { increment: item.quantity } },
         });
-        await tx.inventoryMovement.create({ data: {
+        const movement = await tx.inventoryMovement.create({ data: {
           warehouseId: row.warehouseId,
           productId: item.productId,
           locationId: locationStock.locationId,
@@ -528,14 +533,113 @@ export class ReturnsService {
           balanceAfter: inventory.quantity,
           referenceType: 'SaleReturn',
           referenceId: row.id,
+          occurredAt: postedAt,
         } });
+        const metadata = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+          ? item.metadata as Record<string, unknown>
+          : undefined;
+        restocked.push({
+          item,
+          movementId: movement.id,
+          saleItemId: typeof metadata?.saleItemId === 'string' ? metadata.saleItemId : null,
+        });
+      }
+      let ledgerCogs = new Prisma.Decimal(0);
+      if (costingMode) {
+        for (const { item, movementId, saleItemId } of restocked) {
+          if (!saleItemId) {
+            if (costingMode === 'ACTIVE') {
+              throw new ConflictException('Costing ACTIVE menolak retur tanpa referensi item penjualan asal.');
+            }
+            continue;
+          }
+          const issueEvents = await tx.inventoryCostEvent.findMany({
+            where: {
+              companyId: scope.companyId,
+              branchId: scope.branchId,
+              warehouseId: row.warehouseId,
+              productId: item.productId,
+              sourceType: 'Sale',
+              sourceId: row.saleId,
+              eventType: 'ISSUE',
+              status: 'POSTED',
+              OR: [{ sourceLineKey: saleItemId }, { sourceLineKey: { startsWith: `${saleItemId}:` } }],
+            },
+            orderBy: [{ occurredAt: 'asc' }, { createdAt: 'asc' }, { batchKey: 'asc' }],
+            select: { batchKey: true, quantityDelta: true, unitCost: true },
+          });
+          const returned = await tx.inventoryCostEvent.aggregate({
+            _sum: { quantityDelta: true },
+            where: {
+              companyId: scope.companyId,
+              branchId: scope.branchId,
+              warehouseId: row.warehouseId,
+              productId: item.productId,
+              eventType: 'SALE_RETURN',
+              status: 'POSTED',
+              sourceLineKey: { startsWith: `${saleItemId}:` },
+            },
+          });
+          let offset = returned._sum.quantityDelta ?? 0;
+          let remaining = item.quantity;
+          const parts: Array<{ batchKey: string; quantity: number; unitCost: Prisma.Decimal }> = [];
+          for (const issue of issueEvents) {
+            const issueQuantity = Math.abs(issue.quantityDelta);
+            if (issueQuantity <= 0) continue;
+            if (offset >= issueQuantity) {
+              offset -= issueQuantity;
+              continue;
+            }
+            const quantity = Math.min(remaining, issueQuantity - offset);
+            if (quantity <= 0) break;
+            offset = 0;
+            parts.push({ batchKey: issue.batchKey, quantity, unitCost: new Prisma.Decimal(issue.unitCost) });
+            remaining -= quantity;
+            if (remaining === 0) break;
+          }
+          if (remaining > 0) {
+            if (costingMode === 'ACTIVE') {
+              throw new ConflictException(
+                `Costing ACTIVE menolak retur ${remaining} unit tanpa jejak ISSUE penjualan asal; lengkapi backfill atau matikan flag inventory.costing.`,
+              );
+            }
+            continue;
+          }
+          for (const [partIndex, part] of parts.entries()) {
+            const result = await this.costing.recordSaleReturn(tx, {
+              companyId: scope.companyId,
+              branchId: scope.branchId,
+              warehouseId: row.warehouseId,
+              productId: item.productId,
+              batchKey: part.batchKey,
+              sourceType: 'SaleReturn',
+              sourceId: row.id,
+              sourceLineKey: `${saleItemId}:${part.batchKey}:${partIndex}`,
+              operationKey: `sale-return-cost:${row.id}:${saleItemId}:${partIndex}:v1`,
+              payloadHash: costingPayloadHash({
+                version: 1,
+                returnId: row.id,
+                saleItemId,
+                batchKey: part.batchKey,
+                quantity: part.quantity,
+                occurredAt: postedAt.toISOString(),
+              }),
+              movementId,
+              occurredAt: postedAt,
+              createdById: user.sub,
+              quantity: part.quantity,
+              totalValue: part.unitCost.mul(part.quantity),
+            });
+            ledgerCogs = ledgerCogs.add(result.cost);
+          }
+        }
       }
       const net = row.items.reduce((sum, item) => sum.add(item.netAmount), new Prisma.Decimal(0));
       const tax = row.items.reduce((sum, item) => sum.add(item.taxAmount), new Prisma.Decimal(0));
       const gross = row.items.reduce((sum, item) => sum.add(item.grossAmount), new Prisma.Decimal(0));
-      const cogs = row.items
-        .filter((item) => item.restock && item.condition === 'GOOD')
-        .reduce((sum, item) => sum.add(item.unitCost.mul(item.quantity)), new Prisma.Decimal(0));
+      const legacyCogs = restocked
+        .reduce((sum, { item }) => sum.add(item.unitCost.mul(item.quantity)), new Prisma.Decimal(0));
+      const cogs = costingMode === 'ACTIVE' ? ledgerCogs : legacyCogs;
       const refundResolution = await this.resolveSaleRefundAllocations(tx, scope, row.saleId, gross, row.refundMethod ?? 'ORIGINAL');
       const refundAllocations = refundResolution.allocations;
       const taxLines = row.items
@@ -626,7 +730,7 @@ export class ReturnsService {
           confirmationId,
           accountingEventId: event.id,
           refundDetails: refundAllocations as unknown as Prisma.InputJsonValue,
-          postedAt: new Date(),
+          postedAt,
         },
         include: { items: true },
       });
@@ -832,6 +936,9 @@ export class ReturnsService {
       }
       const warehouse = await this.assertWarehouse(tx, user, scope, row.warehouseId);
       await this.assertReturnTaxCodes(tx, user, scope, row.items.map((item) => item.taxCodeId));
+      const postedAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, postedAt);
+      let ledgerInventoryCost = new Prisma.Decimal(0);
       if (!row.goodsReceiptId) throw new BadRequestException('Retur supplier tidak memiliki referensi penerimaan barang.');
       const sourceReceipt = await tx.goodsReceipt.findFirst({
         where: {
@@ -922,16 +1029,21 @@ export class ReturnsService {
           where: { id: inventory.id },
           data: { quantity: { decrement: item.quantity }, available: { decrement: item.quantity } },
         });
-        for (const allocation of allocations) await tx.inventoryMovement.create({ data: {
-          warehouseId: row.warehouseId,
-          productId: item.productId,
-          locationId: allocation.locationId,
-          type: 'PURCHASE_RETURN',
-          quantity: -allocation.quantity,
-          balanceAfter: updated.quantity,
-          referenceType: 'PurchaseReturn',
-          referenceId: row.id,
-        } });
+        let firstMovementId: string | undefined;
+        for (const allocation of allocations) {
+          const movement = await tx.inventoryMovement.create({ data: {
+            warehouseId: row.warehouseId,
+            productId: item.productId,
+            locationId: allocation.locationId,
+            type: 'PURCHASE_RETURN',
+            quantity: -allocation.quantity,
+            balanceAfter: updated.quantity,
+            referenceType: 'PurchaseReturn',
+            referenceId: row.id,
+            occurredAt: postedAt,
+          } });
+          firstMovementId ??= movement.id;
+        }
         const metadata = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
           ? item.metadata as Record<string, unknown>
           : undefined;
@@ -945,6 +1057,33 @@ export class ReturnsService {
             throw new BadRequestException(`Stok batch ${originalReceiptItem.batchNumber} tidak mencukupi untuk retur supplier.`);
           }
           await tx.inventoryBatch.update({ where: { id: batch.id }, data: { quantity: { decrement: item.quantity } } });
+        }
+        if (costingMode) {
+          const batchKey = originalReceiptItem?.batchNumber ?? '';
+          const result = await this.costing.recordPurchaseReturn(tx, {
+            companyId: scope.companyId,
+            branchId: scope.branchId,
+            warehouseId: row.warehouseId,
+            productId: item.productId,
+            batchKey,
+            quantity: item.quantity,
+            occurredAt: postedAt,
+            movementId: firstMovementId,
+            sourceType: 'PurchaseReturn',
+            sourceId: row.id,
+            sourceLineKey: item.id,
+            operationKey: `purchase-return-cost:${row.id}:${item.id}:v1`,
+            payloadHash: costingPayloadHash({
+              returnId: row.id,
+              itemId: item.id,
+              productId: item.productId,
+              batchKey,
+              quantity: item.quantity,
+              occurredAt: postedAt.toISOString(),
+            }),
+            createdById: user.sub,
+          });
+          ledgerInventoryCost = ledgerInventoryCost.add(result.cost);
         }
       }
       const net = row.items.reduce((sum, item) => sum.add(item.netAmount), new Prisma.Decimal(0));
@@ -961,6 +1100,13 @@ export class ReturnsService {
           counterpartyId: row.supplierId,
           documentNumber: row.number,
         }));
+      const inventoryCost = costingMode === 'ACTIVE' ? ledgerInventoryCost : net;
+      const purchasePriceVariance = net.sub(inventoryCost);
+      const varianceLines = costingMode === 'ACTIVE' && !purchasePriceVariance.isZero()
+        ? [purchasePriceVariance.greaterThan(0)
+          ? { accountCode: '4203', side: 'CREDIT' as const, amount: purchasePriceVariance }
+          : { accountCode: '5103', side: 'DEBIT' as const, amount: purchasePriceVariance.abs() }]
+        : [];
       const event = await this.accounting.postOperationalEvent(tx, {
         companyId: scope.companyId,
         branchId: scope.branchId,
@@ -968,10 +1114,29 @@ export class ReturnsService {
         sourceType: 'PurchaseReturn',
         sourceId: row.id,
         idempotencyKey: `purchase-return:${row.id}`,
-        amounts: { net, inputTax: tax, gross, payableOffset, supplierReceivable },
-        accountCodes: { payable: '2101', supplierReceivable: '1202', inventory: '1301', inputTax: '1205' },
+        amounts: { net, inputTax: tax, gross, payableOffset, supplierReceivable, inventory: inventoryCost },
+        accountCodes: {
+          payable: '2101',
+          supplierReceivable: '1202',
+          inventory: '1301',
+          inputTax: '1205',
+          purchasePriceVarianceGain: '4203',
+          purchasePriceVarianceLoss: '5103',
+        },
+        additionalJournalLines: varianceLines.length ? varianceLines : undefined,
         taxLines,
-        context: { inspectionId, gatePassId, confirmationId, notes: dto.notes, supplierCreditNoteNumber, payableOffset: payableOffset.toFixed(2), supplierReceivable: supplierReceivable.toFixed(2) },
+        context: {
+          inspectionId,
+          gatePassId,
+          confirmationId,
+          notes: dto.notes,
+          supplierCreditNoteNumber,
+          payableOffset: payableOffset.toFixed(2),
+          supplierReceivable: supplierReceivable.toFixed(2),
+          costingMode,
+          inventoryCost: inventoryCost.toFixed(2),
+          purchasePriceVariance: purchasePriceVariance.toFixed(2),
+        },
       });
       await tx.eventOutbox.create({ data: {
         companyId: scope.companyId,
@@ -1005,7 +1170,7 @@ export class ReturnsService {
           payableOffsetAmount: payableOffset,
           supplierReceivableAmount: supplierReceivable,
           supplierCreditNoteNumber,
-          postedAt: new Date(),
+          postedAt,
         },
         include: { items: true },
       });
@@ -1239,7 +1404,9 @@ export class ReturnsService {
         throw new BadRequestException('Inspeksi retur order harus APPROVED sebelum refund diposting.');
       }
       const resultByCode = new Map(inspection.results.map((result) => [result.code, result]));
-      const restockableItemIds: string[] = [];
+      const postedAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, postedAt);
+      const restocked: Array<{ item: (typeof row.items)[number]; movementId: string }> = [];
       for (const item of row.items) {
         const result = resultByCode.get(`ORDER_RETURN_ITEM:${item.id}`);
         if (!result) throw new BadRequestException(`Hasil inspeksi item ${item.id} tidak ditemukan.`);
@@ -1249,7 +1416,6 @@ export class ReturnsService {
         const damaged = result.damagedQty ?? 0;
         if (expected !== item.quantity || accepted + rejected !== expected) throw new BadRequestException(`Kuantitas inspeksi item ${item.id} belum lengkap.`);
         const restock = result.result === 'PASS' && rejected === 0 && damaged === 0 && accepted === expected;
-        if (restock) restockableItemIds.push(item.id);
         await tx.orderReturnItem.update({ where: { id: item.id }, data: { condition: restock ? 'GOOD' : damaged > 0 ? 'DAMAGED' : 'UNSELLABLE', restock } });
         if (restock) {
           const locationStock = await depositLocationStock(tx, { warehouseId: row.warehouseId, productId: item.productId, quantity: item.quantity });
@@ -1258,14 +1424,112 @@ export class ReturnsService {
             create: { warehouseId: row.warehouseId, productId: item.productId, quantity: item.quantity, available: item.quantity },
             update: { quantity: { increment: item.quantity }, available: { increment: item.quantity } },
           });
-          await tx.inventoryMovement.create({ data: { warehouseId: row.warehouseId, productId: item.productId, locationId: locationStock.locationId, type: 'SALE_RETURN', quantity: item.quantity, balanceAfter: inventory.quantity, referenceType: 'OrderReturn', referenceId: row.id } });
+          const movement = await tx.inventoryMovement.create({ data: { warehouseId: row.warehouseId, productId: item.productId, locationId: locationStock.locationId, type: 'SALE_RETURN', quantity: item.quantity, balanceAfter: inventory.quantity, referenceType: 'OrderReturn', referenceId: row.id, occurredAt: postedAt } });
+          restocked.push({ item, movementId: movement.id });
+        }
+      }
+      const restockableItemIds = restocked.map(({ item }) => item.id);
+      let ledgerCogs = new Prisma.Decimal(0);
+      if (costingMode) {
+        for (const { item, movementId } of restocked) {
+          const orderItemId = item.orderItemId;
+          const issueEvents = await tx.inventoryCostEvent.findMany({
+            where: {
+              companyId: scope.companyId,
+              branchId: scope.branchId,
+              warehouseId: row.warehouseId,
+              productId: item.productId,
+              sourceType: 'Order',
+              sourceId: row.orderId,
+              eventType: 'ISSUE',
+              status: 'POSTED',
+              OR: [{ sourceLineKey: orderItemId }, { sourceLineKey: { startsWith: `${orderItemId}:` } }],
+            },
+            orderBy: [{ occurredAt: 'asc' }, { createdAt: 'asc' }, { batchKey: 'asc' }],
+            select: { batchKey: true, quantityDelta: true, unitCost: true },
+          });
+          const returned = await tx.inventoryCostEvent.aggregate({
+            _sum: { quantityDelta: true },
+            where: {
+              companyId: scope.companyId,
+              branchId: scope.branchId,
+              warehouseId: row.warehouseId,
+              productId: item.productId,
+              sourceType: 'OrderReturn',
+              eventType: 'SALE_RETURN',
+              status: 'POSTED',
+              sourceLineKey: { startsWith: `${orderItemId}:` },
+            },
+          });
+          let offset = returned._sum.quantityDelta ?? 0;
+          let remaining = item.quantity;
+          const parts: Array<{ batchKey: string; quantity: number; unitCost: Prisma.Decimal }> = [];
+          for (const issue of issueEvents) {
+            const issueQuantity = Math.abs(issue.quantityDelta);
+            if (issueQuantity <= 0) continue;
+            if (offset >= issueQuantity) {
+              offset -= issueQuantity;
+              continue;
+            }
+            const quantity = Math.min(remaining, issueQuantity - offset);
+            if (quantity <= 0) break;
+            offset = 0;
+            parts.push({ batchKey: issue.batchKey, quantity, unitCost: new Prisma.Decimal(issue.unitCost) });
+            remaining -= quantity;
+            if (remaining === 0) break;
+          }
+          if (remaining > 0) {
+            if (costingMode === 'ACTIVE') {
+              throw new ConflictException(
+                `Costing ACTIVE menolak retur order ${remaining} unit tanpa jejak ISSUE pesanan asal; lengkapi backfill atau matikan flag inventory.costing.`,
+              );
+            }
+            continue;
+          }
+          for (const [partIndex, part] of parts.entries()) {
+            if (item.product.trackBatch) {
+              const restoredBatch = await tx.inventoryBatch.updateMany({
+                where: { warehouseId: row.warehouseId, productId: item.productId, batchNumber: part.batchKey },
+                data: { quantity: { increment: part.quantity } },
+              });
+              if (restoredBatch.count !== 1) {
+                throw new ConflictException(`Batch asal ${part.batchKey} untuk retur order ${row.number} tidak ditemukan; stok batch tidak boleh dipulihkan tanpa jejak asal.`);
+              }
+            }
+            const result = await this.costing.recordSaleReturn(tx, {
+              companyId: scope.companyId,
+              branchId: scope.branchId,
+              warehouseId: row.warehouseId,
+              productId: item.productId,
+              batchKey: part.batchKey,
+              sourceType: 'OrderReturn',
+              sourceId: row.id,
+              sourceLineKey: `${orderItemId}:${part.batchKey}:${partIndex}`,
+              operationKey: `order-return-cost:${row.id}:${orderItemId}:${partIndex}:v1`,
+              payloadHash: costingPayloadHash({
+                version: 1,
+                returnId: row.id,
+                orderItemId,
+                batchKey: part.batchKey,
+                quantity: part.quantity,
+                occurredAt: postedAt.toISOString(),
+              }),
+              movementId,
+              occurredAt: postedAt,
+              createdById: user.sub,
+              quantity: part.quantity,
+              totalValue: part.unitCost.mul(part.quantity),
+            });
+            ledgerCogs = ledgerCogs.add(result.cost);
+          }
         }
       }
       await this.assertReturnTaxCodes(tx, user, scope, row.items.map((item) => item.taxCodeId));
       const net = row.items.reduce((sum, item) => sum.add(item.netAmount), new Prisma.Decimal(0));
       const tax = row.items.reduce((sum, item) => sum.add(item.taxAmount), new Prisma.Decimal(0));
       const gross = row.items.reduce((sum, item) => sum.add(item.grossAmount), new Prisma.Decimal(0));
-      const cogs = row.items.filter((item) => restockableItemIds.includes(item.id)).reduce((sum, item) => sum.add(item.unitCost.mul(item.quantity)), new Prisma.Decimal(0));
+      const legacyCogs = restocked.reduce((sum, { item }) => sum.add(item.unitCost.mul(item.quantity)), new Prisma.Decimal(0));
+      const cogs = costingMode === 'ACTIVE' ? ledgerCogs : legacyCogs;
       const payment = row.order.payments[0];
       const requestedMethod = dto.refundMethod ?? row.refundMethod ?? 'ORIGINAL';
       const refundMethod = requestedMethod === 'ORIGINAL' ? (payment?.method === 'COD' ? 'CASH' : payment?.method === 'INVOICE' ? 'RECEIVABLE' : 'BANK_TRANSFER') : requestedMethod;
@@ -1282,7 +1546,7 @@ export class ReturnsService {
         amounts: { net, outputTax: tax, gross, settlement: settlementAmount, receivable: receivableAmount, inventory: cogs, cogs },
         accountCodes: { returns: '4102', outputTax: '2201', settlement: refundMethod === 'CASH' ? '1101' : '1102', receivable: payment?.method === 'COD' ? '1203' : '1201', inventory: '1301', cogs: '5101' },
         taxLines,
-        context: { orderId: row.orderId, inspectionId: row.inspectionId, refundMethod, notes: dto.notes, restockableItemIds },
+        context: { orderId: row.orderId, inspectionId: row.inspectionId, refundMethod, notes: dto.notes, restockableItemIds, costingMode },
       });
       const activeReturns = await tx.orderReturn.findMany({ where: { orderId: row.orderId, id: { not: row.id }, status: 'COMPLETED' }, include: { items: true } });
       let loyaltyRevoked = 0;
@@ -1324,7 +1588,7 @@ export class ReturnsService {
       }
       await tx.eventOutbox.create({ data: { companyId: scope.companyId, eventType: 'commerce.order.return.completed', aggregateType: 'OrderReturn', aggregateId: row.id, payload: { companyId: scope.companyId, branchId: scope.branchId, returnId: row.id, orderId: row.orderId, accountingEventId: event.id, fullOrderReturn, loyaltyRevoked } } });
       await tx.auditLog.create({ data: { companyId: scope.companyId, userId: user.sub, action: 'CONFIRM_ORDER_RETURN', entityType: 'OrderReturn', entityId: row.id, payload: { branchId: scope.branchId, orderId: row.orderId, accountingEventId: event.id, refundMethod, fullOrderReturn, loyaltyRevoked } } });
-      return tx.orderReturn.update({ where: { id: row.id }, data: { status: 'COMPLETED', refundMethod, accountingEventId: event.id, approvedById: user.sub, approvedAt: new Date(), postedAt: new Date() }, include: { items: { include: { product: true } }, order: true } });
+      return tx.orderReturn.update({ where: { id: row.id }, data: { status: 'COMPLETED', refundMethod, accountingEventId: event.id, approvedById: user.sub, approvedAt: postedAt, postedAt }, include: { items: { include: { product: true } }, order: true } });
     });
   }
 

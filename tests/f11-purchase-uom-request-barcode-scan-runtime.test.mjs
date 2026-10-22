@@ -53,11 +53,12 @@ const { PurchaseRequestsService } = await load('apps/api/src/purchase-orders/pur
 const { GoodsReceiptsService } = await load('apps/api/src/goods-receipts/goods-receipts.service.ts', nestOpts);
 const { OperationsControlService } = await load('apps/api/src/operations-control/operations-control.service.ts', nestOpts);
 const { AccountingCoreService } = await load('apps/api/src/accounting-core/accounting-core.service.ts', opts);
+const { InventoryCostingService } = await load('apps/api/src/inventory/costing.service.ts', opts);
 
 const operations = new OperationsControlService(prisma);
 const accounting = new AccountingCoreService(prisma);
 const purchaseOrders = new PurchaseOrdersService(prisma);
-const goodsReceipts = new GoodsReceiptsService(prisma, accounting, operations);
+const goodsReceipts = new GoodsReceiptsService(prisma, accounting, operations, new InventoryCostingService());
 
 // PurchaseRequestsService only needs the approval-request surface from PlatformService, so the
 // real service is not loaded here: approval policy resolution is not what this test is about.

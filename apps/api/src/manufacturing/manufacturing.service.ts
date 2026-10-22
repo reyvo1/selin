@@ -7,6 +7,7 @@ import { nextDocumentNumber } from '../common/numbering';
 import { decodeCursor, parsePageLimit, toCursorPage } from '../common/pagination';
 import { serializableTx } from '../common/serializable-tx';
 import { PrismaService } from '../prisma/prisma.service';
+import { InventoryCostingService, costingPayloadHash } from '../inventory/costing.service';
 import { CompleteProductionOrderDto, CreateProductionOrderDto, CreateProductionRecipeDto } from './dto/manufacturing.dto';
 
 type Scope = { companyId: string; branchId: string };
@@ -15,7 +16,7 @@ type OrderCursor = { createdAt: string; id: string };
 
 @Injectable()
 export class ManufacturingService {
-  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService, private readonly costing: InventoryCostingService) {}
 
   private scope(user: AuthUser): Scope {
     if (!user.companyId || !user.branchId) throw new ForbiddenException({ code: 'TENANT_CONTEXT_REQUIRED', message: 'Company dan branch aktif wajib tersedia.' });
@@ -143,8 +144,13 @@ export class ManufacturingService {
       if (tracked.length) throw new BadRequestException(`Produksi batch/expiry/serial belum boleh diposting tanpa traceability produksi: ${tracked.map((product) => product.sku).join(', ')}.`);
       const actualOutputQty = dto.actualOutputQty ?? order.plannedOutputQty;
       if (!Number.isInteger(actualOutputQty) || actualOutputQty <= 0) throw new BadRequestException('Actual output harus integer positif.');
+      const occurredAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, order.branchId, occurredAt);
+      const costingEnabled = costingMode !== null;
+      const costingActive = costingMode === 'ACTIVE';
 
       let totalCost = new Prisma.Decimal(0);
+      const componentCosts = new Map<string, Prisma.Decimal>();
       for (const component of order.components) {
         const quantity = component.plannedQty;
         const inventory = await tx.inventory.findUnique({ where: { warehouseId_productId: { warehouseId: order.warehouseId, productId: component.productId } } });
@@ -153,10 +159,37 @@ export class ManufacturingService {
         const changed = await tx.inventory.updateMany({ where: { id: inventory.id, quantity: { gte: quantity }, available: { gte: quantity } }, data: { quantity: { decrement: quantity }, available: { decrement: quantity } } });
         if (changed.count !== 1) throw new BadRequestException(`Saldo bahan ${component.product.sku} berubah saat posting produksi. Ulangi transaksi.`);
         const after = await tx.inventory.findUniqueOrThrow({ where: { id: inventory.id } });
-        for (const allocation of allocations) await tx.inventoryMovement.create({ data: { warehouseId: order.warehouseId, locationId: allocation.locationId, productId: component.productId, type: 'PRODUCTION_CONSUME', quantity: -allocation.quantity, balanceAfter: after.quantity, referenceType: 'ProductionOrder', referenceId: order.id, notes: `Consume ${order.number}` } });
-        const unitCost = new Prisma.Decimal(component.product.costPrice);
-        const componentCost = unitCost.mul(quantity);
+        let firstMovementId: string | undefined;
+        for (const allocation of allocations) {
+          const movement = await tx.inventoryMovement.create({ data: { warehouseId: order.warehouseId, locationId: allocation.locationId, productId: component.productId, type: 'PRODUCTION_CONSUME', quantity: -allocation.quantity, balanceAfter: after.quantity, referenceType: 'ProductionOrder', referenceId: order.id, notes: `Consume ${order.number}`, occurredAt } });
+          firstMovementId ??= movement.id;
+        }
+        let unitCost = new Prisma.Decimal(component.product.costPrice);
+        let componentCost = unitCost.mul(quantity);
+        if (costingEnabled) {
+          const result = await this.costing.recordIssue(tx, {
+            companyId: scope.companyId,
+            branchId: order.branchId,
+            warehouseId: order.warehouseId,
+            productId: component.productId,
+            batchKey: '',
+            sourceType: 'ProductionOrder',
+            sourceId: order.id,
+            sourceLineKey: component.id,
+            operationKey: `production-cost:${order.id}:${component.id}:v1`,
+            payloadHash: costingPayloadHash({ version: 1, productionOrderId: order.id, componentId: component.id, quantity, occurredAt: occurredAt.toISOString() }),
+            movementId: firstMovementId,
+            occurredAt,
+            createdById: user.sub,
+            quantity,
+          });
+          if (costingActive) {
+            componentCost = result.cost;
+            unitCost = componentCost.div(quantity).toDecimalPlaces(6);
+          }
+        }
         totalCost = totalCost.add(componentCost);
+        componentCosts.set(component.id, componentCost);
         await tx.productionOrderComponent.update({ where: { id: component.id }, data: { actualQty: quantity, unitCost, totalCost: componentCost } });
       }
 
@@ -167,13 +200,32 @@ export class ManufacturingService {
         create: { warehouseId: order.warehouseId, productId: output.id, quantity: actualOutputQty, available: actualOutputQty },
         update: { quantity: { increment: actualOutputQty }, available: { increment: actualOutputQty } },
       });
-      await tx.inventoryMovement.create({ data: { warehouseId: order.warehouseId, locationId: locationStock.locationId, productId: output.id, type: 'PRODUCTION_OUTPUT', quantity: actualOutputQty, balanceAfter: outputInventory.quantity, referenceType: 'ProductionOrder', referenceId: order.id, notes: `Output ${order.number}` } });
+      const outputMovement = await tx.inventoryMovement.create({ data: { warehouseId: order.warehouseId, locationId: locationStock.locationId, productId: output.id, type: 'PRODUCTION_OUTPUT', quantity: actualOutputQty, balanceAfter: outputInventory.quantity, referenceType: 'ProductionOrder', referenceId: order.id, notes: `Output ${order.number}`, occurredAt } });
+      if (costingEnabled) {
+        await this.costing.recordReceipt(tx, {
+          companyId: scope.companyId,
+          branchId: order.branchId,
+          warehouseId: order.warehouseId,
+          productId: output.id,
+          batchKey: '',
+          sourceType: 'ProductionOrder',
+          sourceId: order.id,
+          sourceLineKey: output.id,
+          operationKey: `production-output-cost:${order.id}:v1`,
+          payloadHash: costingPayloadHash({ version: 1, productionOrderId: order.id, outputProductId: output.id, actualOutputQty, totalCost: totalCost.toFixed(2), occurredAt: occurredAt.toISOString() }),
+          movementId: outputMovement.id,
+          occurredAt,
+          createdById: user.sub,
+          quantity: actualOutputQty,
+          totalValue: totalCost,
+        });
+      }
 
       const batchUnitCost = totalCost.div(actualOutputQty).toDecimalPlaces(4);
       const oldQty = outputInventoryBefore?.quantity ?? 0;
       const oldValue = new Prisma.Decimal(output.costPrice).mul(oldQty);
       const nextMovingAverageCost = oldValue.add(totalCost).div(oldQty + actualOutputQty).toDecimalPlaces(4);
-      if (!new Prisma.Decimal(output.costPrice).equals(nextMovingAverageCost)) {
+      if (!costingActive && !new Prisma.Decimal(output.costPrice).equals(nextMovingAverageCost)) {
         await tx.product.update({ where: { id: output.id }, data: { costPrice: nextMovingAverageCost } });
         await tx.productPriceHistory.create({ data: { companyId: scope.companyId, productId: output.id, field: 'costPrice', oldValue: output.costPrice, newValue: nextMovingAverageCost, changedById: user.sub } });
       }
@@ -181,7 +233,10 @@ export class ManufacturingService {
       const consumeEvent = await this.accounting.postOperationalEvent(tx, {
         companyId: scope.companyId, branchId: scope.branchId, eventType: 'PRODUCTION_CONSUME', sourceType: 'ProductionOrder', sourceId: order.id,
         idempotencyKey: `production-consume:${order.id}`, amounts: { inventory: totalCost }, accountCodes: { wip: '1303', inventory: '1301' },
-        lines: order.components.map((component) => ({ itemType: 'Product', itemId: component.productId, description: component.product.name, quantity: component.plannedQty, unitAmount: component.product.costPrice, netAmount: new Prisma.Decimal(component.product.costPrice).mul(component.plannedQty), grossAmount: new Prisma.Decimal(component.product.costPrice).mul(component.plannedQty), dimensions: { warehouseId: order.warehouseId } })),
+        lines: order.components.map((component) => {
+          const componentCost = componentCosts.get(component.id) ?? new Prisma.Decimal(component.product.costPrice).mul(component.plannedQty);
+          return { itemType: 'Product', itemId: component.productId, description: component.product.name, quantity: component.plannedQty, unitAmount: componentCost.div(component.plannedQty).toDecimalPlaces(6), netAmount: componentCost, grossAmount: componentCost, dimensions: { warehouseId: order.warehouseId } };
+        }),
         context: { productionOrderNumber: order.number, phase: 'CONSUME' },
       });
       const outputEvent = await this.accounting.postOperationalEvent(tx, {
@@ -190,7 +245,7 @@ export class ManufacturingService {
         lines: [{ itemType: 'Product', itemId: output.id, description: output.name, quantity: actualOutputQty, unitAmount: batchUnitCost, netAmount: totalCost, grossAmount: totalCost, dimensions: { warehouseId: order.warehouseId } }],
         context: { productionOrderNumber: order.number, phase: 'OUTPUT', consumeAccountingEventId: consumeEvent.id },
       });
-      const completed = await tx.productionOrder.update({ where: { id: order.id }, data: { status: 'COMPLETED', actualOutputQty, totalCost, completedAt: new Date(), notes: dto.notes?.trim() || order.notes } });
+      const completed = await tx.productionOrder.update({ where: { id: order.id }, data: { status: 'COMPLETED', actualOutputQty, totalCost, completedAt: occurredAt, notes: dto.notes?.trim() || order.notes } });
       await tx.eventOutbox.create({ data: { companyId: scope.companyId, eventType: 'manufacturing.production.completed', aggregateType: 'ProductionOrder', aggregateId: order.id, payload: { companyId: scope.companyId, branchId: scope.branchId, productionOrderId: order.id, number: order.number, outputProductId: output.id, actualOutputQty, totalCost: totalCost.toString(), accountingEventIds: [consumeEvent.id, outputEvent.id] } } });
       await tx.auditLog.create({ data: { companyId: scope.companyId, userId: user.sub, action: 'COMPLETE_PRODUCTION_ORDER', entityType: 'ProductionOrder', entityId: order.id, payload: { branchId: scope.branchId, actualOutputQty, totalCost: totalCost.toString(), batchUnitCost: batchUnitCost.toString(), nextMovingAverageCost: nextMovingAverageCost.toString() } } });
       return completed;

@@ -1,10 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AccountingCoreService } from '../accounting-core/accounting-core.service';
 import { computeReorderForecast } from './reorder-forecast';
 import { AuthUser } from '../auth/auth.types';
 import { nextDocumentNumber } from '../common/numbering';
 import { PrismaService } from '../prisma/prisma.service';
+import { InventoryCostingService, costingPayloadHash } from '../inventory/costing.service';
 import { randomUUID } from 'node:crypto';
 import { adjustLocationStock, consumeAvailableLocationStock, depositLocationStock, prepareConditionInventory, prepareLocationInventory, relocateLocationStock } from '../common/location-inventory';
 import { CountStockOpnameDto, CreateStockOpnameDto, CreateStockTransferDto, MoveInventoryConditionDto, ReceiveStockTransferDto, RelocateInventoryDto } from './dto/advanced-inventory.dto';
@@ -15,7 +16,7 @@ type WarehouseRow = { id: string; branchId: string; branch: { companyId: string 
 
 @Injectable()
 export class AdvancedInventoryService {
-  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService, private readonly costing: InventoryCostingService) {}
 
   private requireTenantScope(user: AuthUser): TenantScope {
     if (!user.companyId || !user.branchId) {
@@ -246,6 +247,11 @@ export class AdvancedInventoryService {
     return this.prisma.$transaction(async (tx) => {
       const { row: transfer, source, destination } = await this.transfer(tx, user, scope, id, 'source');
       if (transfer.status !== 'APPROVED') throw new BadRequestException('Transfer harus disetujui sebelum dikirim.');
+      const occurredAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, source.branchId, occurredAt);
+      const costingEnabled = costingMode !== null;
+      const costingActive = costingMode === 'ACTIVE';
+      let ledgerCost = new Prisma.Decimal(0);
       for (const item of transfer.items) {
         const inventory = await tx.inventory.findUnique({ where: { warehouseId_productId: { warehouseId: source.id, productId: item.productId } } });
         if (!inventory || inventory.available < item.quantity) throw new BadRequestException(`Stok produk ${item.productId} tidak mencukupi.`);
@@ -265,14 +271,44 @@ export class AdvancedInventoryService {
         }
         const allocations = await consumeAvailableLocationStock(tx, { warehouseId: source.id, productId: item.productId, quantity: item.quantity });
         const updated = await tx.inventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: item.quantity }, available: { decrement: item.quantity } } });
-        for (const allocation of allocations) await tx.inventoryMovement.create({ data: { warehouseId: source.id, productId: item.productId, locationId: allocation.locationId, type: 'TRANSFER_OUT', quantity: -allocation.quantity, balanceAfter: updated.quantity, referenceType: 'StockTransfer', referenceId: transfer.id } });
+        let firstMovementId: string | undefined;
+        for (const allocation of allocations) {
+          const movement = await tx.inventoryMovement.create({ data: { warehouseId: source.id, productId: item.productId, locationId: allocation.locationId, type: 'TRANSFER_OUT', quantity: -allocation.quantity, balanceAfter: updated.quantity, referenceType: 'StockTransfer', referenceId: transfer.id, occurredAt } });
+          firstMovementId ??= movement.id;
+        }
         await tx.stockTransferItem.update({ where: { id: item.id }, data: { shippedQty: item.quantity } });
+        if (!costingEnabled) continue;
+        const result = await this.costing.recordIssue(tx, {
+          companyId: scope.companyId,
+          branchId: source.branchId,
+          warehouseId: source.id,
+          productId: item.productId,
+          batchKey: item.batchNumber ?? '',
+          sourceType: 'StockTransfer',
+          sourceId: transfer.id,
+          sourceLineKey: item.id,
+          operationKey: `stock-transfer-cost:${transfer.id}:${item.id}:v1`,
+          payloadHash: costingPayloadHash({
+            version: 1,
+            transferId: transfer.id,
+            transferItemId: item.id,
+            batchKey: item.batchNumber ?? '',
+            quantity: item.quantity,
+            occurredAt: occurredAt.toISOString(),
+          }),
+          movementId: firstMovementId,
+          occurredAt,
+          createdById: user.sub,
+          quantity: item.quantity,
+        });
+        if (costingActive) ledgerCost = ledgerCost.add(result.cost);
       }
       const transferProductIds = [...new Set(transfer.items.map((item) => item.productId))];
       const products = await tx.product.findMany({ where: { id: { in: transferProductIds }, companyId: scope.companyId } });
       if (products.length !== transferProductIds.length) return this.denyTenantAccess(tx, user, scope, 'StockTransferProduct', transfer.id);
       const costMap = new Map(products.map((product) => [product.id, new Prisma.Decimal(product.costPrice)]));
-      const value = transfer.items.reduce((total, item) => total.add((costMap.get(item.productId) ?? new Prisma.Decimal(0)).mul(item.quantity)), new Prisma.Decimal(0));
+      const legacyValue = transfer.items.reduce((total, item) => total.add((costMap.get(item.productId) ?? new Prisma.Decimal(0)).mul(item.quantity)), new Prisma.Decimal(0));
+      const value = costingActive ? ledgerCost : legacyValue;
       if (value.greaterThan(0)) await this.accounting.postOperationalEvent(tx, {
         companyId: scope.companyId, branchId: source.branchId, eventType: 'STOCK_TRANSFER_SHIPPED', sourceType: 'StockTransfer', sourceId: transfer.id,
         idempotencyKey: `stock-transfer-shipped:${transfer.id}`, amounts: { gross: value }, accountCodes: { debit: '1302', credit: '1301' },
@@ -289,12 +325,58 @@ export class AdvancedInventoryService {
     return this.prisma.$transaction(async (tx) => {
       const { row: transfer, source, destination } = await this.transfer(tx, user, scope, id, 'destination');
       if (!['SHIPPED','PARTIALLY_RECEIVED'].includes(transfer.status)) throw new BadRequestException('Transfer belum dikirim atau sudah selesai.');
+      const occurredAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, destination.branchId, occurredAt);
+      const costingEnabled = costingMode !== null;
+      const costingActive = costingMode === 'ACTIVE';
+      let ledgerValue = new Prisma.Decimal(0);
       for (const input of dto.items) {
         const item = transfer.items.find((row) => row.id === input.transferItemId);
         if (!item) throw new BadRequestException(`Item transfer ${input.transferItemId} tidak ditemukan.`);
         const remaining = item.shippedQty - item.receivedQty;
         if (input.receivedQty > remaining) throw new BadRequestException('Jumlah diterima melebihi jumlah dalam perjalanan.');
         if (input.receivedQty === 0) continue;
+        let receiptValue: Prisma.Decimal | null = null;
+        if (costingEnabled) {
+          const sourceIssue = await tx.inventoryCostEvent.findFirst({
+            where: {
+              companyId: scope.companyId,
+              sourceType: 'StockTransfer',
+              sourceId: transfer.id,
+              sourceLineKey: item.id,
+              eventType: 'ISSUE',
+              status: 'POSTED',
+            },
+          });
+          if (!sourceIssue) {
+            if (costingActive) {
+              throw new ConflictException(`Costing ACTIVE tujuan transfer menolak penerimaan ${item.productId} tanpa event ISSUE asal; lengkapi backfill atau matikan flag inventory.costing.`);
+            }
+            const product = await tx.product.findUnique({ where: { id: item.productId }, select: { costPrice: true } });
+            receiptValue = new Prisma.Decimal(product?.costPrice ?? 0).mul(input.receivedQty);
+          } else {
+            const issuedQty = Math.abs(sourceIssue.quantityDelta);
+            const issuedValue = new Prisma.Decimal(sourceIssue.valueDelta).abs();
+            const prior = await tx.inventoryCostEvent.aggregate({
+              where: {
+                companyId: scope.companyId,
+                sourceType: 'StockTransfer',
+                sourceId: transfer.id,
+                eventType: 'RECEIPT',
+                status: 'POSTED',
+                sourceLineKey: { startsWith: `${item.id}:` },
+              },
+              _sum: { quantityDelta: true, valueDelta: true },
+            });
+            const priorQty = prior._sum.quantityDelta ?? 0;
+            const priorValue = new Prisma.Decimal(prior._sum.valueDelta ?? 0);
+            const remainingQty = issuedQty - priorQty;
+            const remainingValue = issuedValue.sub(priorValue);
+            receiptValue = remainingQty > 0 && input.receivedQty === remainingQty
+              ? remainingValue
+              : (remainingQty > 0 ? remainingValue.mul(input.receivedQty).div(remainingQty) : new Prisma.Decimal(0)).toDecimalPlaces(6);
+          }
+        }
         if (item.batchNumber) {
           const sourceBatch = await tx.inventoryBatch.findUnique({ where: { warehouseId_productId_batchNumber: { warehouseId: source.id, productId: item.productId, batchNumber: item.batchNumber } } });
           if (!sourceBatch) throw new BadRequestException(`Metadata batch ${item.batchNumber} tidak ditemukan pada gudang asal.`);
@@ -326,8 +408,38 @@ export class AdvancedInventoryService {
           create: { warehouseId: destination.id, productId: item.productId, quantity: input.receivedQty, available: input.receivedQty },
           update: { quantity: { increment: input.receivedQty }, available: { increment: input.receivedQty } },
         });
-        await tx.inventoryMovement.create({ data: { warehouseId: destination.id, productId: item.productId, locationId: locationStock.locationId, type: 'TRANSFER_IN', quantity: input.receivedQty, balanceAfter: inventory.quantity, referenceType: 'StockTransfer', referenceId: transfer.id, notes: dto.notes } });
+        const movement = await tx.inventoryMovement.create({ data: { warehouseId: destination.id, productId: item.productId, locationId: locationStock.locationId, type: 'TRANSFER_IN', quantity: input.receivedQty, balanceAfter: inventory.quantity, referenceType: 'StockTransfer', referenceId: transfer.id, notes: dto.notes, occurredAt } });
         await tx.stockTransferItem.update({ where: { id: item.id }, data: { receivedQty: { increment: input.receivedQty } } });
+        if (costingEnabled && receiptValue !== null) {
+          const nextReceived = item.receivedQty + input.receivedQty;
+          const result = await this.costing.recordReceipt(tx, {
+            companyId: scope.companyId,
+            branchId: destination.branchId,
+            warehouseId: destination.id,
+            productId: item.productId,
+            batchKey: item.batchNumber ?? '',
+            sourceType: 'StockTransfer',
+            sourceId: transfer.id,
+            sourceLineKey: `${item.id}:${nextReceived}`,
+            operationKey: `stock-transfer-receipt-cost:${transfer.id}:${item.id}:${nextReceived}:v1`,
+            payloadHash: costingPayloadHash({
+              version: 1,
+              transferId: transfer.id,
+              transferItemId: item.id,
+              batchKey: item.batchNumber ?? '',
+              receivedQty: input.receivedQty,
+              cumulativeReceived: nextReceived,
+              sourceValue: receiptValue.toFixed(2),
+              occurredAt: occurredAt.toISOString(),
+            }),
+            movementId: movement.id,
+            occurredAt,
+            createdById: user.sub,
+            quantity: input.receivedQty,
+            totalValue: receiptValue,
+          });
+          if (costingActive) ledgerValue = ledgerValue.add(result.cost);
+        }
       }
       const updatedItems = await tx.stockTransferItem.findMany({ where: { transferId: id } });
       const complete = updatedItems.every((item) => item.receivedQty >= item.shippedQty);
@@ -337,10 +449,11 @@ export class AdvancedInventoryService {
       const products = await tx.product.findMany({ where: { id: { in: uniqueProductIds }, companyId: scope.companyId } });
       if (products.length !== uniqueProductIds.length) return this.denyTenantAccess(tx, user, scope, 'StockTransferProduct', transfer.id);
       const costMap = new Map(products.map((product) => [product.id, new Prisma.Decimal(product.costPrice)]));
-      const value = receivedInputs.reduce((total, input) => {
+      const legacyValue = receivedInputs.reduce((total, input) => {
         const item = transfer.items.find((row) => row.id === input.transferItemId)!;
         return total.add((costMap.get(item.productId) ?? new Prisma.Decimal(0)).mul(input.receivedQty));
       }, new Prisma.Decimal(0));
+      const value = costingActive ? ledgerValue : legacyValue;
       const receiptSequence = updatedItems.reduce((sum, item) => sum + item.receivedQty, 0);
       if (value.greaterThan(0)) await this.accounting.postOperationalEvent(tx, {
         companyId: scope.companyId, branchId: destination.branchId, eventType: 'STOCK_TRANSFER_RECEIVED', sourceType: 'StockTransferReceipt', sourceId: `${transfer.id}:${receiptSequence}`,
@@ -548,12 +661,18 @@ export class AdvancedInventoryService {
       const products = await tx.product.findMany({ where: { id: { in: opnameProductIds }, companyId: scope.companyId } });
       if (products.length !== opnameProductIds.length) return this.denyTenantAccess(tx, user, scope, 'StockOpnameProduct', opname.id);
       const costMap = new Map(products.map((product) => [product.id, new Prisma.Decimal(product.costPrice)]));
+      const occurredAt = new Date();
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, occurredAt);
+      const costingEnabled = costingMode !== null;
+      const costingActive = costingMode === 'ACTIVE';
       let gainValue = new Prisma.Decimal(0); let lossValue = new Prisma.Decimal(0);
       for (const item of opname.items) {
         const counted = item.countedQty ?? item.systemQty; const difference = counted - item.systemQty;
         if (difference === 0) continue;
         const adjustmentValue = (costMap.get(item.productId) ?? new Prisma.Decimal(0)).mul(Math.abs(difference));
-        if (difference > 0) gainValue = gainValue.add(adjustmentValue); else lossValue = lossValue.add(adjustmentValue);
+        if (!costingActive) {
+          if (difference > 0) gainValue = gainValue.add(adjustmentValue); else lossValue = lossValue.add(adjustmentValue);
+        }
         if (item.batchNumber) {
           const batch = await tx.inventoryBatch.findUnique({ where: { warehouseId_productId_batchNumber: { warehouseId: warehouse.id, productId: item.productId, batchNumber: item.batchNumber } } });
           if (!batch) throw new BadRequestException(`Batch ${item.batchNumber} pada opname tidak ditemukan.`);
@@ -579,7 +698,59 @@ export class AdvancedInventoryService {
           create: { warehouseId: warehouse.id, productId: item.productId, quantity: nextQuantity, available: nextAvailable },
           update: { quantity: nextQuantity, available: nextAvailable },
         });
-        for (const locationChange of locationChanges) await tx.inventoryMovement.create({ data: { warehouseId: warehouse.id, productId: item.productId, locationId: locationChange.locationId, type: difference > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT', quantity: difference > 0 ? locationChange.quantity : -locationChange.quantity, balanceAfter: inventory.quantity, referenceType: 'StockOpname', referenceId: id, notes: item.reason } });
+        let firstMovementId: string | undefined;
+        for (const locationChange of locationChanges) {
+          const movement = await tx.inventoryMovement.create({ data: { warehouseId: warehouse.id, productId: item.productId, locationId: locationChange.locationId, type: difference > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT', quantity: difference > 0 ? locationChange.quantity : -locationChange.quantity, balanceAfter: inventory.quantity, referenceType: 'StockOpname', referenceId: id, notes: item.reason, occurredAt } });
+          firstMovementId ??= movement.id;
+        }
+        if (!costingEnabled) continue;
+        if (difference > 0) {
+          const batchKey = item.batchNumber ?? '';
+          const state = await tx.inventoryCostState.findUnique({ where: { companyId_branchId_warehouseId_productId_batchKey_method: {
+            companyId: scope.companyId, branchId: scope.branchId, warehouseId: warehouse.id, productId: item.productId, batchKey, method: 'MOVING_AVERAGE',
+          } } });
+          if (!state || state.quantity <= 0) {
+            if (costingActive) throw new ConflictException(`Costing ACTIVE menolak penambahan opname ${item.productId} tanpa biaya rata-rata; seed biaya awal terlebih dahulu.`);
+            continue;
+          }
+          const totalValue = new Prisma.Decimal(state.value).mul(difference).div(state.quantity).toDecimalPlaces(6);
+          const result = await this.costing.recordReceipt(tx, {
+            companyId: scope.companyId,
+            branchId: scope.branchId,
+            warehouseId: warehouse.id,
+            productId: item.productId,
+            batchKey,
+            sourceType: 'StockOpname',
+            sourceId: id,
+            sourceLineKey: item.id,
+            operationKey: `stock-opname-cost:${id}:${item.id}:v1`,
+            payloadHash: costingPayloadHash({ version: 1, opnameId: id, itemId: item.id, difference, occurredAt: occurredAt.toISOString() }),
+            movementId: firstMovementId,
+            occurredAt,
+            createdById: user.sub,
+            quantity: difference,
+            totalValue,
+          });
+          if (costingActive) gainValue = gainValue.add(result.cost);
+        } else {
+          const result = await this.costing.recordIssue(tx, {
+            companyId: scope.companyId,
+            branchId: scope.branchId,
+            warehouseId: warehouse.id,
+            productId: item.productId,
+            batchKey: item.batchNumber ?? '',
+            sourceType: 'StockOpname',
+            sourceId: id,
+            sourceLineKey: item.id,
+            operationKey: `stock-opname-cost:${id}:${item.id}:v1`,
+            payloadHash: costingPayloadHash({ version: 1, opnameId: id, itemId: item.id, difference, occurredAt: occurredAt.toISOString() }),
+            movementId: firstMovementId,
+            occurredAt,
+            createdById: user.sub,
+            quantity: Math.abs(difference),
+          });
+          if (costingActive) lossValue = lossValue.add(result.cost);
+        }
       }
       if (gainValue.greaterThan(0) || lossValue.greaterThan(0)) await this.accounting.postOperationalEvent(tx, {
         companyId: scope.companyId, branchId: scope.branchId, eventType: 'STOCK_OPNAME_ADJUSTMENT', sourceType: 'StockOpname', sourceId: id,
@@ -592,7 +763,7 @@ export class AdvancedInventoryService {
       });
       await tx.eventOutbox.create({ data: { companyId: scope.companyId, eventType: 'inventory.opname.completed', aggregateType: 'StockOpname', aggregateId: id, payload: { companyId: scope.companyId, branchId: scope.branchId, warehouseId: warehouse.id, opnameId: id } } });
       await tx.auditLog.create({ data: { companyId: scope.companyId, userId: user.sub, action: 'COMPLETE_STOCK_OPNAME', entityType: 'StockOpname', entityId: id, payload: { branchId: scope.branchId, warehouseId: warehouse.id, postedMobileDrafts: postedMobileDrafts.count } } });
-      return tx.stockOpname.update({ where: { id }, data: { status: 'COMPLETED', approvedById: user.sub, completedAt: new Date() }, include: { items: true } });
+      return tx.stockOpname.update({ where: { id }, data: { status: 'COMPLETED', approvedById: user.sub, completedAt: occurredAt }, include: { items: true } });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 }

@@ -16,6 +16,7 @@ import { SupervisorApprovalService } from '../supervisor-approval/supervisor-app
 import { CashierCashMovementDto, CreateSaleDto, ReplayOfflineSalesDto } from './dto/create-sale.dto';
 import { assertCashDrawerPostingRule, CashDrawerPostingEvent, DRAWER_ACCOUNT_CODE } from './cash-drawer-posting';
 import { StockAlertService } from './stock-alert.service';
+import { InventoryCostingService, costingPayloadHash } from '../inventory/costing.service';
 
 type TenantScope = { companyId: string; branchId: string };
 type SaleCreateOptions = {
@@ -92,7 +93,7 @@ function syncErrorMessage(error: unknown): string {
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService, private readonly stockAlerts: StockAlertService, private readonly promotions: PromotionsService, private readonly approvals: SupervisorApprovalService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService, private readonly stockAlerts: StockAlertService, private readonly promotions: PromotionsService, private readonly approvals: SupervisorApprovalService, private readonly costing: InventoryCostingService) {}
 
   private requireTenantScope(user: AuthUser): TenantScope {
     if (!user.companyId || !user.branchId) {
@@ -1188,6 +1189,9 @@ export class SalesService {
         const product = products.find((value) => value.id === item.productId)!;
         if ((!inventory || inventory.available < item.quantity) && !product.allowNegativeStock) throw new BadRequestException(`Stok ${product.name} tidak mencukupi.`);
       }
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, occurredAt);
+      const costingEnabled = costingMode !== null;
+      const costingActive = costingMode === 'ACTIVE';
 
       // Customer-facing service fee is part of the amount that must be settled. Historically the
       // split-payment validator compared against goods gross before this fee, which made a correct
@@ -1236,20 +1240,71 @@ export class SalesService {
       const saleEventType = onAccountAmount.greaterThan(0) || settlementComponentCount > 1 ? 'SALE_SPLIT' : !cashSettlement.isZero() ? 'SALE_CASH' : 'SALE_BANK';
       const sale = await tx.sale.create({ data: {
         number: await nextDocumentNumber(tx, { companyId: scope.companyId, branchId: scope.branchId, documentType: 'SALE', prefix: 'POS' }), branchId: scope.branchId, warehouseId: warehouse.id, customerId: dto.customerId,
-        cashierShiftId, subtotal: rawSubtotal, discount: totalDiscount, tax: taxTotal, serviceFee, total: saleTotal, costTotal, createdAt: occurredAt,
-        items: { create: prepared.map(({ productName, trackBatch, ...item }) => item) },
+        cashierShiftId, subtotal: rawSubtotal, discount: totalDiscount, tax: taxTotal, serviceFee, total: saleTotal, costTotal: costingActive ? new Prisma.Decimal(0) : costTotal, createdAt: occurredAt,
       } });
+      const saleItems: Array<{ id: string }> = [];
+      for (const item of prepared) {
+        const { productName: _productName, trackBatch: _trackBatch, ...saleItemData } = item;
+        const saleItem = await tx.saleItem.create({ data: { ...saleItemData, saleId: sale.id } });
+        saleItems.push({ id: saleItem.id });
+      }
       if (promotion.rule && promoDiscount.greaterThan(0)) {
         await this.promotions.recordRedemption(tx, scope, promotion.rule.id, dto.customerId, 'Sale', sale.id, promoDiscount);
       }
-      for (const item of prepared) {
+      let saleCostTotal = new Prisma.Decimal(0);
+      for (const [lineIndex, item] of prepared.entries()) {
+        let saleLineCost = new Prisma.Decimal(0);
         const allocations = await consumeAvailableLocationStock(tx, { warehouseId: warehouse.id, productId: item.productId, quantity: item.quantity });
         const inventory = await tx.inventory.update({
           where: { warehouseId_productId: { warehouseId: warehouse.id, productId: item.productId } },
           data: { quantity: { decrement: item.quantity }, available: { decrement: item.quantity } },
         });
-        for (const allocation of allocations) await tx.inventoryMovement.create({ data: { warehouseId: warehouse.id, productId: item.productId, locationId: allocation.locationId, type: 'SALE', quantity: -allocation.quantity, balanceAfter: inventory.quantity, referenceType: 'Sale', referenceId: sale.id, createdAt: occurredAt } });
-        if (item.trackBatch) await consumeProductBatchesFefo(tx, { warehouseId: warehouse.id, productId: item.productId, quantity: item.quantity });
+        let firstMovementId: string | undefined;
+        for (const allocation of allocations) {
+          const movement = await tx.inventoryMovement.create({ data: { warehouseId: warehouse.id, productId: item.productId, locationId: allocation.locationId, type: 'SALE', quantity: -allocation.quantity, balanceAfter: inventory.quantity, referenceType: 'Sale', referenceId: sale.id, occurredAt, createdAt: occurredAt } });
+          firstMovementId ??= movement.id;
+        }
+        const batchConsumptions = item.trackBatch
+          ? await consumeProductBatchesFefo(tx, { warehouseId: warehouse.id, productId: item.productId, quantity: item.quantity })
+          : [];
+        if (!costingEnabled) continue;
+        const costParts = batchConsumptions.length > 0
+          ? batchConsumptions.map((batch) => ({ batchKey: batch.batchNumber, quantity: batch.quantity }))
+          : [{ batchKey: '', quantity: item.quantity }];
+        for (const part of costParts) {
+          const sourceLineKey = batchConsumptions.length > 0 ? `${saleItems[lineIndex].id}:${part.batchKey}` : saleItems[lineIndex].id;
+          const result = await this.costing.recordIssue(tx, {
+            companyId: scope.companyId,
+            branchId: scope.branchId,
+            warehouseId: warehouse.id,
+            productId: item.productId,
+            batchKey: part.batchKey,
+            sourceType: 'Sale',
+            sourceId: sale.id,
+            sourceLineKey,
+            operationKey: `sale-cost:${sale.id}:${lineIndex}:${part.batchKey || 'none'}:v1`,
+            payloadHash: costingPayloadHash({
+              version: 1,
+              saleId: sale.id,
+              lineIndex,
+              batchKey: part.batchKey,
+              quantity: part.quantity,
+              occurredAt: occurredAt.toISOString(),
+            }),
+            movementId: firstMovementId,
+            occurredAt,
+            quantity: part.quantity,
+          });
+          saleLineCost = saleLineCost.add(result.cost);
+          saleCostTotal = saleCostTotal.add(result.cost);
+        }
+        if (costingActive) {
+          await tx.saleItem.update({ where: { id: saleItems[lineIndex].id }, data: { unitCost: saleLineCost.div(item.quantity).toDecimalPlaces(6) } });
+        }
+      }
+      if (costingActive) {
+        await tx.sale.update({ where: { id: sale.id }, data: { costTotal: saleCostTotal } });
+        costTotal = saleCostTotal;
       }
       const payments: Array<{ id: string }> = [];
       for (const requested of requestedPayments) {

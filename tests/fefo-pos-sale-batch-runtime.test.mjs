@@ -32,9 +32,10 @@ const { AccountingCoreService } = await load('apps/api/src/accounting-core/accou
 const { StockAlertService } = await load('apps/api/src/sales/stock-alert.service.ts', opts);
 const { PromotionsService } = await load('apps/api/src/promotions/promotions.service.ts', opts);
 const { SupervisorApprovalService } = await load('apps/api/src/supervisor-approval/supervisor-approval.service.ts', opts);
+const { InventoryCostingService } = await load('apps/api/src/inventory/costing.service.ts', opts);
 
 const sales = new SalesService(prisma, new AccountingCoreService(prisma), new StockAlertService(prisma),
-  new PromotionsService(prisma), new SupervisorApprovalService(prisma));
+  new PromotionsService(prisma), new SupervisorApprovalService(prisma), new InventoryCostingService());
 
 const COMPANY = 'acme';
 const USER = 'u-1';

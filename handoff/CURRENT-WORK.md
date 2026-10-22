@@ -1,5 +1,255 @@
 # CURRENT WORK — Toko360 (WAJIB BACA BLOK INI DULU)
 
+## 2026-10-22 (lanjutan 9) — API policy costing dan valuasi
+
+- `InventoryCostingPolicyService` dan `InventoryCostingController` ditambahkan:
+  `GET /inventory/costing/policies` (pagination), `POST /inventory/costing/policies`,
+  `POST /inventory/costing/policies/:id/activate`, dan
+  `GET /inventory/costing/valuation`.
+- Policy dibuat sebagai `DRAFT`; aktivasi hanya untuk policy ber-`effectiveFrom`
+  maju, memakai maker-checker berbasis audit `COSTING_POLICY_CREATED`, CAS
+  `updateMany` status `DRAFT`, dan audit `COSTING_POLICY_ACTIVATED`.
+- Permission `inventory.costing.view`, `inventory.costing.manage`, dan
+  `inventory.costing.rebuild` didaftarkan ke seed; view/manage/rebuild diberikan
+  ke ADMIN dan FINANCE, view ke AUDITOR, dan WAREHOUSE tidak diberi akses
+  manage. Test statis mengunci matriks ini. `rebuild` belum punya endpoint.
+- Valuasi read-only mengagregasi `InventoryCostState` per warehouse dengan scope
+  company/branch dari token; belum ada rekonsiliasi state vs inventory vs GL.
+- Test bertambah menjadi **15 static + 13 runtime PASS**; `quality:fast` PASS
+  **2024/2024 test**, lint, `db:local:prepare`, worker build.
+- Berikutnya: rebuild SHADOW/backfill, rekonsiliasi, layer/reconciliation API,
+  lalu uji aktivasi flag pada database TEST.
+
+## 2026-10-21 (lanjutan 8) — Transfer dan opname memakai costing
+
+- `AdvancedInventoryService` kini menerima `InventoryCostingService`;
+  `AdvancedInventoryModule` mengimpor `InventoryModule`.
+- `shipTransfer` memposting `ISSUE` per item transfer pada gudang asal,
+  mengisi `occurredAt` movement, dan saat ACTIVE memakai total biaya ledger
+  untuk jurnal `STOCK_TRANSFER_SHIPPED` (bukan `Product.costPrice`).
+- `receiveTransfer` mencari event ISSUE asal, memposting `RECEIPT` tujuan
+  dengan nilai ledger yang sama (proporsional untuk partial receipt), dan
+  memakai operation key per penerimaan kumulatif. ACTIVE fail-closed bila
+  event ISSUE asal tidak ada.
+- `completeOpname` memposting adjustment lewat costing: selisih negatif
+  memakai biaya metode, selisih positif memakai average state saat ini;
+  ACTIVE fail-closed bila selisih positif tidak punya dasar biaya.
+- `ManufacturingService.complete` memposting ISSUE komponen dan RECEIPT
+  output pada biaya ledger; ACTIVE tidak lagi menulis ulang
+  `Product.costPrice`.
+- `AssetsService.completeMaintenance` memposting ISSUE part pada biaya ledger
+  untuk jurnal `ASSET_MAINTENANCE_PARTS`.
+- Test statis dan runtime transfer/opname/produksi/maintenance ditambahkan;
+  `quality:fast` PASS **2021/2021 test**, lint, `db:local:prepare`, worker
+  build. Semua writer inventory utama kini memanggil costing.
+
+## 2026-10-21 (lanjutan 7) — Order ship dan retur order memakai costing
+
+- `orders.ship` sekarang memanggil `InventoryCostingService`:
+  - `resolveMode` dievaluasi sekali per pengiriman;
+  - batch FEFO per item dipakai untuk `recordIssue` dan `sourceLineKey`
+    `${orderItemId}:${batchNumber}`;
+  - movement order mengisi `occurredAt`;
+  - ACTIVE memakai total biaya ledger untuk jurnal COGS dan menulis ulang
+    `OrderItem.unitCost`; SHADOW tetap memakai COGS legacy.
+- `confirmOrderReturn` memulihkan biaya ISSUE pesanan asal per batch,
+  memposting `SALE_RETURN` dengan source key order item, dan memakai nilai
+  ledger untuk pembalikan COGS. ACTIVE fail-closed bila event ISSUE pesanan
+  asal tidak lengkap; SHADOW tetap legacy.
+- `OrdersModule` mengimpor `InventoryModule`; test statis order ship/return
+  ditambahkan ke `tests/w1-costing-engine-foundation.test.mjs`, dan runtime
+  order ship/return ditambahkan ke `tests/w1-costing-sale-runtime.test.mjs`.
+- Retur order kini menambah kembali quantity `InventoryBatch` asal; batch yang
+  hilang membuat ACTIVE fail-closed.
+- Validasi: `quality:fast` PASS **2013/2013 test**, lint, `db:local:prepare`,
+  worker build.
+- Known issue: pesanan yang sudah dikirim sebelum integrasi belum punya ISSUE
+  event, sehingga retur ACTIVE untuk pesanan lama akan fail-closed sampai
+  backfill. Writer transfer/opname/manufacturing/asset masih pending pada
+  entri ini; **selesai di lanjutan 8**.
+
+## 2026-10-21 (lanjutan 6) — Retur supplier: moving average + purchase price variance
+
+- Keputusan user: retur supplier mengurangi inventory pada **moving average**
+  berjalan, bukan harga beli. Selisih harga beli vs carrying value diposting
+  ke akun baru `4203` (keuntungan) atau `5103` (kerugian).
+- `confirmPurchaseReturn` sekarang:
+  - menyelesaikan `costingMode` dan `postedAt` sekali per transaksi;
+  - memposting `PURCHASE_RETURN` per item/batch lewat `recordPurchaseReturn`;
+  - mengisi `InventoryMovement.occurredAt`;
+  - memakai `inventoryCost` di amount rule `PURCHASE-RETURN` v2;
+  - menambahkan jurnal variance dan menyimpannya di context/audit.
+- Seed dan migration expand-only SQLite/PostgreSQL menambahkan akun
+  `4203`/`5103` serta rule `PURCHASE-RETURN` versi 2 (`inventory` amount key)
+  secara idempotent untuk company/branch existing.
+- Default `CURRENT_TIMESTAMP` pada `InventoryMovement.occurredAt` di migration
+  PostgreSQL dihapus agar konsisten dengan ketiga schema (writer wajib
+  eksplisit); README migration dikoreksi.
+- Test baru: retur supplier ACTIVE memverifikasi event `PURCHASE_RETURN`
+  (-1 qty, -2000 value), state batch LATE 3/6000, dan jurnal 2101 debit 1500 /
+  1301 credit 2000 / 5103 debit 500.
+- Validasi: `node --test` costing **13/13 PASS**; `quality:fast` PASS
+  **2009/2009 test**, lint, `db:local:prepare`, worker build.
+- Belum: `orders.ship`/order return, transfer/opname/manufacturing/asset,
+  API policy, rebuild SHADOW, backfill/rekonsiliasi, Postgres rehearsal,
+  staging/UAT. Branch/commit masih menunggu keputusan kebijakan prefix.
+
+## 2026-10-21 (lanjutan 5) — Costing fondasi, sales, dan retur penjualan
+
+- ADR costing dan opening disetujui; costing masuk **IMPLEMENTATION**, opening
+  tetap **DESIGN** menunggu fondasi costing.
+- Schema ketiga profile: model/enum costing + `InventoryMovement.occurredAt`.
+  `occurredAt` nullable **tanpa default** karena SQLite menolak default
+  non-konstan pada `ADD COLUMN`; migration mengisi balik dari `createdAt`.
+- Migration expand-only costing terdaftar di
+  `config/expand-migration-order.json`; SQLite rehearsal PASS. Baseline
+  PostgreSQL diregenerasi (219314 byte) dan `db:baseline:postgres:check` PASS.
+- `InventoryCostingService` mendukung `resolveMode`, idempotency
+  `operationKey`+`payloadHash`, CAS version, backdated guard, dan menolak
+  pengeluaran uncosted saat ACTIVE.
+- Goods receipt, sales, dan retur penjualan sudah memanggil costing:
+  - sales memakai FEFO batch, memposting ISSUE per batch, lalu menulis ulang
+    `SaleItem.unitCost` dan `Sale.costTotal` dari ledger saat ACTIVE;
+  - retur penjualan menelusuri ISSUE asal lewat `SaleItem.id`, memulihkan
+    batch/cost state, dan memposting `SALE_RETURN`; ACTIVE fail-closed bila
+    referensi/coverage tidak lengkap;
+  - SHADOW tetap memakai COGS legacy.
+- `consumeProductBatchesFefo` kini mengembalikan alokasi batch.
+- Test: `tests/w1-costing-engine-foundation.test.mjs` dan
+  `tests/w1-costing-sale-runtime.test.mjs`; F3/parity/fefo/uom/post1a/f11
+  diperbarui dan lulus.
+- Validasi: workflow PASS **73 work item / 8 wave**; `validate:repo` PASS
+  **1308 files / 208 Prisma models**; `quality:fast` PASS **2007/2007 test**,
+  lint, `db:local:prepare`, worker build.
+- Belum: purchase return (butuh aturan selisih harga beli vs moving average),
+  order return (menunggu `orders.ship`), transfer/opname/manufacturing/asset,
+  API policy, rebuild SHADOW, backfill/rekonsiliasi, Postgres rehearsal (butuh
+  `T360_MIGRATION_DATABASE_URL`), staging/UAT.
+- Koreksi 2026-10-22: asumsi bahwa kebijakan hanya mengizinkan prefix `docs/`
+  keliru; `config/workflow-policy.json` mengizinkan `feature`. Branch costing
+  dibuat dan commit/push dilakukan atas permintaan user.
+- Langkah berikutnya: integrasi orders/purchase return setelah keputusan
+  desainnya, lalu writer inventory lain sebelum aktivasi flag.
+
+## 2026-10-21 (lanjutan 4) — Design review P0 selesai, menunggu approval
+
+- Generated packet dibuat dan disinkronkan:
+  - `work-items/generated/T360-20261021-134120/` (costing)
+  - `work-items/generated/T360-20261021-134133/` (opening/closing)
+- ADR costing dikoreksi: varian ditunda, `sourceLineKey` non-null untuk
+  idempotency, `branchId` state/event wajib, backdated receipt dengan event
+  setelahnya ditolak (butuh rebuild/approval, bukan silent recalculation),
+  dan state qty=0 wajib value=0.
+- ADR opening dikoreksi: varian ditunda; outstanding (bukan total invoice)
+  yang diposting; opening AR/AP tidak membuat `TaxTransaction`; settlement
+  lewat `OperationalFinanceTransaction`; GL batch hanya akun residual; cutover
+  gate wajib lulus sebelum operasi normal; closing memakai
+  `incomeSummaryAccountCode`; rerun year-end memakai operation key berversi.
+- Work item dan generated `TASK.md`/`SESSION-HANDOFF.md` disinkronkan dengan
+  aturan terbaru. `docs/IPOS-5-PARITY-WORKFLOW.md` diperbarui: design PROPOSED,
+  costing varian ditunda, opening tahun berikut adalah snapshot.
+- Validasi: `node scripts/workflow.mjs validate` PASS **73 work item / 8 wave**;
+  `npm run validate:repo` PASS **1302 files, 202 Prisma models**;
+  `npm run quality:fast` PASS **1996/1996 test**, lint, worker build;
+  `git diff --check` bersih.
+- Status: kedua work item tetap **DESIGN**; ADR **PROPOSED**; belum ada
+  kode/schema/migration/database; belum ada commit/push.
+- Langkah berikutnya: minta approval user atas ADR + migration plan. Jangan
+  masuk IMPLEMENTATION sebelum approval.
+
+## 2026-10-21 (lanjutan 3) — P0 DESIGN: costing dan opening/closing
+
+- Keputusan user dikunci: HPP default **MOVING_AVERAGE** (FIFO/LIFO sebagai
+  policy, average periodik tidak P0); tutup tahun **preview + approval +
+  auto-post** closing entries; saldo awal **import batch CSV/Excel + dry-run +
+  approval + koreksi manual terbatas**.
+- ADR design dibuat:
+  - `docs/adr/ADR-T360-20261021-134120-COSTING-METHOD.md`
+  - `docs/adr/ADR-T360-20261021-134133-OPENING-BALANCE-CUTOVER.md`
+- Desain costing: `InventoryCostEvent` append-only + `InventoryCostState`
+  untuk moving average; `InventoryCostLayer`/`Consumption` untuk FIFO/LIFO;
+  state version CAS + serializable tx; flag `inventory.costing` dengan mode
+  SHADOW→ACTIVE; backfill snapshot dan reconciliation. Semua writer stok wajib
+  memanggil costing service.
+- Desain opening/closing: batch/row staging, opening stock/AR/AP/GL, opening
+  ledger settlement, `YearEndCloseRun`, `postSystemJournal` + `postReversal`
+  di accounting core, P&L/balance-sheet filter untuk closing entries, dan
+  subledger tie-out. Flag `accounting.opening_and_year_end`.
+- Audit menemukan risiko yang harus diselesaikan: feature flag belum
+  ditegakkan; payroll adjustment masih bypass accounting core; aging AR/AP
+  masih cap 500; `postManual` belum membandingkan payload; LIFO butuh
+  persetujuan finance/tax; metode costing terkunci setelah event pertama.
+- Work item `T360-20261021-134120` dan `T360-20261021-134133` berada di
+  **DESIGN**. Belum ada kode/schema/migration/database yang diubah; belum ada
+  commit/push.
+- Validasi: `node scripts/workflow.mjs validate` PASS **73 work item / 8 wave**;
+  `npm run validate:repo` PASS **1291 files, 202 Prisma models**;
+  `git diff --check` bersih.
+- Langkah berikutnya: review/approve ADR, buat generated task package, lalu
+  implementasi schema expand-only + feature gate. Jangan IMPLEMENTATION sebelum
+  ADR dan migration plan disetujui.
+
+## 2026-10-21 (lanjutan 2) — Sign-off baseline dan P0 masuk ANALYSIS
+
+- User menyetujui checklist, status, asumsi, dan prioritas baseline IPOS 5.0,
+  lalu meminta mulai P0. Dokumen `docs/IPOS-5-PARITY-WORKFLOW.md` ditandai
+  `BASELINE DISETUJUI UNTUK P0`; empat checkbox sign-off pertama dicentang.
+- Dua work item P0 dibuat dan berada di **ANALYSIS**:
+  - `T360-20261021-134120-costing-engine-dan-valuasi-persediaan` (inventory,
+    W1, CRITICAL, flag `inventory.costing`).
+  - `T360-20261021-134133-saldo-awal-dan-tutup-tahun` (accounting-core, W3,
+    CRITICAL, flag `accounting.opening_and_year_end`, dependency costing).
+- Audit source menemukan: COGS/valuasi masih `Product.costPrice` statis
+  (`apps/api/src/sales/sales.service.ts:1089`,
+  `apps/api/src/reports/reports.service.ts:663`); belum ada cost layer;
+  `OPENING_STOCK` hanya dipakai seed; accounting core punya posting idempotent
+  dan period lock, tetapi belum ada opening AR/AP, closing entries, retained
+  earnings, reversal API, atau subledger tie-out; feature flag belum ditegakkan
+  di service; payroll adjustment masih membuat jurnal langsung di luar engine.
+- Konflik keputusan yang harus diselesaikan sebelum DESIGN: metode HPP default
+  (seed `MOVING_AVERAGE` vs work item semula FIFO), kebijakan backdated
+  receipt, mode tutup tahun (auto-post vs worksheet), sumber saldo awal, dan
+  key feature flag (flat vs dotted). Work item costing sudah dikoreksi agar
+  tidak mengunci FIFO.
+- Tidak ada kode/schema/migration/database yang diubah. Belum ada commit/push.
+  Working tree tetap memuat tiga file lama yang bukan bagian sesi ini.
+- Validasi: `node scripts/workflow.mjs validate` PASS **73 work item / 8 wave**.
+- Langkah berikutnya: jawab keputusan di atas, selesaikan DESIGN + migration
+  plan, lalu buat generated task package. Jangan IMPLEMENTATION sebelum DESIGN
+  disetujui.
+
+## 2026-10-21 — Baseline workflow paritas IPOS 5.0 (T360-20261021-131414, DESIGN)
+
+- Dibuat `docs/IPOS-5-PARITY-WORKFLOW.md`: checklist A-J, 138 baris unik dengan
+  **67 `ADA`**, **26 `SEBAGIAN`**, **45 `BELUM`**. Duplikat dihapus dan ID
+  dinomori ulang per domain; matriks tetap memuat bukti source, gap,
+  prioritas, dan dampak.
+- Dokumen memuat paket `PKG-00`-`PKG-13`, gelombang delivery 0-5, workflow
+  INTAKE-CLOSED per paket, quality gate domain, migration/backfill/rollback,
+  risiko, sign-off, indeks bukti, dan perintah verifikasi. Asumsi serta
+  keputusan yang masih terbuka dicatat di Bagian 5.
+- Work item `T360-20261021-131414-susun-workflow-paritas-ipos-5-0.json` dibuat,
+  manifest diisi, dan berada di fase **DESIGN**, risk MEDIUM, seluruh impact
+  `NONE`. Ini work item dokumentasi; tidak ada kode aplikasi, schema, migration,
+  database, atau status P5 yang berubah.
+- Koreksi bukti: `Product.productType` adalah string yang dibatasi DTO ke
+  `PHYSICAL`/`SERVICE` (bukan enum); valuasi statis ada di
+  `apps/api/src/reports/reports.service.ts:663`; COGS statis di
+  `apps/api/src/sales/sales.service.ts:1089`.
+- Validasi: invarian markdown 138 baris (67 `ADA` / 26 `SEBAGIAN` / 45 `BELUM`) PASS; `node
+  scripts/workflow.mjs validate` PASS **71 work item / 8 delivery wave**;
+  `npm run validate:repo` PASS **1287 files, 202 Prisma models**;
+  `git diff --check` bersih.
+- **Status saat entri ini dibuat: belum ada sign-off user.** Lihat entri
+  terbaru di atas untuk keputusan setelahnya. `productReady=false`,
+  `currentPhase=P5`, `humanStage20=PENDING` tetap berlaku.
+- Tidak ada commit/push. Tiga file lama di working tree tetap dibiarkan:
+  `.gitignore`, `config/p5-full-ui-root-audit.json`,
+  `docs/P5-FULL-UI-ROOT-AUDIT.md`.
+- Langkah berikutnya: user mencocokkan 138 baris dengan checklist IPOS asli dan
+  menjawab keputusan Bagian 5; setelah sign-off, buat work item paket P0 dan
+  mulai dari INTAKE/ANALYSIS/DESIGN, bukan langsung coding.
+
 ## 2026-10-21 (lanjutan) — POS sale mengonsumsi batch FEFO
 
 - Ditutup: `T360-20261017-193216` (module batch-serial, HIGH). `SalesService.create` kini memanggil

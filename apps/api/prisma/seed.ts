@@ -115,6 +115,7 @@ async function main() {
     'supplier.view','supplier.create','supplier.update',
     'purchase.view','purchase.create','purchase.approve','purchase.receive','purchase.return','purchase.cancel',
     'inventory.view','inventory.adjust','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
+    'inventory.costing.view','inventory.costing.manage','inventory.costing.rebuild',
     'sale.view','sale.create','sale.cancel','sale.return','sale.refund',
     'order.view','order.manage','order.cancel','shipment.manage',
     'payment.view','payment.manage','payment.refund','payment.reconcile',
@@ -226,8 +227,8 @@ async function main() {
     ['1491','Akumulasi Penyusutan Aset',AccountType.ASSET], ['1492','Akumulasi Penyusutan Kendaraan',AccountType.ASSET],
     ['1493','Akumulasi Penyusutan Bangunan',AccountType.ASSET],
     ['2201','Pajak Keluaran',AccountType.LIABILITY], ['2202','Utang Pajak Lainnya',AccountType.LIABILITY],
-    ['4102','Retur dan Potongan Penjualan',AccountType.REVENUE], ['4201','Keuntungan Penyesuaian Persediaan',AccountType.REVENUE], ['4202','Keuntungan Pelepasan Aset',AccountType.REVENUE],
-    ['5102','Kerugian Penyesuaian Persediaan',AccountType.EXPENSE],
+    ['4102','Retur dan Potongan Penjualan',AccountType.REVENUE], ['4201','Keuntungan Penyesuaian Persediaan',AccountType.REVENUE], ['4202','Keuntungan Pelepasan Aset',AccountType.REVENUE], ['4203','Keuntungan Selisih Harga Beli',AccountType.REVENUE],
+    ['5102','Kerugian Penyesuaian Persediaan',AccountType.EXPENSE], ['5103','Kerugian Selisih Harga Beli',AccountType.EXPENSE],
     ['5201','Beban Pengiriman',AccountType.EXPENSE], ['5202','Beban Bahan Bakar Kendaraan',AccountType.EXPENSE],
     ['5203','Beban Perawatan Kendaraan dan Aset',AccountType.EXPENSE], ['6201','Beban Penyusutan',AccountType.EXPENSE], ['6202','Kerugian Pelepasan Aset',AccountType.EXPENSE],
   ];
@@ -713,6 +714,33 @@ async function main() {
     update: { eventType: rule.eventType, status: 'ACTIVE', journalLines: rule.lines as Prisma.InputJsonValue },
     create: { companyId: company.id, code: rule.code, version: 1, name: rule.code, eventType: rule.eventType, status: 'ACTIVE', journalLines: rule.lines as Prisma.InputJsonValue },
   });
+  await prisma.accountingPostingRule.upsert({
+    where: { companyId_code_version: { companyId: company.id, code: 'PURCHASE-RETURN', version: 2 } },
+    update: {
+      eventType: 'PURCHASE_RETURN',
+      status: 'ACTIVE',
+      journalLines: [
+        { accountCodeKey: 'payable', side: 'DEBIT', amountKey: 'payableOffset', skipIfZero: true },
+        { accountCodeKey: 'supplierReceivable', side: 'DEBIT', amountKey: 'supplierReceivable', skipIfZero: true },
+        { accountCodeKey: 'inventory', side: 'CREDIT', amountKey: 'inventory' },
+        { accountCodeKey: 'inputTax', side: 'CREDIT', amountKey: 'inputTax', skipIfZero: true },
+      ] as Prisma.InputJsonValue,
+    },
+    create: {
+      companyId: company.id,
+      code: 'PURCHASE-RETURN',
+      version: 2,
+      name: 'PURCHASE-RETURN',
+      eventType: 'PURCHASE_RETURN',
+      status: 'ACTIVE',
+      journalLines: [
+        { accountCodeKey: 'payable', side: 'DEBIT', amountKey: 'payableOffset', skipIfZero: true },
+        { accountCodeKey: 'supplierReceivable', side: 'DEBIT', amountKey: 'supplierReceivable', skipIfZero: true },
+        { accountCodeKey: 'inventory', side: 'CREDIT', amountKey: 'inventory' },
+        { accountCodeKey: 'inputTax', side: 'CREDIT', amountKey: 'inputTax', skipIfZero: true },
+      ] as Prisma.InputJsonValue,
+    },
+  });
 
   // Assets and fleet classifications.
   const assetCategories = [
@@ -828,6 +856,7 @@ async function main() {
       'supplier.view','supplier.create','supplier.update',
       'purchase.view','purchase.create','purchase.approve','purchase.receive','purchase.return','purchase.cancel',
       'inventory.view','inventory.adjust','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
+      'inventory.costing.view','inventory.costing.manage','inventory.costing.rebuild',
       'sale.view','sale.create','sale.cancel','sale.return','sale.refund',
       'order.view','order.manage','order.cancel','shipment.manage',
       'payment.view','payment.manage','payment.refund','payment.reconcile',
@@ -867,10 +896,10 @@ async function main() {
       'finance.view','finance.create','finance.post','finance.journal','finance.expense','finance.approve','finance.close_period','finance.reconcile',
       'tax.view','tax.manage','accounting.event.view','accounting.rule.manage',
       'payroll.view','payroll.approve','payroll.post','payroll.publish',
-      'report.view','report.export','audit.view','inventory.view','asset.view','asset.depreciate','fleet.view',
+      'report.view','report.export','audit.view','inventory.view','inventory.costing.view','inventory.costing.manage','inventory.costing.rebuild','asset.view','asset.depreciate','fleet.view',
       'inspection.view','operations.confirm','goods_receipt.confirm','goods_receipt.reject','digital_service.view','digital_service.manage','sale.return','purchase.return',
     ]],
-    ['AUDITOR', ['product.view','supplier.view','purchase.view','sale.view','order.view','inventory.view','finance.view','tax.view','accounting.event.view','payroll.view','report.view','report.export','audit.view','inspection.view','asset.view','fleet.view','payment.view','manufacturing.view','digital_service.view']],
+    ['AUDITOR', ['product.view','supplier.view','purchase.view','sale.view','order.view','inventory.view','inventory.costing.view','finance.view','tax.view','accounting.event.view','payroll.view','report.view','report.export','audit.view','inspection.view','asset.view','fleet.view','payment.view','manufacturing.view','digital_service.view']],
     ['HR', ['employee.view','employee.manage','attendance.view','attendance.manage','attendance.approve','leave.view','leave.manage','leave.approve','overtime.view','overtime.manage','overtime.approve','payroll.view','report.view']],
     ['PAYROLL', ['employee.view','attendance.view','attendance.approve','payroll.view','payroll.manage','payroll.calculate','payroll.approve','payroll.post','payroll.publish','tax.view','tax.manage','accounting.event.view','report.view']],
     ['MANAGER', [

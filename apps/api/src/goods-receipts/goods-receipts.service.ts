@@ -8,6 +8,7 @@ import { depositLocationStock } from '../common/location-inventory';
 import { toPurchaseBaseQuantity } from '../common/purchase-uom';
 import { serializableTx } from '../common/serializable-tx';
 import { decodeCursor, parsePageLimit, toCursorPage } from '../common/pagination';
+import { InventoryCostingService, costingPayloadHash } from '../inventory/costing.service';
 import { OperationsControlService } from '../operations-control/operations-control.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmGoodsReceiptDto, CreateGoodsReceiptDto } from './dto/create-goods-receipt.dto';
@@ -20,6 +21,7 @@ export class GoodsReceiptsService {
     private readonly prisma: PrismaService,
     private readonly accounting: AccountingCoreService,
     private readonly operations: OperationsControlService,
+    private readonly costing: InventoryCostingService,
   ) {}
 
   private requireTenantScope(user: AuthUser): TenantScope {
@@ -305,6 +307,7 @@ export class GoodsReceiptsService {
       }
       let net = new Prisma.Decimal(0), tax = new Prisma.Decimal(0), gross = new Prisma.Decimal(0);
       const taxGroups = new Map<string, { base: Prisma.Decimal; tax: Prisma.Decimal }>();
+      const costingEnabled = await this.costing.isEnabled(tx, scope.companyId, receipt.warehouse.branchId);
       for (const item of receipt.items) {
         net = net.add(item.subtotal); tax = tax.add(item.taxAmount); gross = gross.add(item.grossSubtotal);
         await tx.purchaseOrderItem.update({ where: { id: item.purchaseOrderItemId }, data: { receivedQty: { increment: item.acceptedQty } } });
@@ -315,11 +318,38 @@ export class GoodsReceiptsService {
             create: { warehouseId: receipt.warehouseId, productId: item.productId, quantity: item.acceptedQty, available: item.acceptedQty },
             update: { quantity: { increment: item.acceptedQty }, available: { increment: item.acceptedQty } },
           });
-          await tx.inventoryMovement.create({ data: {
+          const movement = await tx.inventoryMovement.create({ data: {
             warehouseId: receipt.warehouseId, productId: item.productId, locationId: locationStock.locationId, type: 'PURCHASE_RECEIPT', quantity: item.acceptedQty,
             balanceAfter: inventory.quantity, referenceType: 'GoodsReceipt', referenceId: receipt.id,
+            occurredAt: receipt.receivedAt,
             notes: item.quantityDamaged ? `${item.quantityDamaged} unit rusak/ditolak dan tidak masuk stok.` : dto.notes,
           } });
+          if (costingEnabled) {
+            await this.costing.recordReceipt(tx, {
+              companyId: scope.companyId,
+              branchId: receipt.warehouse.branchId,
+              warehouseId: receipt.warehouseId,
+              productId: item.productId,
+              batchKey: item.batchNumber ?? '',
+              quantity: item.acceptedQty,
+              totalValue: item.subtotal,
+              occurredAt: receipt.receivedAt,
+              movementId: movement.id,
+              sourceType: 'GoodsReceipt',
+              sourceId: receipt.id,
+              sourceLineKey: item.id,
+              operationKey: `goods-receipt-cost:${receipt.id}:${item.id}:v1`,
+              payloadHash: costingPayloadHash({
+                receiptId: receipt.id,
+                itemId: item.id,
+                quantity: item.acceptedQty,
+                totalValue: item.subtotal.toFixed(6),
+                batchKey: item.batchNumber ?? '',
+                occurredAt: receipt.receivedAt.toISOString(),
+              }),
+              createdById: user?.sub,
+            });
+          }
           if (item.batchNumber) {
             const existingBatch = await tx.inventoryBatch.findUnique({
               where: { warehouseId_productId_batchNumber: { warehouseId: receipt.warehouseId, productId: item.productId, batchNumber: item.batchNumber } },

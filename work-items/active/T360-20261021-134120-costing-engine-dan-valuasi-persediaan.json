@@ -1,0 +1,73 @@
+{
+  "id": "T360-20261021-134120",
+  "title": "Costing engine dan valuasi persediaan",
+  "type": "feature",
+  "module": "inventory",
+  "wave": "W1",
+  "phase": "IMPLEMENTATION",
+  "risk": "CRITICAL",
+  "owner": "architecture",
+  "featureFlag": "inventory.costing",
+  "dependencies": [],
+  "impacts": {
+    "database": "HIGH",
+    "inventory": "HIGH",
+    "accounting": "HIGH",
+    "tax": "LOW",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "MEDIUM",
+    "performance": "MEDIUM"
+  },
+  "businessRules": [
+    "Cost layer disimpan per produk, gudang, dan batch/lot bila relevan; layer hanya dibuat dari inventory movement yang valid dan tidak boleh diedit langsung. Stok per varian belum dipisahkan oleh schema, sehingga costing varian ditunda.",
+    "Metode costing adalah kebijakan company/scope yang disetujui di ADR. Default operasional adalah MOVING_AVERAGE (keputusan user 21 Oktober 2026); FIFO dan LIFO dapat dipilih sebagai policy. Average periodik tidak termasuk P0 kecuali diminta terpisah. Perubahan metode tidak boleh mengubah layer historis tanpa restatement yang disetujui.",
+    "COGS penjualan, retur, dan reversal dihitung dari cost layer yang dikonsumsi, bukan dari Product.costPrice statis. Tidak ada negative stock; kekurangan layer menggagalkan transaksi secara atomik.",
+    "Penerimaan backdated hanya boleh mengubah layer dalam periode terbuka dan tidak boleh memiliki cost event setelahnya pada scope yang sama; koreksi memakai rebuild/cutover dengan approval dan jurnal kompensasi, bukan recalculation diam-diam.",
+    "Setiap konsumsi/penyesuaian layer memiliki operation key unik dan idempotent; retry atau replay tidak boleh menggandakan layer, COGS, atau jurnal.",
+    "Valuasi persediaan, margin, dan laporan HPP memakai cost layer yang sama; tidak boleh ada dua sumber nilai persediaan yang berbeda.",
+    "Jurnal HPP tetap dibuat melalui accounting core dengan debit=kredit; costing tidak menanam jurnal dan tidak mengubah tarif pajak. Tax core tetap memakai versi dan tanggal efektif.",
+    "Semua query dan mutasi dibatasi company/branch/warehouse dari konteks terpercaya; permission dan audit event wajib untuk perubahan kebijakan, rebuild, dan koreksi.",
+    "Backfill/opening layer hanya dari snapshot yang disetujui, dijalankan batch dan dapat dilanjutkan; data historis yang tidak lengkap dicatat sebagai keterbatasan, bukan direkayasa.",
+    "Feature flag inventory.costing harus dapat dimatikan tanpa rollback schema; saat off, jalur lama tetap berjalan dan tidak ada data layer yang dihapus."
+  ],
+  "acceptanceCriteria": [
+    "Schema cost layer, kebijakan metode, dan relasi ke inventory movement tersedia di tiga dialek Prisma; migration expand-only dan baseline PostgreSQL diperbarui.",
+    "Penjualan, retur penjualan, dan reversal mengonsumsi layer secara atomik; COGS yang diposting sama dengan nilai layer yang dikonsumsi.",
+    "FIFO, LIFO, dan average memiliki perhitungan yang teruji; metode default dan konfigurasi per scope tercatat di ADR.",
+    "Stok negatif, layer kosong, dan konsumsi bersamaan ditolak atau diserialisasi tanpa menggandakan COGS; retry idempotent.",
+    "Penerimaan backdated, periode terkunci, retur, dan rebuild layer menghasilkan saldo yang dapat direkonsiliasi tanpa mengedit data historis.",
+    "Laporan valuasi, margin, dan HPP memakai layer; selisih terhadap metode lama diukur dalam parallel run dan disetujui sebelum cutover.",
+    "Feature flag inventory.costing dapat mematikan jalur baru; jalur lama tetap menghasilkan transaksi yang valid tanpa kehilangan data layer.",
+    "Test unit/integration/concurrency/security/performance lulus, termasuk tenant isolation, permission, query plan, dan migration rehearsal SQLite/PostgreSQL.",
+    "Dokumentasi ADR, runbook backfill/rebuild, rollback, monitoring, dan known limitation tersedia; tidak ada klaim production-ready sebelum STAGING dan Human Stage-20."
+  ],
+  "testPlan": [
+    "Unit test perhitungan FIFO, LIFO, average, pembulatan, dan konsumsi layer parsial.",
+    "Integration test penerimaan, penjualan, retur, reversal, dan penyesuaian; pastikan jurnal HPP debit=kredit dan nilai layer sama dengan COGS.",
+    "Concurrency test dua penjualan terakhir pada layer yang sama; hanya satu yang boleh berhasil atau keduanya diserialisasi tanpa COGS ganda.",
+    "Negative stock dan layer kosong harus menolak transaksi secara atomik; tidak ada movement/jurnal parsial.",
+    "Backdated receipt dan period lock: receipt tanpa event setelahnya boleh dalam periode terbuka; receipt dengan event setelahnya ditolak dan koreksi memakai rebuild/approval dengan jurnal kompensasi; periode terkunci menolak posting.",
+    "Idempotency/replay test untuk posting, retry, rebuild, dan import layer; operation key yang sama tidak menggandakan data.",
+    "Rebuild/reconciliation test: total layer = nilai persediaan = saldo akun persediaan; selisih harus nol atau dijelaskan.",
+    "Tenant/branch/warehouse isolation dan permission test untuk endpoint kebijakan, rebuild, dan koreksi; audit event tercatat.",
+    "Performance test query valuation/COGS pada volume movement besar dengan query plan dan index yang terukur.",
+    "Migration rehearsal SQLite dan PostgreSQL, termasuk `npm run db:baseline:postgres` dan `db:baseline:postgres:check`."
+  ],
+  "migrationPlan": "Migration expand-only `database/migrations/T360-20261021-134120-costing-engine/` menambah CostingPolicy, InventoryCostState, InventoryCostEvent, InventoryCostLayer, InventoryCostConsumption, CostingRebuildRun, serta InventoryMovement.occurredAt (backfill dari createdAt). Tidak ada rewrite COGS historis; backfill costing dijalankan terpisah lewat CostingRebuildRun mode SHADOW per company/branch/warehouse, direkonsiliasi dengan Inventory dan jurnal sebelum aktivasi flag. Uji rehearsal SQLite/PostgreSQL, regenerate baseline PostgreSQL, parallel run, lalu aktifkan inventory.costing. Rollback non-destruktif: set policy SHADOW/flag off dan pertahankan tabel.",
+  "rollbackPlan": "Matikan feature flag inventory.costing dan kembalikan jalur COGS lama tanpa menghapus tabel layer. Jika terjadi korupsi layer, hentikan write, restore snapshot, rebuild dari movement, dan rekonsiliasi jurnal. Posting yang sudah terjadi dibalik dengan dokumen reversal/compensating, bukan edit langsung. Catat rollback dan dampaknya di work item.",
+  "monitoringPlan": "Pantau jumlah layer, layer kosong/negatif, selisih valuation vs GL, selisih COGS vs layer consumption, latency query costing, dan kegagalan rebuild. Alert bila selisih melewati ambang atau antrean rebuild tertahan; observasi minimal satu siklus penjualan dan tutup periode sebelum CLOSED.",
+  "securityNotes": "Endpoint kebijakan costing, rebuild, dan koreksi wajib memakai permission finance/inventory yang sempit, tenant/branch/warehouse scope dari AuthUser, audit event, dan maker-checker untuk rebuild. Tidak ada data kartu, token, biometric, atau data pribadi dalam layer; operation key tidak boleh menjadi secret. Log tidak memuat payload sensitif.",
+  "documentation": [
+    "docs/IPOS-5-PARITY-WORKFLOW.md",
+    "docs/F3-INVENTORY-COMPLETION.md",
+    "docs/F4-ACCOUNTING-COMPLETION.md",
+    "docs/ERD.md",
+    "docs/adr/ADR-T360-20261021-134120-COSTING-METHOD.md",
+    "docs/DEVELOPMENT-WORKFLOW.md",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-21T05:41:20.906Z",
+  "updatedAt": "2026-10-22T03:51:47Z"
+}

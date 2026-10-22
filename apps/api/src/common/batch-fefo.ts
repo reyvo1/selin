@@ -9,6 +9,7 @@ export async function consumeProductBatchesFefo(
   input: { warehouseId: string; productId: string; quantity: number },
 ) {
   let remaining = input.quantity;
+  const consumed: Array<{ batchId: string; batchNumber: string; quantity: number }> = [];
   const now = new Date();
   const expiringBatches = await tx.inventoryBatch.findMany({
     where: { warehouseId: input.warehouseId, productId: input.productId, quantity: { gt: 0 }, expiryDate: { gt: now } },
@@ -29,7 +30,9 @@ export async function consumeProductBatchesFefo(
       data: { quantity: { decrement: take } },
     });
     if (changed.count !== 1) throw new BadRequestException('Stok batch berubah saat konsumsi. Ulangi transaksi.');
+    consumed.push({ batchId: batch.id, batchNumber: batch.batchNumber, quantity: take });
     remaining -= take;
   }
   if (remaining > 0) throw new BadRequestException('Stok batch bebas tidak mencukupi untuk transaksi.');
+  return consumed;
 }

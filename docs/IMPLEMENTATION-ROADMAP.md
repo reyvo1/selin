@@ -2,6 +2,18 @@
 
 Roadmap ini mengatur urutan pengerjaan. Status aktual setiap pekerjaan berada pada `work-items/active/` dan bukan pada teks roadmap ini.
 
+## Baseline paritas IPOS 5.0 (planning)
+
+- Gap checklist IPOS 5.0 dan urutan kerja ada di `docs/IPOS-5-PARITY-WORKFLOW.md`:
+  138 baris, 67 `ADA`, 26 `SEBAGIAN`, 45 `BELUM`, dikelompokkan A-J.
+- Ini baseline source-level, bukan klaim production-ready. Baseline sudah
+  disetujui user pada 21 Oktober 2026; otoritas status tetap
+  `config/product-completeness.json`.
+- Paket P0 (costing, saldo awal, tutup tahun): ADR disetujui 21 Oktober 2026.
+  Costing berada di IMPLEMENTATION; saldo awal/tutup tahun tetap DESIGN sampai
+  fondasi costing selesai. Paket operasional dan laporan mengikuti gelombang di
+  dokumen tersebut setelah work item paket dibuat.
+
 ## Milestone A — Stabilitas fondasi
 
 - Tenant/branch isolation konsisten.

@@ -1,0 +1,72 @@
+{
+  "id": "T360-20261021-131414",
+  "title": "susun workflow paritas IPOS 5.0",
+  "type": "documentation",
+  "module": "product-parity",
+  "wave": "W0",
+  "phase": "DESIGN",
+  "risk": "MEDIUM",
+  "owner": "architecture",
+  "featureFlag": "",
+  "dependencies": [],
+  "impacts": {
+    "database": "NONE",
+    "inventory": "NONE",
+    "accounting": "NONE",
+    "tax": "NONE",
+    "payment": "NONE",
+    "payroll": "NONE",
+    "sync": "NONE",
+    "security": "NONE",
+    "performance": "NONE"
+  },
+  "businessRules": [
+    "Dokumen ini adalah baseline gap dan urutan kerja, bukan otoritas completion; status produk tetap mengikuti config/product-completeness.json.",
+    "Status ADA berarti model/API/UI/alur ditemukan pada source, bukan bukti runtime, UAT, concurrency, atau Human Stage-20; verifikasi runtime wajib saat paket terkait dikerjakan.",
+    "Seluruh frasa checklist A-J harus terpetakan ke baris matriks; item yang ambigu dicatat di Bagian 5 sebagai asumsi dan tidak boleh dihapus atau ditebak.",
+    "Tidak ada implementasi paket sebelum user menyetujui checklist, status, asumsi, prioritas, gelombang, dan keputusan desain di dokumen.",
+    "Satu domain satu sumber kebenaran; paket harus memperluas inventory, accounting, tax, sales, purchasing, reporting, branch-sync, dan platform yang sudah ada, bukan membuat modul duplikat.",
+    "Costing, saldo awal, tutup tahun, konsinyasi, cek/BG, dan migrasi adalah domain kritis; setiap paket wajib lulus gate inventory, accounting/tax, sync, security, dan performance yang relevan.",
+    "Perubahan schema pada paket turunan wajib expand-only, memiliki backfill/rollback, dan meregenerasi baseline PostgreSQL; work item dokumentasi ini sendiri tidak mengubah schema.",
+    "Dokumen tidak boleh memuat credential, token, data pelanggan, data produksi, atau secret; bukti yang dikutip hanya path dan line source.",
+    "Paket implementasi dibuat sebagai work item terpisah setelah sign-off, dimulai dari P0 dan mengikuti urutan gelombang yang disetujui.",
+    "Work item ini tidak boleh ditutup sebelum user sign-off tercatat dan seluruh acceptance criteria dokumen terverifikasi."
+  ],
+  "acceptanceCriteria": [
+    "docs/IPOS-5-PARITY-WORKFLOW.md memuat 138 baris checklist unik: 67 ADA, 26 SEBAGIAN, dan 45 BELUM, mencakup sepuluh domain A-J.",
+    "Setiap baris memiliki status, bukti/kondisi saat ini, gap yang harus ditutup, prioritas, dan dampak; tidak ada placeholder atau baris tanpa bukti.",
+    "Seluruh frasa checklist user terwakili di Bagian 4; item yang tidak dapat dipetakan dengan yakin tercatat di Bagian 5 beserta dampak salah asumsi.",
+    "Dokumen memuat paket PKG-00 sampai PKG-13 dengan hasil, basis perluasan, dependensi, wave, risiko, dan gate utama.",
+    "Dokumen memuat gelombang delivery 0-5 beserta exit gate, workflow INTAKE sampai CLOSED, quality gate per domain, migration/backfill/rollback, risiko, sign-off, indeks bukti, dan perintah verifikasi.",
+    "Dokumen menegaskan productReady=false, currentPhase=P5, humanStage20=PENDING, dan tidak menaikkan status fitur ADA menjadi production-ready.",
+    "Work item ini tidak menambah perubahan kode aplikasi, schema Prisma, migration, database, konfigurasi produk, atau status P5; perubahan sesi ini hanya dokumen, roadmap, handoff, dan work item dokumentasi. Tiga perubahan working tree lama (.gitignore, config/p5-full-ui-root-audit.json, docs/P5-FULL-UI-ROOT-AUDIT.md) bukan bagian work item ini.",
+    "node scripts/workflow.mjs validate lulus dengan 73 work item dan 8 delivery wave; npm run validate:repo lulus tanpa error.",
+    "User menyetujui checklist, status, asumsi, prioritas, urutan gelombang, dan keputusan desain; persetujuan dicatat di handoff atau evidence sebelum paket implementasi dibuat.",
+    "Paket implementasi belum dibuat atau dijalankan sebelum acceptance criterion sign-off terpenuhi."
+  ],
+  "testPlan": [
+    "Validasi invarian markdown: 138 baris unik, 67 ADA, 26 SEBAGIAN, 45 BELUM, 10 domain A-J, ID unik dan berurutan per domain, serta setiap baris memiliki 7 kolom.",
+    "Validasi tidak ada placeholder \"ISI aturan\", \"ISI hasil\", atau status/prioritas di luar P0/P1/P2/Jaga/P1-P2; validasi rujukan ID contoh (A01, B11) tetap ada.",
+    "Validasi keberadaan PKG-00..PKG-13, gelombang 0-5, gate costing/opening/year-end/item type/manufacturing/customer/commission/tax/cek-BG/deposit/consignment/branch/migration/performance/security, dan Bagian 13 sign-off.",
+    "Validasi setiap path bukti utama di Lampiran A dapat ditemukan di repository; line number diperiksa ulang bila file berubah.",
+    "Jalankan node scripts/workflow.mjs validate; harapkan 73 work item dan 8 delivery wave tanpa error.",
+    "Jalankan npm run validate:repo; harapkan repository validation PASS tanpa error markdown/link.",
+    "Jalankan git diff --check untuk memastikan tidak ada whitespace error pada dokumen dan manifest.",
+    "Review manusia oleh user: cocokkan 138 baris dengan checklist IPOS asli, koreksi status/asumsi/prioritas, lalu catat sign-off. Tidak ada test runtime aplikasi karena work item ini hanya dokumentasi."
+  ],
+  "migrationPlan": "Tidak ada perubahan database, schema, migration, atau backfill. Work item ini hanya menambah dokumen planning dan manifest workflow. Paket turunan yang menyentuh schema wajib memiliki migration plan expand-only, backfill, rollback, dan regenerasi baseline PostgreSQL.",
+  "rollbackPlan": "Rollback hanya menghapus atau merevert docs/IPOS-5-PARITY-WORKFLOW.md dan work item dokumentasi ini; tidak ada data transaksi, schema, atau posting yang perlu dikompensasi. Jika paket implementasi sudah dimulai, rollback dilakukan per work item paket dengan feature flag dan compensating operation sesuai domain.",
+  "monitoringPlan": "Tidak ada runtime monitoring untuk dokumen. Review dilakukan saat sign-off, saat status paket berubah, dan sebelum work item ditutup; drift jumlah baris/status dideteksi melalui test plan invarian dan review user. Setelah implementasi, monitoring mengikuti work item paket terkait.",
+  "securityNotes": "Dokumen hanya memuat path source, line reference, dan ringkasan gap; tidak memuat credential, token, data pelanggan, data produksi, atau secret. Tidak ada endpoint, permission, tenant scope, atau audit event baru pada work item ini. Akses dokumen mengikuti permission repository.",
+  "documentation": [
+    "docs/IPOS-5-PARITY-WORKFLOW.md",
+    "docs/DEVELOPMENT-WORKFLOW.md",
+    "docs/IMPLEMENTATION-ROADMAP.md",
+    "docs/DEVELOPMENT-KIT.md",
+    "config/product-completeness.json",
+    "config/workflow-policy.json",
+    "handoff/CURRENT-WORK.md"
+  ],
+  "createdAt": "2026-10-21T05:14:14.503Z",
+  "updatedAt": "2026-10-22T03:55:00.000Z"
+}

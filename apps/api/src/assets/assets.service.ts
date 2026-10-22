@@ -6,6 +6,7 @@ import { parseBusinessDateBoundary } from '../common/business-time';
 import { nextDocumentNumber } from '../common/numbering';
 import { consumeAvailableLocationStock } from '../common/location-inventory';
 import { PrismaService } from '../prisma/prisma.service';
+import { InventoryCostingService, costingPayloadHash } from '../inventory/costing.service';
 import { AssignAssetDto, CompleteMaintenanceDto, CreateAssetCategoryDto, CreateAssetDto, CreateAssetMaintenancePlanDto, CreateMaintenanceWorkOrderDto, DisposeAssetDto, RunDepreciationDto, TransferAssetDto, UpdateAssetMaintenancePlanDto } from './dto/assets.dto';
 
 type DbClient = Prisma.TransactionClient | PrismaService;
@@ -13,7 +14,7 @@ type TenantScope = { companyId: string; branchId: string };
 
 @Injectable()
 export class AssetsService {
-  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService) {}
+  constructor(private readonly prisma: PrismaService, private readonly accounting: AccountingCoreService, private readonly costing: InventoryCostingService) {}
 
   private requireTenantScope(user: AuthUser): TenantScope {
     if (!user.companyId || !user.branchId) {
@@ -437,9 +438,12 @@ export class AssetsService {
         if (vehicle && dto.odometer < vehicle.currentOdometer) throw new BadRequestException('Odometer maintenance tidak boleh lebih kecil dari odometer kendaraan saat ini.');
       }
 
+      const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, completedAt);
+      const costingEnabled = costingMode !== null;
+      const costingActive = costingMode === 'ACTIVE';
       let partsCost = new Prisma.Decimal(0);
       const partDetails: Prisma.InputJsonObject[] = [];
-      for (const part of dto.parts ?? []) {
+      for (const [partIndex, part] of (dto.parts ?? []).entries()) {
         await this.assertWarehouse(tx, user, scope, part.warehouseId);
         const product = await tx.product.findFirst({ where: { id: part.productId, companyId: scope.companyId, isActive: true } });
         if (!product) return this.denyTenantAccess(tx, user, scope, 'Product', part.productId);
@@ -460,6 +464,7 @@ export class AssetsService {
           });
           if (serialUpdate.count !== part.quantity) throw new BadRequestException(`Status serial part ${product.sku} berubah; ulangi transaksi maintenance.`);
         }
+        let batchKey = '';
         if (part.batchId) {
           const batch = await tx.inventoryBatch.findUnique({ where: { id: part.batchId } });
           if (!batch || batch.warehouseId !== part.warehouseId || batch.productId !== part.productId) {
@@ -471,6 +476,7 @@ export class AssetsService {
             data: { quantity: { decrement: part.quantity } },
           });
           if (batchUpdate.count !== 1) throw new BadRequestException(`Stok batch part ${product.sku} berubah; ulangi transaksi.`);
+          batchKey = batch.batchNumber;
         }
         const allocations = await consumeAvailableLocationStock(tx, { warehouseId: part.warehouseId, productId: part.productId, quantity: part.quantity });
         const stockUpdate = await tx.inventory.updateMany({
@@ -479,21 +485,47 @@ export class AssetsService {
         });
         if (stockUpdate.count !== 1) throw new BadRequestException(`Stok part ${product.sku} berubah; ulangi transaksi.`);
         const updatedInventory = await tx.inventory.findUniqueOrThrow({ where: { id: inventory.id } });
-        const lineCost = new Prisma.Decimal(product.costPrice).mul(part.quantity).toDecimalPlaces(2);
+        const legacyLineCost = new Prisma.Decimal(product.costPrice).mul(part.quantity).toDecimalPlaces(2);
+        let lineCost = legacyLineCost;
+        let firstMovementId: string | undefined;
+        for (const allocation of allocations) {
+          const movement = await tx.inventoryMovement.create({ data: {
+            warehouseId: part.warehouseId,
+            productId: part.productId,
+            locationId: allocation.locationId,
+            type: 'ADJUSTMENT_OUT',
+            quantity: -allocation.quantity,
+            balanceAfter: updatedInventory.quantity,
+            referenceType: 'MaintenanceWorkOrder',
+            referenceId: work.id,
+            notes: `MAINTENANCE_PART:${work.number}`,
+            createdAt: completedAt,
+            occurredAt: completedAt,
+          } });
+          firstMovementId ??= movement.id;
+        }
+        if (costingEnabled) {
+          const result = await this.costing.recordIssue(tx, {
+            companyId: scope.companyId,
+            branchId: scope.branchId,
+            warehouseId: part.warehouseId,
+            productId: part.productId,
+            batchKey,
+            sourceType: 'MaintenanceWorkOrder',
+            sourceId: work.id,
+            sourceLineKey: `${partIndex}:${part.productId}:${batchKey}`,
+            operationKey: `maintenance-cost:${work.id}:${partIndex}:v1`,
+            payloadHash: costingPayloadHash({ version: 1, workOrderId: work.id, partIndex, productId: part.productId, batchKey, quantity: part.quantity, occurredAt: completedAt.toISOString() }),
+            movementId: firstMovementId,
+            occurredAt: completedAt,
+            createdById: user.sub,
+            quantity: part.quantity,
+          });
+          if (costingActive) lineCost = result.cost;
+        }
         partsCost = partsCost.add(lineCost);
-        for (const allocation of allocations) await tx.inventoryMovement.create({ data: {
-          warehouseId: part.warehouseId,
-          productId: part.productId,
-          locationId: allocation.locationId,
-          type: 'ADJUSTMENT_OUT',
-          quantity: -allocation.quantity,
-          balanceAfter: updatedInventory.quantity,
-          referenceType: 'MaintenanceWorkOrder',
-          referenceId: work.id,
-          notes: `MAINTENANCE_PART:${work.number}`,
-          createdAt: completedAt,
-        } });
-        partDetails.push({ productId: part.productId, sku: product.sku, warehouseId: part.warehouseId, batchId: part.batchId ?? null, serialIds, quantity: part.quantity, unitCost: product.costPrice.toString(), totalCost: lineCost.toString() });
+        const unitCost = lineCost.div(part.quantity).toDecimalPlaces(6);
+        partDetails.push({ productId: part.productId, sku: product.sku, warehouseId: part.warehouseId, batchId: part.batchId ?? null, serialIds, quantity: part.quantity, unitCost: unitCost.toString(), totalCost: lineCost.toString() });
       }
 
       let externalEvent: Awaited<ReturnType<AccountingCoreService['postOperationalEvent']>> | undefined;

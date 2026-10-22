@@ -35,7 +35,7 @@ test('F3 fulfillment uses FEFO and never consumes expired batches', () => {
 test('F3 POS checkout consumes batch stock with the shared FEFO helper', () => {
   const sales = read('apps/api/src/sales/sales.service.ts');
   assert.match(sales, /import \{ consumeProductBatchesFefo \} from '\.\.\/common\/batch-fefo'/);
-  assert.match(sales, /if \(item\.trackBatch\) await consumeProductBatchesFefo\(tx, \{ warehouseId: warehouse\.id, productId: item\.productId, quantity: item\.quantity \}\)/);
+  assert.match(sales, /item\.trackBatch\s*\?\s*await consumeProductBatchesFefo\(tx, \{ warehouseId: warehouse\.id, productId: item\.productId, quantity: item\.quantity \}\)/);
 });
 
 test('F3 batch pre-registration and operator UI enforce expiry configuration', () => {

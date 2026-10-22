@@ -651,14 +651,17 @@ model InventoryMovement {
   referenceType String
   referenceId   String
   notes         String?
+  occurredAt    DateTime?
   createdAt     DateTime              @default(now())
   warehouse     Warehouse             @relation(fields: [warehouseId], references: [id])
   product       Product               @relation(fields: [productId], references: [id])
   @@index([warehouseId, productId, createdAt])
+  @@index([warehouseId, productId, occurredAt])
   @@index([locationId, productId, createdAt])
   @@index([productId, createdAt])
   @@index([referenceType, referenceId])
   @@index([createdAt, id])
+  @@index([occurredAt, id])
 }
 
 model InventoryConditionBalance {
@@ -1881,6 +1884,189 @@ model InventorySerial {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   @@index([warehouseId, productId, status])
+}
+
+enum CostingMethod {
+  MOVING_AVERAGE
+  FIFO
+  LIFO
+}
+
+enum CostingMode {
+  SHADOW
+  ACTIVE
+}
+
+enum CostingPolicyStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum InventoryCostEventType {
+  RECEIPT
+  ISSUE
+  SALE_RETURN
+  PURCHASE_RETURN
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT_POSITIVE
+  ADJUSTMENT_NEGATIVE
+  PRODUCTION_CONSUME
+  PRODUCTION_OUTPUT
+  ASSET_ISSUE
+  OPENING
+  REVERSAL
+  REBUILD
+}
+
+enum InventoryCostEventStatus {
+  POSTED
+  REVERSED
+}
+
+enum InventoryCostLayerStatus {
+  OPEN
+  CONSUMED
+  REVERSED
+}
+
+enum CostingRebuildStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model CostingPolicy {
+  id            String              @id @default(uuid())
+  companyId     String
+  branchId      String?
+  scopeKey      String
+  method        CostingMethod
+  mode          CostingMode        @default(SHADOW)
+  status        CostingPolicyStatus @default(DRAFT)
+  version       Int                 @default(1)
+  effectiveFrom DateTime
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  @@unique([companyId, scopeKey, version])
+  @@index([companyId, branchId, status])
+  @@index([companyId, status, effectiveFrom])
+}
+
+model InventoryCostState {
+  id          String        @id @default(uuid())
+  companyId   String
+  branchId    String
+  warehouseId String
+  productId   String
+  batchKey    String        @default("")
+  method      CostingMethod
+  quantity    Int           @default(0)
+  value       Decimal       @default(0)
+  averageCost Decimal       @default(0)
+  version     Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  @@unique([companyId, branchId, warehouseId, productId, batchKey, method])
+  @@index([companyId, warehouseId, productId])
+  @@index([companyId, branchId, productId])
+}
+
+model InventoryCostEvent {
+  id              String                   @id @default(uuid())
+  companyId       String
+  branchId        String
+  warehouseId     String
+  productId       String
+  batchKey        String                   @default("")
+  movementId      String?
+  eventType       InventoryCostEventType
+  method          CostingMethod
+  quantityDelta   Int
+  uncostedQuantity Int                   @default(0)
+  valueDelta      Decimal
+  unitCost        Decimal
+  balanceQuantity Int
+  balanceValue    Decimal
+  occurredAt      DateTime                 @default(now())
+  sourceType      String
+  sourceId        String
+  sourceLineKey   String                   @default("")
+  operationKey    String
+  payloadHash     String
+  status          InventoryCostEventStatus @default(POSTED)
+  reversalOfId    String?
+  createdById     String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  @@unique([companyId, operationKey])
+  @@unique([companyId, sourceType, sourceId, sourceLineKey, eventType])
+  @@index([companyId, branchId, warehouseId, productId, occurredAt])
+  @@index([movementId])
+  @@index([reversalOfId])
+}
+
+model InventoryCostLayer {
+  id             String                  @id @default(uuid())
+  companyId      String
+  branchId       String
+  warehouseId    String
+  productId      String
+  batchKey       String                  @default("")
+  method         CostingMethod
+  sourceEventId  String                  @unique
+  receivedAt     DateTime
+  originalQty    Int
+  remainingQty   Int
+  unitCost       Decimal
+  originalValue  Decimal
+  remainingValue Decimal
+  status         InventoryCostLayerStatus @default(OPEN)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+  @@index([companyId, branchId, warehouseId, productId, batchKey, status, receivedAt])
+  @@index([companyId, method, status, receivedAt])
+}
+
+model InventoryCostConsumption {
+  id        String   @id @default(uuid())
+  companyId String
+  layerId   String
+  eventId   String
+  quantity  Int
+  amount    Decimal
+  createdAt DateTime @default(now())
+  @@unique([layerId, eventId])
+  @@index([companyId, layerId])
+  @@index([eventId])
+}
+
+model CostingRebuildRun {
+  id            String               @id @default(uuid())
+  companyId     String
+  branchId      String
+  warehouseId   String?
+  method        CostingMethod
+  mode          CostingMode
+  fromDate      DateTime
+  toDate        DateTime
+  status        CostingRebuildStatus @default(PENDING)
+  checkpoint    String?
+  statistics    Json?
+  operationKey  String
+  approvedBy    String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  @@unique([companyId, operationKey])
+  @@index([companyId, branchId, status, createdAt])
+  @@index([companyId, warehouseId, fromDate, toDate])
 }
 
 model OrderReturn {

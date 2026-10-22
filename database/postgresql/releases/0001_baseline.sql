@@ -86,6 +86,27 @@ CREATE TYPE "NotificationStatus" AS ENUM ('QUEUED', 'SENT', 'DELIVERED', 'FAILED
 CREATE TYPE "FiscalPeriodStatus" AS ENUM ('OPEN', 'SOFT_CLOSED', 'CLOSED');
 
 -- CreateEnum
+CREATE TYPE "CostingMethod" AS ENUM ('MOVING_AVERAGE', 'FIFO', 'LIFO');
+
+-- CreateEnum
+CREATE TYPE "CostingMode" AS ENUM ('SHADOW', 'ACTIVE');
+
+-- CreateEnum
+CREATE TYPE "CostingPolicyStatus" AS ENUM ('DRAFT', 'ACTIVE', 'RETIRED');
+
+-- CreateEnum
+CREATE TYPE "InventoryCostEventType" AS ENUM ('RECEIPT', 'ISSUE', 'SALE_RETURN', 'PURCHASE_RETURN', 'TRANSFER_OUT', 'TRANSFER_IN', 'ADJUSTMENT_POSITIVE', 'ADJUSTMENT_NEGATIVE', 'PRODUCTION_CONSUME', 'PRODUCTION_OUTPUT', 'ASSET_ISSUE', 'OPENING', 'REVERSAL', 'REBUILD');
+
+-- CreateEnum
+CREATE TYPE "InventoryCostEventStatus" AS ENUM ('POSTED', 'REVERSED');
+
+-- CreateEnum
+CREATE TYPE "InventoryCostLayerStatus" AS ENUM ('OPEN', 'CONSUMED', 'REVERSED');
+
+-- CreateEnum
+CREATE TYPE "CostingRebuildStatus" AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED');
+
+-- CreateEnum
 CREATE TYPE "EmploymentStatus" AS ENUM ('PROBATION', 'PERMANENT', 'CONTRACT', 'DAILY', 'PART_TIME', 'INTERN', 'INACTIVE', 'TERMINATED');
 
 -- CreateEnum
@@ -668,6 +689,7 @@ CREATE TABLE "InventoryMovement" (
     "referenceType" TEXT NOT NULL,
     "referenceId" TEXT NOT NULL,
     "notes" TEXT,
+    "occurredAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "InventoryMovement_pkey" PRIMARY KEY ("id")
@@ -1693,6 +1715,135 @@ CREATE TABLE "InventorySerial" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "InventorySerial_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CostingPolicy" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT,
+    "scopeKey" TEXT NOT NULL,
+    "method" "CostingMethod" NOT NULL,
+    "mode" "CostingMode" NOT NULL DEFAULT 'SHADOW',
+    "status" "CostingPolicyStatus" NOT NULL DEFAULT 'DRAFT',
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "effectiveFrom" TIMESTAMP(3) NOT NULL,
+    "approvedBy" TEXT,
+    "approvedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CostingPolicy_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "InventoryCostState" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "warehouseId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "batchKey" TEXT NOT NULL DEFAULT '',
+    "method" "CostingMethod" NOT NULL,
+    "quantity" INTEGER NOT NULL DEFAULT 0,
+    "value" DECIMAL(20,6) NOT NULL DEFAULT 0,
+    "averageCost" DECIMAL(20,6) NOT NULL DEFAULT 0,
+    "version" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "InventoryCostState_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "InventoryCostEvent" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "warehouseId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "batchKey" TEXT NOT NULL DEFAULT '',
+    "movementId" TEXT,
+    "eventType" "InventoryCostEventType" NOT NULL,
+    "method" "CostingMethod" NOT NULL,
+    "quantityDelta" INTEGER NOT NULL,
+    "uncostedQuantity" INTEGER NOT NULL DEFAULT 0,
+    "valueDelta" DECIMAL(20,6) NOT NULL,
+    "unitCost" DECIMAL(20,6) NOT NULL,
+    "balanceQuantity" INTEGER NOT NULL,
+    "balanceValue" DECIMAL(20,6) NOT NULL,
+    "occurredAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "sourceType" TEXT NOT NULL,
+    "sourceId" TEXT NOT NULL,
+    "sourceLineKey" TEXT NOT NULL DEFAULT '',
+    "operationKey" TEXT NOT NULL,
+    "payloadHash" TEXT NOT NULL,
+    "status" "InventoryCostEventStatus" NOT NULL DEFAULT 'POSTED',
+    "reversalOfId" TEXT,
+    "createdById" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "InventoryCostEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "InventoryCostLayer" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "warehouseId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "batchKey" TEXT NOT NULL DEFAULT '',
+    "method" "CostingMethod" NOT NULL,
+    "sourceEventId" TEXT NOT NULL,
+    "receivedAt" TIMESTAMP(3) NOT NULL,
+    "originalQty" INTEGER NOT NULL,
+    "remainingQty" INTEGER NOT NULL,
+    "unitCost" DECIMAL(20,6) NOT NULL,
+    "originalValue" DECIMAL(20,6) NOT NULL,
+    "remainingValue" DECIMAL(20,6) NOT NULL,
+    "status" "InventoryCostLayerStatus" NOT NULL DEFAULT 'OPEN',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "InventoryCostLayer_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "InventoryCostConsumption" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "layerId" TEXT NOT NULL,
+    "eventId" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "amount" DECIMAL(20,6) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "InventoryCostConsumption_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CostingRebuildRun" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "warehouseId" TEXT,
+    "method" "CostingMethod" NOT NULL,
+    "mode" "CostingMode" NOT NULL,
+    "fromDate" TIMESTAMP(3) NOT NULL,
+    "toDate" TIMESTAMP(3) NOT NULL,
+    "status" "CostingRebuildStatus" NOT NULL DEFAULT 'PENDING',
+    "checkpoint" TEXT,
+    "statistics" JSONB,
+    "operationKey" TEXT NOT NULL,
+    "approvedBy" TEXT,
+    "startedAt" TIMESTAMP(3),
+    "finishedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CostingRebuildRun_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -4380,6 +4531,9 @@ CREATE UNIQUE INDEX "Inventory_warehouseId_productId_key" ON "Inventory"("wareho
 CREATE INDEX "InventoryMovement_warehouseId_productId_createdAt_idx" ON "InventoryMovement"("warehouseId", "productId", "createdAt");
 
 -- CreateIndex
+CREATE INDEX "InventoryMovement_warehouseId_productId_occurredAt_idx" ON "InventoryMovement"("warehouseId", "productId", "occurredAt");
+
+-- CreateIndex
 CREATE INDEX "InventoryMovement_locationId_productId_createdAt_idx" ON "InventoryMovement"("locationId", "productId", "createdAt");
 
 -- CreateIndex
@@ -4390,6 +4544,9 @@ CREATE INDEX "InventoryMovement_referenceType_referenceId_idx" ON "InventoryMove
 
 -- CreateIndex
 CREATE INDEX "InventoryMovement_createdAt_id_idx" ON "InventoryMovement"("createdAt", "id");
+
+-- CreateIndex
+CREATE INDEX "InventoryMovement_occurredAt_id_idx" ON "InventoryMovement"("occurredAt", "id");
 
 -- CreateIndex
 CREATE INDEX "InventoryConditionBalance_warehouseId_productId_condition_idx" ON "InventoryConditionBalance"("warehouseId", "productId", "condition");
@@ -4798,6 +4955,66 @@ CREATE UNIQUE INDEX "InventorySerial_serialNumber_key" ON "InventorySerial"("ser
 
 -- CreateIndex
 CREATE INDEX "InventorySerial_warehouseId_productId_status_idx" ON "InventorySerial"("warehouseId", "productId", "status");
+
+-- CreateIndex
+CREATE INDEX "CostingPolicy_companyId_branchId_status_idx" ON "CostingPolicy"("companyId", "branchId", "status");
+
+-- CreateIndex
+CREATE INDEX "CostingPolicy_companyId_status_effectiveFrom_idx" ON "CostingPolicy"("companyId", "status", "effectiveFrom");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CostingPolicy_companyId_scopeKey_version_key" ON "CostingPolicy"("companyId", "scopeKey", "version");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostState_companyId_warehouseId_productId_idx" ON "InventoryCostState"("companyId", "warehouseId", "productId");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostState_companyId_branchId_productId_idx" ON "InventoryCostState"("companyId", "branchId", "productId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "InventoryCostState_companyId_branchId_warehouseId_productId_key" ON "InventoryCostState"("companyId", "branchId", "warehouseId", "productId", "batchKey", "method");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostEvent_companyId_branchId_warehouseId_productId_idx" ON "InventoryCostEvent"("companyId", "branchId", "warehouseId", "productId", "occurredAt");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostEvent_movementId_idx" ON "InventoryCostEvent"("movementId");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostEvent_reversalOfId_idx" ON "InventoryCostEvent"("reversalOfId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "InventoryCostEvent_companyId_operationKey_key" ON "InventoryCostEvent"("companyId", "operationKey");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "InventoryCostEvent_companyId_sourceType_sourceId_sourceLine_key" ON "InventoryCostEvent"("companyId", "sourceType", "sourceId", "sourceLineKey", "eventType");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "InventoryCostLayer_sourceEventId_key" ON "InventoryCostLayer"("sourceEventId");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostLayer_companyId_branchId_warehouseId_productId_idx" ON "InventoryCostLayer"("companyId", "branchId", "warehouseId", "productId", "batchKey", "status", "receivedAt");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostLayer_companyId_method_status_receivedAt_idx" ON "InventoryCostLayer"("companyId", "method", "status", "receivedAt");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostConsumption_companyId_layerId_idx" ON "InventoryCostConsumption"("companyId", "layerId");
+
+-- CreateIndex
+CREATE INDEX "InventoryCostConsumption_eventId_idx" ON "InventoryCostConsumption"("eventId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "InventoryCostConsumption_layerId_eventId_key" ON "InventoryCostConsumption"("layerId", "eventId");
+
+-- CreateIndex
+CREATE INDEX "CostingRebuildRun_companyId_branchId_status_createdAt_idx" ON "CostingRebuildRun"("companyId", "branchId", "status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "CostingRebuildRun_companyId_warehouseId_fromDate_toDate_idx" ON "CostingRebuildRun"("companyId", "warehouseId", "fromDate", "toDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CostingRebuildRun_companyId_operationKey_key" ON "CostingRebuildRun"("companyId", "operationKey");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "OrderReturn_number_key" ON "OrderReturn"("number");
