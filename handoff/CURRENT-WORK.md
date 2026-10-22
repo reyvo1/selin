@@ -17,6 +17,11 @@
   company/branch dari token; belum ada rekonsiliasi state vs inventory vs GL.
 - Test bertambah menjadi **15 static + 13 runtime PASS**; `quality:fast` PASS
   **2024/2024 test**, lint, `db:local:prepare`, worker build.
+- Commit `2bb91b3` pada branch
+  `feature/T360-20261021-134120-costing-engine-dan-valuasi`, sudah dipush ke
+  `origin`. Tiga file lama (`.gitignore`, `config/p5-full-ui-root-audit.json`,
+  `docs/P5-FULL-UI-ROOT-AUDIT.md`) tetap tidak di-commit karena bukan bagian
+  work item.
 - Berikutnya: rebuild SHADOW/backfill, rekonsiliasi, layer/reconciliation API,
   lalu uji aktivasi flag pada database TEST.
 
