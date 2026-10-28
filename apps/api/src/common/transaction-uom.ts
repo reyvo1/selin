@@ -45,6 +45,7 @@ export async function resolveSellingUnitLine(
   product: TransactionUomProduct,
   input: TransactionUomInput,
   segmentCode?: string | null,
+  customerRegionId?: string | null,
   occurredAt?: Date,
 ): Promise<TransactionUomSnapshot> {
   const baseUnit = product.unit.trim().toUpperCase();
@@ -154,6 +155,7 @@ export async function resolveSellingUnitLine(
     product: { id: product.id, salePrice: packageFallback },
     quantity: unitQuantity,
     segmentCode,
+    customerRegionId,
     unitCode,
     unitFactor: quantityFactor,
     variantId,

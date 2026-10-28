@@ -19,7 +19,8 @@ test('artefak baseline dan post-migration tersedia', () => {
   const baseline = read(baselinePath);
   assert.match(baseline, /GENERATED FILE - jangan edit manual/);
   assert.match(baseline, /Source schema: apps\/api\/prisma\/schema\.postgresql\.prisma/);
-  assert.match(baseline, /Post-migration files: 1/);
+  assert.match(baseline, /Post-migration files: 2/);
+  assert.match(baseline, /YearEndCloseRun_posted_scope_key/);
 });
 
 test('baseline memuat seluruh tabel inti dan tidak destruktif', () => {

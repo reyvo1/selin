@@ -89,6 +89,25 @@ export default function DataGovernanceView({token}:{token:string}){
     finally{setBusy(false);}
   }
 
+  async function runVacuum() {
+    setBusy(true); setMessage('');
+    try {
+      const result = await api<any>(token, '/platform/db-maintenance/vacuum', { method: 'POST' });
+      await refresh();
+      setMessage(`${result.operation ?? 'VACUUM'} selesai (${result.provider ?? '-'}, ${result.durationMs ?? 0} ms). ${result.message ?? ''}`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Gagal menjalankan VACUUM.'); }
+    finally { setBusy(false); }
+  }
+  async function runAnalyze() {
+    setBusy(true); setMessage('');
+    try {
+      const result = await api<any>(token, '/platform/db-maintenance/analyze', { method: 'POST' });
+      await refresh();
+      setMessage(`${result.operation ?? 'ANALYZE'} selesai (${result.provider ?? '-'}, ${result.durationMs ?? 0} ms). ${result.message ?? ''}`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Gagal menjalankan ANALYZE.'); }
+    finally { setBusy(false); }
+  }
+
   const latestBusinessDate=useMemo(()=>{
     const rows=[...(summaries?.sales??[]),...(summaries?.finance??[])];
     return rows.map((row)=>row.businessDate).sort().at(-1)??null;
@@ -135,6 +154,13 @@ export default function DataGovernanceView({token}:{token:string}){
         <div><small>Last source rows</small><strong>{lastMaterialize?`${lastMaterialize.sourceSales}/${lastMaterialize.sourceJournalLines}`:'-'}</strong></div>
       </div>
       <Table head={['Tanggal','Channel','Transaksi','Qty','Net Sales','Gross Profit']} rows={(summaries?.sales??[]).slice(0,20).map((row)=>[new Date(row.businessDate).toLocaleDateString('id-ID'),row.channel,row.transactionCount,row.itemQuantity,Number(row.netSales).toLocaleString('id-ID'),Number(row.grossProfit).toLocaleString('id-ID')])} empty="Daily sales summary belum dimaterialisasi."/>
+    </Panel>
+    <Panel eyebrow="MAINTENANCE DATABASE" title="Vacuum & Analyze" badge="DB maintenance">
+      <p className="sectionHelp">Jalankan VACUUM untuk mereklaim ruang kosong dan ANALYZE untuk memperbarui statistik planner. Operasi berjalan pada database aktif (SQLite/PostgreSQL) dan diaudit. Gunakan setelah archive/retention besar atau saat performa query menurun.</p>
+      <div className="actionRow">
+        {canAll('platform.configure') && <button type="button" disabled={busy} onClick={() => void runVacuum()}>Jalankan VACUUM</button>}
+        {canAll('platform.configure') && <button type="button" className="secondary" disabled={busy} onClick={() => void runAnalyze()}>Jalankan ANALYZE</button>}
+      </div>
     </Panel>
     {message&&<div className="notice">{message}</div>}
   </section>;

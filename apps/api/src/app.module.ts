@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { AdvancedInventoryModule } from './advanced-inventory/advanced-inventory.module';
 import { ExtensionsModule } from './extensions/extensions.module';
+import { MigrationModule } from './migration/migration.module';
 import { PlatformModule } from './platform/platform.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
@@ -18,6 +19,11 @@ import { PromotionsModule } from './promotions/promotions.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { ReportsModule } from './reports/reports.module';
 import { SalesModule } from './sales/sales.module';
+import { SalesOrdersModule } from './sales-orders/sales-orders.module';
+import { ConsignmentsModule } from './consignments/consignments.module';
+import { TradeInsModule } from './trade-ins/trade-ins.module';
+import { CashFlowCategoriesModule } from './cash-flow-categories/cash-flow-categories.module';
+import { TransferFilesModule } from './transfer-files/transfer-files.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { UsersModule } from './users/users.module';
 import { HrModule } from './hr/hr.module';
@@ -42,14 +48,26 @@ import { MasterDataModule } from './master-data/master-data.module';
 import { PaymentsModule } from './payments/payments.module';
 import { StorefrontCustomerModule } from './storefront-customer/storefront-customer.module';
 import { ManufacturingModule } from './manufacturing/manufacturing.module';
+import { CommissionsModule } from './commissions/commissions.module';
+import { CustomerDepositsModule } from './customer-deposits/customer-deposits.module';
+import { SupplierDepositsModule } from './supplier-deposits/supplier-deposits.module';
+import { SupplierPricesModule } from './supplier-prices/supplier-prices.module';
+import { CustomerGroupsModule } from './customer-groups/customer-groups.module';
+import { CustomerRegionsModule } from './customer-regions/customer-regions.module';
+import { NumberSequencesModule } from './number-sequences/number-sequences.module';
+import { PrintersModule } from './printers/printers.module';
+import { GeneralSettingsModule } from './general-settings/general-settings.module';
 import { DigitalServicesModule } from './digital-services/digital-services.module';
 import { StaffMemosModule } from './staff-memos/staff-memos.module';
+import { OpeningBalanceModule } from './opening-balance/opening-balance.module';
+import { ChequesModule } from './cheques/cheques.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '../../.env'] }),
     PrismaModule,
     AuthModule,
+    MigrationModule,
     PlatformModule,
     AdvancedInventoryModule,
     ExtensionsModule,
@@ -73,14 +91,30 @@ import { StaffMemosModule } from './staff-memos/staff-memos.module';
     PaymentsModule,
     StorefrontCustomerModule,
     ManufacturingModule,
+    CommissionsModule,
+    CustomerDepositsModule,
+    SupplierDepositsModule,
+    SupplierPricesModule,
+    CustomerGroupsModule,
+    CustomerRegionsModule,
+    NumberSequencesModule,
+    PrintersModule,
+    GeneralSettingsModule,
     DigitalServicesModule,
     StaffMemosModule,
+    OpeningBalanceModule,
+    ChequesModule,
     ProductsModule,
     SuppliersModule,
     PurchaseOrdersModule,
     GoodsReceiptsModule,
     InventoryModule,
     SalesModule,
+    SalesOrdersModule,
+    ConsignmentsModule,
+    TradeInsModule,
+    CashFlowCategoriesModule,
+    TransferFilesModule,
     OrdersModule,
     ReportsModule,
     PromotionsModule,

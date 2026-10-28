@@ -4,7 +4,7 @@ import { AuthUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Permissions } from '../auth/permissions.decorator';
 import { BranchContinuityService } from './branch-continuity.service';
-import { DeclareContinuityCapabilityDto, MarkReadWatermarkDto, RecordBackupMetadataDto, RejoinBranchDto, ReportConnectivityDto, SetNodePolicyDto, VerifyRestoreChecksumDto } from './dto/branch-continuity.dto';
+import { DeclareContinuityCapabilityDto, MarkReadWatermarkDto, RecordBackupMetadataDto, RecordRestoreDrillDto, RejoinBranchDto, ReportConnectivityDto, ScheduleAutobackupDto, SetNodePolicyDto, UpdateAutobackupScheduleDto, VerifyRestoreChecksumDto } from './dto/branch-continuity.dto';
 
 // POST-1B — local-first branch continuity.
 //
@@ -103,6 +103,42 @@ export class BranchContinuityController {
   @Permissions('integration.manage')
   verifyRestore(@Body() dto: VerifyRestoreChecksumDto, @CurrentUser() user: AuthUser) {
     return this.service.verifyRestoreChecksum(user, dto);
+  }
+
+  @Post('backups/restore-drills')
+  @Permissions('integration.manage')
+  recordRestoreDrill(@Body() dto: RecordRestoreDrillDto, @CurrentUser() user: AuthUser) {
+    return this.service.recordRestoreDrill(user, dto);
+  }
+
+  @Get('backups/restore-drills')
+  @Permissions('integration.manage')
+  listRestoreDrills(@CurrentUser() user: AuthUser) {
+    return this.service.listRestoreDrills(user);
+  }
+
+  @Post('backups/autobackup-schedules')
+  @Permissions('integration.manage')
+  scheduleAutobackup(@Body() dto: ScheduleAutobackupDto, @CurrentUser() user: AuthUser) {
+    return this.service.scheduleAutobackup(user, dto);
+  }
+
+  @Get('backups/autobackup-schedules')
+  @Permissions('integration.manage')
+  listAutobackupSchedules(@CurrentUser() user: AuthUser) {
+    return this.service.listAutobackupSchedules(user);
+  }
+
+  @Put('backups/autobackup-schedules/:id')
+  @Permissions('integration.manage')
+  updateAutobackupSchedule(@Param('id') id: string, @Body() dto: UpdateAutobackupScheduleDto, @CurrentUser() user: AuthUser) {
+    return this.service.updateAutobackupSchedule(user, id, dto);
+  }
+
+  @Post('backups/autobackup-schedules/:id/run-now')
+  @Permissions('integration.manage')
+  runAutobackupNow(@Param('id') id: string, @Body() dto: any, @CurrentUser() user: AuthUser) {
+    return this.service.runAutobackupNow(user, { ...dto, nodeId: dto?.nodeId ?? id });
   }
 
   @Post('rejoin')

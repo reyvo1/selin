@@ -14,6 +14,7 @@ type ResolvePriceInput = {
   product: ProductForPrice;
   quantity: number;
   segmentCode?: string | null;
+  customerRegionId?: string | null;
   unitCode?: string | null;
   unitFactor?: number;
   variantId?: string | null;
@@ -38,6 +39,7 @@ export async function resolveProductUnitPrice(client: DbClient, input: ResolvePr
       minQty: { lte: new Prisma.Decimal(input.quantity) },
       segmentCode: segment === 'RETAIL' ? 'RETAIL' : { in: [segment, 'RETAIL'] },
       AND: [
+        ...(input.customerRegionId ? [{ OR: [{ customerRegionId: input.customerRegionId }, { customerRegionId: null }] }] : []),
         ...(input.variantId ? [{ OR: [{ variantId: input.variantId }, { variantId: null }] }] : [{ variantId: null }]),
         { OR: [{ branchId: input.branchId }, { branchId: null }] },
         { OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: at } }] },
@@ -46,7 +48,7 @@ export async function resolveProductUnitPrice(client: DbClient, input: ResolvePr
       ],
       product: { companyId: input.companyId },
     },
-    select: { variantId: true, branchId: true, segmentCode: true, unitCode: true, minQty: true, price: true, createdAt: true },
+    select: { variantId: true, branchId: true, segmentCode: true, unitCode: true, minQty: true, price: true, createdAt: true, customerRegionId: true },
     take: 100,
   });
   rows.sort((a, b) => {
@@ -56,6 +58,8 @@ export async function resolveProductUnitPrice(client: DbClient, input: ResolvePr
     if (branchScore) return branchScore;
     const segmentScore = Number(b.segmentCode === segment) - Number(a.segmentCode === segment);
     if (segmentScore) return segmentScore;
+    const regionScore = Number(Boolean(input.customerRegionId && b.customerRegionId === input.customerRegionId)) - Number(Boolean(input.customerRegionId && a.customerRegionId === input.customerRegionId));
+    if (regionScore) return regionScore;
     const unitScore = Number(Boolean(unit && b.unitCode?.toUpperCase() === unit)) - Number(Boolean(unit && a.unitCode?.toUpperCase() === unit));
     if (unitScore) return unitScore;
     const qtyScore = new Prisma.Decimal(b.minQty).cmp(new Prisma.Decimal(a.minQty));

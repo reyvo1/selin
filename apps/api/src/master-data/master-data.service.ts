@@ -345,7 +345,7 @@ export class MasterDataService {
   async createCustomer(dto: CreateCustomerDto, user: AuthUser) {
     const scope = this.scope(user);
     try {
-      return await this.prisma.$transaction(async (tx) => { const row = await tx.customer.create({ data: { companyId: scope.companyId, name: dto.name.trim(), phone: dto.phone?.trim(), email: dto.email?.trim().toLowerCase(), address: dto.address?.trim(), customerType: (dto.customerType || 'RETAIL').trim().toUpperCase(), taxIdNumber: dto.taxIdNumber?.trim() } }); await this.audit(tx, user, 'CREATE_CUSTOMER', 'Customer', row.id); return row; });
+      return await this.prisma.$transaction(async (tx) => { const row = await tx.customer.create({ data: { companyId: scope.companyId, name: dto.name.trim(), phone: dto.phone?.trim(), email: dto.email?.trim().toLowerCase(), address: dto.address?.trim(), customerType: (dto.customerType || 'RETAIL').trim().toUpperCase(), taxIdNumber: dto.taxIdNumber?.trim(), customerRegionId: dto.customerRegionId?.trim() || null } }); await this.audit(tx, user, 'CREATE_CUSTOMER', 'Customer', row.id); return row; });
     } catch (error) { if ((error as { code?: string }).code === 'P2002') throw new ConflictException('Email pelanggan sudah digunakan pada perusahaan ini.'); throw error; }
   }
 
@@ -355,7 +355,7 @@ export class MasterDataService {
     const data: Prisma.CustomerUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name.trim(); if (dto.phone !== undefined) data.phone = dto.phone?.trim() || null;
     if (dto.email !== undefined) data.email = dto.email?.trim().toLowerCase() || null; if (dto.address !== undefined) data.address = dto.address?.trim() || null;
-    if (dto.customerType !== undefined) data.customerType = dto.customerType.trim().toUpperCase(); if (dto.taxIdNumber !== undefined) data.taxIdNumber = dto.taxIdNumber?.trim() || null;
+    if (dto.customerType !== undefined) data.customerType = dto.customerType.trim().toUpperCase(); if (dto.taxIdNumber !== undefined) data.taxIdNumber = dto.taxIdNumber?.trim() || null; if (dto.customerRegionId !== undefined) data.customerRegionId = dto.customerRegionId?.trim() || null;
     return this.prisma.$transaction(async (tx) => { const row = await tx.customer.update({ where: { id }, data }); await this.audit(tx, user, 'UPDATE_CUSTOMER', 'Customer', id); return row; });
   }
 
@@ -691,7 +691,7 @@ export class MasterDataService {
     const from = this.parseDate(dto.effectiveFrom), to = this.parseDate(dto.effectiveTo);
     if (from && to && from > to) throw new BadRequestException('effectiveFrom tidak boleh setelah effectiveTo.');
     return this.prisma.$transaction(async (tx) => {
-      const row = await tx.productPrice.create({ data: { productId, variantId: variant?.id ?? null, productUnitId: requestedUnit?.id ?? null, branchId: dto.branchId, segmentCode: (dto.segmentCode || 'RETAIL').trim().toUpperCase(), unitCode, minQty: new Prisma.Decimal(dto.minQty ?? 1), price: new Prisma.Decimal(dto.price), effectiveFrom: from, effectiveTo: to } });
+      const row = await tx.productPrice.create({ data: { productId, variantId: variant?.id ?? null, productUnitId: requestedUnit?.id ?? null, branchId: dto.branchId, segmentCode: (dto.segmentCode || 'RETAIL').trim().toUpperCase(), customerRegionId: dto.customerRegionId?.trim() || null, unitCode, minQty: new Prisma.Decimal(dto.minQty ?? 1), price: new Prisma.Decimal(dto.price), effectiveFrom: from, effectiveTo: to } });
       await this.audit(tx, user, 'CREATE_PRODUCT_PRICE', 'ProductPrice', row.id, { productId, variantId: variant?.id ?? null, targetBranchId: dto.branchId ?? null, unitCode });
       return row;
     });
@@ -729,6 +729,7 @@ export class MasterDataService {
         ...(dto.productUnitId !== undefined ? { productUnitId: targetUnit?.id ?? null } : {}),
         ...(dto.branchId !== undefined ? { branchId: dto.branchId || null } : {}),
         ...(dto.segmentCode !== undefined ? { segmentCode: dto.segmentCode.trim().toUpperCase() } : {}),
+        ...(dto.customerRegionId !== undefined ? { customerRegionId: dto.customerRegionId?.trim() || null } : {}),
         ...(dto.unitCode !== undefined ? { unitCode } : {}),
         ...(dto.minQty !== undefined ? { minQty: new Prisma.Decimal(dto.minQty) } : {}),
         ...(dto.price !== undefined ? { price: new Prisma.Decimal(dto.price) } : {}),
@@ -740,5 +741,221 @@ export class MasterDataService {
       return row;
     });
   }
+
+  private requireTenantScope(user: AuthUser): { companyId: string; branchId: string } {
+    if (!user.companyId || !user.branchId) {
+      throw new ForbiddenException({ code: 'TENANT_CONTEXT_REQUIRED', message: 'Pengguna belum memiliki company dan branch yang valid.' });
+    }
+    return { companyId: user.companyId, branchId: user.branchId };
+  }
+
+  private exportRowLimit = 10000;
+
+  private csvEscape(value: unknown): string {
+    const raw = value == null ? '' : String(value);
+    return /[",\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+  }
+
+  private buildCsv(headers: string[], rows: unknown[][]): string {
+    return [headers.join(','), ...rows.map((row) => row.map((value) => this.csvEscape(value)).join(','))].join('\n');
+  }
+
+  private renderXlsxBuffer(csv: string): Buffer {
+    const rows = this.parseCsvRows(csv);
+    const rowXml = rows.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, columnIndex) => {
+      const ref = `${this.excelColumn(columnIndex)}${rowIndex + 1}`;
+      const numeric = rowIndex > 0 && value.trim() !== '' && Number.isFinite(Number(value));
+      return numeric ? `<c r="${ref}"><v>${Number(value)}</v></c>` : `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${this.xmlEscape(value)}</t></is></c>`;
+    }).join('')}</row>`).join('');
+    const files = [
+      { name: '[Content_Types].xml', data: Buffer.from('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>') },
+      { name: '_rels/.rels', data: Buffer.from('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>') },
+      { name: 'xl/workbook.xml', data: Buffer.from('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Export" sheetId="1" r:id="rId1"/></sheets></workbook>') },
+      { name: 'xl/_rels/workbook.xml.rels', data: Buffer.from('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>') },
+      { name: 'xl/worksheets/sheet1.xml', data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData></worksheet>`) },
+    ];
+    return this.zipStored(files);
+  }
+
+  private xmlEscape(value: string): string {
+    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  }
+
+  private excelColumn(index: number): string {
+    let value = index + 1;
+    let result = '';
+    while (value > 0) { value -= 1; result = String.fromCharCode(65 + (value % 26)) + result; value = Math.floor(value / 26); }
+    return result;
+  }
+
+  private parseCsvRows(csv: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let cell = '';
+    let quoted = false;
+    for (let i = 0; i < csv.length; i += 1) {
+      const c = csv[i];
+      if (quoted) {
+        if (c === '"' && csv[i + 1] === '"') { cell += '"'; i += 1; continue; }
+        if (c === '"') { quoted = false; continue; }
+        cell += c;
+        continue;
+      }
+      if (c === '"') { quoted = true; continue; }
+      if (c === ',' || c === ';') { row.push(cell); cell = ''; continue; }
+      if (c === '\n') { row.push(cell.replace(/\r$/, '')); rows.push(row); row = []; cell = ''; continue; }
+      cell += c;
+    }
+    if (cell.length || row.length) { row.push(cell.replace(/\r$/, '')); rows.push(row); }
+    return rows.filter((r) => r.some((v) => String(v).trim() !== ''));
+  }
+
+  private zipStored(files: Array<{ name: string; data: Buffer }>): Buffer {
+    const locals: Buffer[] = [];
+    const centrals: Buffer[] = [];
+    let offset = 0;
+    for (const file of files) {
+      const name = Buffer.from(file.name, 'utf8');
+      const crc = this.crc32(file.data);
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(0, 6); local.writeUInt16LE(0, 8);
+      local.writeUInt16LE(0, 10); local.writeUInt16LE(0, 12); local.writeUInt32LE(crc, 14);
+      local.writeUInt32LE(file.data.length, 18); local.writeUInt32LE(file.data.length, 22); local.writeUInt16LE(name.length, 26); local.writeUInt16LE(0, 28);
+      locals.push(local, name, file.data);
+      const central = Buffer.alloc(46);
+      central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(0, 8); central.writeUInt16LE(0, 10);
+      central.writeUInt16LE(0, 12); central.writeUInt16LE(0, 14); central.writeUInt32LE(crc, 16); central.writeUInt32LE(file.data.length, 20); central.writeUInt32LE(file.data.length, 24);
+      central.writeUInt16LE(name.length, 28); central.writeUInt16LE(0, 30); central.writeUInt16LE(0, 32); central.writeUInt16LE(0, 34); central.writeUInt16LE(0, 36);
+      central.writeUInt32LE(0, 38); central.writeUInt32LE(offset, 42);
+      centrals.push(central, name);
+      offset += local.length + name.length + file.data.length;
+    }
+    const centralSize = centrals.reduce((sum, part) => sum + part.length, 0);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(0, 4); end.writeUInt16LE(0, 6);
+    end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(centralSize, 12); end.writeUInt32LE(offset, 16); end.writeUInt16LE(0, 20);
+    return Buffer.concat([...locals, ...centrals, end]);
+  }
+
+  private crc32(buffer: Buffer): number {
+    let table: Uint32Array | undefined;
+    if (!table) {
+      table = new Uint32Array(256);
+      for (let n = 0; n < 256; n += 1) {
+        let c = n;
+        for (let k = 0; k < 8; k += 1) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        table[n] = c >>> 0;
+      }
+    }
+    let crc = 0xffffffff;
+    for (const byte of buffer) crc = table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  async exportMasterData(user: AuthUser, entity?: string, format?: string) {
+    const scope = this.requireTenantScope(user);
+    const normalizedEntity = String(entity ?? 'products').trim().toLowerCase();
+    const normalizedFormat = String(format ?? 'CSV').trim().toUpperCase();
+    const rowLimit = this.exportRowLimit;
+    let fileNameBase = normalizedEntity || 'export';
+    let headers: string[] = [];
+    let dataRows: unknown[][] = [];
+
+    if (normalizedEntity === 'products' || normalizedEntity === 'product') {
+      const rows = await this.prisma.product.findMany({ where: { companyId: scope.companyId }, include: { category: { select: { slug: true } } }, orderBy: [{ sku: 'asc' }, { id: 'asc' }], take: rowLimit + 1 });
+      const truncated = rows.length > rowLimit;
+      const exported = truncated ? rows.slice(0, rowLimit) : rows;
+      headers = ['sku','name','barcode','unit','costPrice','salePrice','retailCeilingPrice','minStock','brandCode','categorySlug','productType','trackBatch','trackExpiry','trackSerial','isActive'];
+      dataRows = exported.map((row: any) => [row.sku,row.name,row.barcode,row.unit,row.costPrice,row.salePrice,row.retailCeilingPrice,row.minStock,row.brandCode,row.category?.slug,row.productType,row.trackBatch,row.trackExpiry,row.trackSerial,row.isActive]);
+      fileNameBase = 'products';
+      const csv = this.buildCsv(headers, dataRows);
+      const rowCount = exported.length;
+      const isTruncated = truncated;
+      return this.finishExport(fileNameBase, csv, rowCount, rowLimit, isTruncated, normalizedFormat);
+    }
+
+    if (normalizedEntity === 'customers' || normalizedEntity === 'customer') {
+      const rows = await this.prisma.customer.findMany({ where: { companyId: scope.companyId }, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: rowLimit + 1 });
+      const truncated = rows.length > rowLimit;
+      const exported = truncated ? rows.slice(0, rowLimit) : rows;
+      headers = ['id','name','phone','email','address','customerType','taxIdNumber','isActive'];
+      dataRows = exported.map((row: any) => [row.id,row.name,row.phone,row.email,row.address,row.customerType,row.taxIdNumber,row.isActive]);
+      fileNameBase = 'customers';
+      const csv = this.buildCsv(headers, dataRows);
+      return this.finishExport(fileNameBase, csv, exported.length, rowLimit, truncated, normalizedFormat);
+    }
+
+    if (normalizedEntity === 'categories' || normalizedEntity === 'category') {
+      const rows = await this.prisma.category.findMany({ where: { companyId: scope.companyId }, orderBy: [{ name: 'asc' }, { id: 'asc' }], take: rowLimit + 1 });
+      const truncated = rows.length > rowLimit;
+      const exported = truncated ? rows.slice(0, rowLimit) : rows;
+      headers = ['id','name','slug','parentId','sortOrder','isActive'];
+      dataRows = exported.map((row: any) => [row.id,row.name,row.slug,row.parentId,row.sortOrder,row.isActive]);
+      fileNameBase = 'categories';
+      const csv = this.buildCsv(headers, dataRows);
+      return this.finishExport(fileNameBase, csv, exported.length, rowLimit, truncated, normalizedFormat);
+    }
+
+    if (normalizedEntity === 'branches' || normalizedEntity === 'branch') {
+      const rows = await this.prisma.branch.findMany({ where: { companyId: scope.companyId }, orderBy: [{ code: 'asc' }, { id: 'asc' }], take: rowLimit + 1 });
+      const truncated = rows.length > rowLimit;
+      const exported = truncated ? rows.slice(0, rowLimit) : rows;
+      headers = ['id','code','name','isActive'];
+      dataRows = exported.map((row: any) => [row.id,row.code,row.name,row.isActive]);
+      fileNameBase = 'branches';
+      const csv = this.buildCsv(headers, dataRows);
+      return this.finishExport(fileNameBase, csv, exported.length, rowLimit, truncated, normalizedFormat);
+    }
+
+    if (normalizedEntity === 'warehouses' || normalizedEntity === 'warehouse') {
+      const rows = await this.prisma.warehouse.findMany({ where: { branch: { companyId: scope.companyId } }, orderBy: [{ code: 'asc' }, { id: 'asc' }], take: rowLimit + 1 });
+      const truncated = rows.length > rowLimit;
+      const exported = truncated ? rows.slice(0, rowLimit) : rows;
+      headers = ['id','branchId','code','name','address','isDefault','isActive'];
+      dataRows = exported.map((row: any) => [row.id,row.branchId,row.code,row.name,row.address,row.isDefault,row.isActive]);
+      fileNameBase = 'warehouses';
+      const csv = this.buildCsv(headers, dataRows);
+      return this.finishExport(fileNameBase, csv, exported.length, rowLimit, truncated, normalizedFormat);
+    }
+
+    if (normalizedEntity === 'suppliers' || normalizedEntity === 'supplier') {
+      const rows = await this.prisma.supplier.findMany({ where: { companyId: scope.companyId }, orderBy: [{ code: 'asc' }, { id: 'asc' }], take: rowLimit + 1 });
+      const truncated = rows.length > rowLimit;
+      const exported = truncated ? rows.slice(0, rowLimit) : rows;
+      headers = ['id','code','name','phone','email','address','paymentTermDays','taxIdNumber','isActive'];
+      dataRows = exported.map((row: any) => [row.id,row.code,row.name,row.phone,row.email,row.address,row.paymentTermDays,row.taxIdNumber,row.isActive]);
+      fileNameBase = 'suppliers';
+      const csv = this.buildCsv(headers, dataRows);
+      return this.finishExport(fileNameBase, csv, exported.length, rowLimit, truncated, normalizedFormat);
+    }
+
+    if (normalizedEntity === 'references' || normalizedEntity === 'reference') {
+      const rows = await this.prisma.masterReference.findMany({ where: { OR: [{ branchId: null }, { branch: { companyId: scope.companyId } }] }, orderBy: [{ type: 'asc' }, { code: 'asc' }, { id: 'asc' }], take: rowLimit + 1 });
+      const truncated = rows.length > rowLimit;
+      const exported = truncated ? rows.slice(0, rowLimit) : rows;
+      headers = ['id','type','code','name','branchId','isActive'];
+      dataRows = exported.map((row: any) => [row.id,row.type,row.code,row.name,row.branchId,row.isActive]);
+      fileNameBase = 'references';
+      const csv = this.buildCsv(headers, dataRows);
+      return this.finishExport(fileNameBase, csv, exported.length, rowLimit, truncated, normalizedFormat);
+    }
+
+    throw new BadRequestException(`Entity export tidak didukung: ${entity}.`);
+  }
+
+  private finishExport(fileNameBase: string, csv: string, rowCount: number, rowLimit: number, truncated: boolean, format: string) {
+    const date = new Date().toISOString().slice(0, 10);
+    if (format === 'XLSX' || format === 'EXCEL') {
+      const buffer = this.renderXlsxBuffer(csv);
+      return { fileName: `${fileNameBase}-${date}.xlsx`, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', content: buffer.toString('base64'), rowCount, rowLimit, truncated };
+    }
+    return { fileName: `${fileNameBase}-${date}.csv`, mimeType: 'text/csv;charset=utf-8', content: `\uFEFF${csv}`, rowCount, rowLimit, truncated };
+  }
+
+  async exportCsv(user: AuthUser, entity?: string) { return this.exportMasterData(user, entity ?? 'products', 'CSV'); }
+  async exportExcel(user: AuthUser, entity?: string) { return this.exportMasterData(user, entity ?? 'products', 'XLSX'); }
+  async exportData(user: AuthUser, entity?: string, format?: string) { return this.exportMasterData(user, entity, format); }
+  async genericExport(user: AuthUser, entity?: string, format?: string) { return this.exportMasterData(user, entity, format); }
+  async export(user: AuthUser, entity?: string, format?: string) { return this.exportMasterData(user, entity, format); }
 
 }

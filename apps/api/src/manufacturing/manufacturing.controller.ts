@@ -6,12 +6,37 @@ import { Permissions } from '../auth/permissions.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { CancelProductionOrderDto, CompleteProductionOrderDto, CreateProductionOrderDto, CreateProductionRecipeDto } from './dto/manufacturing.dto';
 import { ManufacturingService } from './manufacturing.service';
+import { WorkCentersService } from './work-centers.service';
+import { ProductionRoutingsService } from './production-routings.service';
 
 @ApiTags('manufacturing')
 @ApiBearerAuth()
 @Controller('manufacturing')
 export class ManufacturingController {
-  constructor(private readonly manufacturing: ManufacturingService) {}
+  constructor(private readonly manufacturing: ManufacturingService, private readonly workCenters: WorkCentersService, private readonly routings: ProductionRoutingsService) {}
+
+  @Get('work-centers')
+  @Permissions('manufacturing.view')
+  workCentersList(@CurrentUser() user: AuthUser) { return this.workCenters.list(user); }
+
+  @Post('work-centers')
+  @Roles('SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'WAREHOUSE')
+  @Permissions('manufacturing.manage')
+  workCenterCreate(@Body() dto: { code: string; name: string; hourlyRate?: number }, @CurrentUser() user: AuthUser) { return this.workCenters.create(user, dto); }
+
+  @Post('work-centers/:id')
+  @Roles('SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'WAREHOUSE')
+  @Permissions('manufacturing.manage')
+  workCenterUpdate(@Param('id') id: string, @Body() dto: { name?: string; hourlyRate?: number; isActive?: boolean }, @CurrentUser() user: AuthUser) { return this.workCenters.update(user, id, dto); }
+
+  @Get('routings')
+  @Permissions('manufacturing.view')
+  routingsList(@CurrentUser() user: AuthUser, @Query('recipeId') recipeId?: string) { return this.routings.list(user, recipeId); }
+
+  @Post('routings')
+  @Roles('SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'WAREHOUSE')
+  @Permissions('manufacturing.manage')
+  routingCreate(@Body() dto: { recipeId: string; operations: unknown[] }, @CurrentUser() user: AuthUser) { return this.routings.create(user, dto); }
 
   @Get('recipes')
   @Permissions('manufacturing.view')

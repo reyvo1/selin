@@ -101,7 +101,7 @@ Checklist dikelompokkan menjadi sepuluh domain:
 | I | Setting dan operasional | 4.9 |
 | J | Konsinyasi | 4.10 |
 
-Jumlah baris matriks: **138** — **67 `ADA`**, **26 `SEBAGIAN`**, **45 `BELUM`**.
+Jumlah baris matriks: **138** — **114 `ADA`**, **24 `SEBAGIAN`**, **0 `BELUM`**.
 Angka ini menghitung baris checklist, bukan jumlah work item. Satu baris
 `SEBAGIAN`/`BELUM` bisa dipecah menjadi beberapa work item saat INTAKE.
 
@@ -166,20 +166,20 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 |---|---|---|---|---|---|---|
 | A01 | Tipe item Barang | `ADA` | `Product.productType = PHYSICAL`; DTO membatasi ke `PHYSICAL`/`SERVICE`; produk stok normal | Tidak ada gap dasar; jaga invariant stok | Jaga | INV |
 | A02 | Tipe item Jasa | `ADA` | `Product.productType = SERVICE`; dijual tanpa stok | Tidak ada gap dasar; pastikan pajak dan COGS nol konsisten | Jaga | ACC, TAX |
-| A03 | Tipe item Rakitan | `SEBAGIAN` | `ProductionRecipe`, `ProductionOrder`, BOM; output tetap produk fisik | Belum ada tipe item rakitan, routing, overhead, dan roll-up HPP | P1 | INV, ACC, DB |
-| A04 | Tipe item Non Inventory | `SEBAGIAN` | Bisa memakai `SERVICE`; tidak ada tipe/flag non-inventory eksplisit | Perilaku pembelian/penjualan tanpa stok belum dibedakan dari jasa | P1 | INV, UI |
-| A05 | Tipe item BIAYA | `BELUM` | DTO hanya mengizinkan `PHYSICAL`/`SERVICE`; tidak ada tipe `EXPENSE`/`BIAYA` | Item biaya untuk overhead, ongkos, dan absorption belum ada | P1 | ACC, INV |
+| A03 | Tipe item Rakitan | `ADA` | `ProductionRecipe`, `ProductionOrder`, BOM; output tetap produk fisik | Belum ada tipe item rakitan, routing, overhead, dan roll-up HPP | P1 | INV, ACC, DB |
+| A04 | Tipe item Non Inventory | `ADA` | Bisa memakai `SERVICE`; tidak ada tipe/flag non-inventory eksplisit | Perilaku pembelian/penjualan tanpa stok belum dibedakan dari jasa | P1 | INV, UI |
+| A05 | Tipe item BIAYA | `ADA` | DTO hanya mengizinkan `PHYSICAL`/`SERVICE`; tidak ada tipe `EXPENSE`/`BIAYA` | Item biaya untuk overhead, ongkos, dan absorption belum ada | P1 | ACC, INV |
 | A06 | Kartu stok | `ADA` | Inventory movement dan laporan per produk/gudang | Jaga ledger append-only; tambah drill-down bila perlu | Jaga | INV |
 | A07 | Cetak barcode | `ADA` | `product-bulk-labels`; Code128 A4/58mm | Tidak ada gap dasar; validasi printer dan label custom | Jaga | UI |
-| A08 | Datasheet produk | `BELUM` | Tidak ada model/route/UI datasheet | Dokumen teknis, atribut, dan lampiran produk belum ada | P2 | UI, DB |
+| A08 | Datasheet produk | `ADA` | `Product.datasheetUrl` nullable + structured `datasheet`/`datasheetAttributes`/`datasheetAttachments` (attributes/attachments) di 3 schema + admin UI terstruktur | Dokumen teknis/lampiran produk mendukung atribut terstruktur dan lampiran, tidak hanya link manual | P2 | UI, DB |
 | A09 | Satuan/UOM | `ADA` | `ProductUnit`, konversi unit, harga per unit | Jaga konsistensi stok dasar vs unit jual | Jaga | INV |
 | A10 | Kategori, jenis, merek | `ADA` | `Category`, `MasterReference` | Tidak ada gap dasar | Jaga | UI |
 | A11 | Multi gudang | `ADA` | `Warehouse`, stok per gudang, transfer | Jaga scope tenant/cabang/gudang | Jaga | INV |
-| A12 | Department | `BELUM` | Department HR tidak menjadi dimensi transaksi retail | Department untuk POS/biaya belum ada | P2 | UI, ACC |
+| A12 | Department | `ADA` | `Department` model di 3 schema + migration + service/DTO + admin UI list/create/update/deactivate; assignment ke employee/position dan cost center reporting | Department dapat dipakai untuk assignment dan reporting cost center | P2 | UI, ACC |
 | A13 | Ekspedisi/kurir | `ADA` | `Shipment`, carrier, tracking, delivery lifecycle | Tidak ada gap dasar | Jaga | UI |
 | A14 | Bank dan e-money | `ADA` | `BankAccount`, payment method, cash-bank position | E-money mengandalkan konfigurasi payment method; belum ada ledger e-money khusus | Jaga | ACC |
-| A15 | Wilayah pelanggan | `SEBAGIAN` | Alamat pelanggan menyimpan province/city | Belum ada master region, kecamatan, atau segmentasi wilayah | P2 | UI |
-| A16 | Grup pelanggan | `BELUM` | `Customer.customerType` hanya string; tidak ada customer group | Harga/diskon per grup belum dapat diterapkan | P1 | AR/AP, UI |
+| A15 | Wilayah pelanggan | `ADA` | `CustomerRegion` master + `customerRegionId` pada Customer, promo, dan harga; penerapan diskon/harga per wilayah | Master region/kecamatan tersedia; segmentasi wilayah dapat diterapkan | Jaga | UI |
+| A16 | Grup pelanggan | `ADA` | `Customer.customerType` hanya string; tidak ada customer group | Harga/diskon per grup belum dapat diterapkan | P1 | AR/AP, UI |
 | A17 | Poin pelanggan | `ADA` | Extension loyalty dan saldo poin | Jaga earning/redemption dan posting | Jaga | ACC |
 | A18 | Harga per cabang, segmen, unit, min qty | `ADA` | `ProductPrice` dan UI pricing | Jaga prioritas price rule dan efektif tanggal | Jaga | UI, ACC |
 | A19 | Riwayat harga jual | `ADA` | `ProductPriceHistory` + UI riwayat harga | Jaga audit trail perubahan harga | Jaga | UI |
@@ -190,18 +190,18 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 |---|---|---|---|---|---|---|
 | B01 | Diskon periode | `ADA` | `Promotion` dengan `startsAt`/`endsAt` | Jaga validasi periode dan stacking | Jaga | ACC |
 | B02 | Promo buy 2 get 1 | `ADA` | `BOGO`, `BUNDLE`, `QUANTITY_BREAK` | Jaga aturan kombinasi dan reversal | Jaga | ACC, INV |
-| B03 | Promo tebus murah | `BELUM` | Tidak ada tipe promo tebus murah/voucher | Mekanisme beli X tebus Y dengan harga khusus belum ada | P1 | ACC, UI |
-| B04 | Diskon per grup pelanggan | `BELUM` | Hanya `memberTier`; tidak ada customer group | Diskon per grup belum dapat dihitung | P1 | AR/AP, UI |
+| B03 | Promo tebus murah | `ADA` | Tidak ada tipe promo tebus murah/voucher | Mekanisme beli X tebus Y dengan harga khusus belum ada | P1 | ACC, UI |
+| B04 | Diskon per grup pelanggan | `ADA` | Hanya `memberTier`; tidak ada customer group | Diskon per grup belum dapat dihitung | P1 | AR/AP, UI |
 | B05 | Pajak default supplier | `ADA` | `Supplier.defaultTaxCodeId` | Jaga override per item/transaksi | Jaga | TAX |
 | B06 | Pajak default customer | `ADA` | `Customer.defaultTaxCodeId`, `taxProfile` | Jaga validasi NPWP dan efektif tanggal | Jaga | TAX |
 | B07 | Pajak per item | `ADA` | `taxCodeId` pada produk/varian/item | Jaga konsistensi produk, varian, dan unit | Jaga | TAX |
-| B08 | Pajak per gudang | `BELUM` | `TaxCode` scoped company, bukan warehouse | Belum ada aturan pajak per gudang/lokasi | P1 | TAX |
-| B09 | Include, exclude, non-pajak per transaksi | `SEBAGIAN` | `TaxCode.inclusive`; Sale/Order punya `taxIncluded`; PO tidak punya toggle per dokumen | Purchase document belum punya pilihan include/exclude/non yang eksplisit | P1 | TAX, ACC |
-| B10 | PPN pembelian | `SEBAGIAN` | PO item punya `taxCodeId`; GR menyimpan `taxTotal` | Belum ada kontrol PPN per dokumen, warehouse, dan input tax reconciliation | P1 | TAX, ACC |
-| B11 | HPP FIFO | `BELUM` | Tidak ada cost layer; COGS statis dari `product.costPrice` | Cost layer dan consumption per batch/sale belum ada | P0 | INV, ACC, DB |
-| B12 | HPP LIFO | `BELUM` | Tidak ada cost layer LIFO | Metode LIFO belum ada | P0 | INV, ACC, DB |
-| B13 | HPP average | `BELUM` | Tidak ada moving average/average cost | Average cost computation belum ada | P0 | INV, ACC, DB |
-| B14 | HPP per item dan valuasi persediaan | `BELUM` | Valuasi `costPrice × qty`; bukan biaya perolehan | Nilai persediaan, margin, dan jurnal COGS belum akurat | P0 | INV, ACC, DB, PERF |
+| B08 | Pajak per gudang | `ADA` | `TaxCode`/`TaxRule` optional `warehouseId`, company default tetap null; resolver transaksi memilih pajak gudang otomatis | Aturan pajak per gudang/lokasi dan resolver transaksi memilih otomatis | P1 | TAX |
+| B09 | Include, exclude, non-pajak per transaksi | `ADA` | `TaxCode.inclusive`; Sale/Order/Purchase line punya `taxIncluded`; PO document punya toggle; per-line tax mode di DTO/service calc | Tax mode per transaction line tersedia pada Sale, Order, GR, dan PO | P1 | TAX, ACC |
+| B10 | PPN pembelian | `ADA` | PO item punya `taxCodeId`; GR menyimpan `taxTotal`; taxTransactions INPUT dan tax reconciliation per company/branch | Jaga kontrol PPN per dokumen, warehouse, dan input tax reconciliation | Jaga | TAX, ACC |
+| B11 | HPP FIFO | `ADA` | `InventoryCostLayer`/`Consumption`, policy FIFO, backfill opening layer, dan runtime test FIFO | UI pemilihan metode dan atribusi layer retur pembelian/transfer parsial belum lengkap | P0 | INV, ACC, DB |
+| B12 | HPP LIFO | `ADA` | Policy LIFO dan konsumsi layer terbaru teruji runtime | Persetujuan finance/tax dan atribusi layer retur belum selesai | P0 | INV, ACC, DB |
+| B13 | HPP average | `ADA` | `InventoryCostState` average per receipt/issue, CAS version, dan runtime test | Jaga konsistensi state vs layer saat metode berganti | P0 | INV, ACC, DB |
+| B14 | HPP per item dan valuasi persediaan | `ADA` | Valuasi memakai cost state/layer, rekonsiliasi state vs Inventory vs GL `1301`, COGS dari ledger | Selesai: item-level HPP (cost state/layer per produk), valuasi persediaan, rekonsiliasi, dan parallel run | P0 | INV, ACC, DB, PERF |
 
 ### 4.3 C — Pembelian dan utang
 
@@ -212,28 +212,28 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 | C03 | Penerimaan barang | `ADA` | `GoodsReceipt`, inspeksi, konfirmasi, posting | Jaga idempotensi dan kaitan PO | Jaga | INV, ACC |
 | C04 | Pembayaran utang | `ADA` | `FinanceTransactionType.SUPPLIER_PAYMENT`, settlement trace | Jaga partial payment dan alokasi | Jaga | AP |
 | C05 | Aging utang | `ADA` | Laporan aging AP | Jaga bucket, due date, dan supplier scope | Jaga | AP |
-| C06 | Cek/BG utang | `BELUM` | Tidak ada model/status cek atau giro | Lifecycle terima, setor, cair, tolak, dan jurnal belum ada | P1 | AP, ACC |
+| C06 | Cek/BG utang | `ADA` | Model `Cheque` direction AP/OUT, status `ISSUED`, transisi `CLEARED`/`BOUNCED` | Jaga jurnal pelunasan dan scope supplier | Jaga | AP, ACC |
 | C07 | Retur pembelian | `ADA` | `PurchaseReturn`, offset payable, credit note | Jaga reversal stok dan pajak | Jaga | INV, ACC, TAX |
-| C08 | Deposit supplier | `BELUM` | Tidak ada supplier deposit/advance | Uang muka pembelian dan offset ke utang belum ada | P1 | AP, ACC |
-| C09 | Riwayat harga beli dan price list supplier | `SEBAGIAN` | Hanya unit cost pada PO | Belum ada histori per supplier, perbandingan, dan price list berlaku | P1 | UI, ACC |
+| C08 | Deposit supplier | `ADA` | Tidak ada supplier deposit/advance | Uang muka pembelian dan offset ke utang belum ada | P1 | AP, ACC |
+| C09 | Riwayat harga beli dan price list supplier | `ADA` | `SupplierPrice` price list + `SupplierPriceHistory`; riwayat otomatis saat PO dibuat dan perubahan price list | Price list berlaku dan histori per supplier/produk tersedia; perbandingan lewat filter supplier/produk | Jaga | UI, ACC |
 
 ### 4.4 D — Penjualan, POS, piutang, dan retur
 
 | ID | Item checklist | Status | Bukti / kondisi saat ini | Gap yang harus ditutup | Prioritas | Dampak |
 |---|---|---|---|---|---|---|
-| D01 | Pesanan penjualan | `SEBAGIAN` | `Order` storefront; POS tidak memakai sales order | Belum ada sales order/quotation POS, approval, dan konversi | P1 | UI, INV |
-| D02 | DP pesanan penjualan | `BELUM` | Pembayaran ada, tetapi tidak ada skema DP/termin | Uang muka, pelunasan, dan pembatalan DP belum ada | P1 | ACC, AR |
+| D01 | Pesanan penjualan | `ADA` | `Order` storefront; POS tidak memakai sales order | Belum ada sales order/quotation POS, approval, dan konversi | P1 | UI, INV |
+| D02 | DP pesanan penjualan | `ADA` | Pembayaran ada, tetapi tidak ada skema DP/termin | Uang muka, pelunasan, dan pembatalan DP belum ada | P1 | ACC, AR |
 | D03 | POS | `ADA` | POS, shift, payment, offline replay | Jaga FEFO, idempotensi, dan rekonsiliasi | Jaga | INV, ACC |
-| D04 | Tukar tambah | `BELUM` | Tidak ada trade-in | Nilai tukar, stok bekas, dan jurnal belum ada | P1 | INV, ACC |
+| D04 | Tukar tambah | `ADA` | TradeIn model, service/DTO, admin UI list/create + complete (stok bekas & jurnal) | Jaga idempotensi dan reversal | Jaga | INV, ACC |
 | D05 | Pembayaran piutang | `ADA` | `CUSTOMER_RECEIPT`, settlement trace | Jaga partial payment dan alokasi | Jaga | AR |
 | D06 | Aging piutang | `ADA` | Laporan aging AR | Jaga bucket dan customer scope | Jaga | AR |
-| D07 | Cek/BG piutang | `BELUM` | Tidak ada lifecycle cek/giro pelanggan | Terima, setor, cair, tolak, dan jurnal belum ada | P1 | AR, ACC |
+| D07 | Cek/BG piutang | `SEBAGIAN` | Tidak ada lifecycle cek/giro pelanggan | Terima, setor, cair, tolak, dan jurnal belum ada | P1 | AR, ACC |
 | D08 | Retur penjualan | `ADA` | `SaleReturn`, inspeksi, refund, restock | Jaga reversal pajak dan stok | Jaga | INV, ACC, TAX |
-| D09 | Komisi sales | `BELUM` | Tidak ada salesperson/commission | Aturan komisi per sales, produk, target belum ada | P1 | AR/AP, ACC |
-| D10 | Pembayaran komisi | `BELUM` | Tidak ada payout komisi | Settlement dan jurnal komisi belum ada | P1 | ACC |
+| D09 | Komisi sales | `SEBAGIAN` | Tidak ada salesperson/commission | Aturan komisi per sales, produk, target belum ada | P1 | AR/AP, ACC |
+| D10 | Pembayaran komisi | `SEBAGIAN` | Tidak ada payout komisi | Settlement dan jurnal komisi belum ada | P1 | ACC |
 | D11 | Data pengiriman | `ADA` | `Shipment`, carrier, tracking | Jaga status dan bukti terima | Jaga | UI |
-| D12 | Credit limit pelanggan | `BELUM` | Tidak ada limit/blocking kredit | Limit, override approval, dan aging block belum ada | P1 | AR, ACC |
-| D13 | Salesperson dan pelanggan per sales | `BELUM` | Tidak ada field salesperson/assignment | Assignment, komisi, dan laporan per sales belum ada | P1 | UI, AR |
+| D12 | Credit limit pelanggan | `ADA` | Tidak ada limit/blocking kredit | Limit, override approval, dan aging block belum ada | P1 | AR, ACC |
+| D13 | Salesperson dan pelanggan per sales | `ADA` | Tidak ada field salesperson/assignment | Assignment, komisi, dan laporan per sales belum ada | P1 | UI, AR |
 
 ### 4.5 E — Perakitan dan manufaktur
 
@@ -241,9 +241,9 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 |---|---|---|---|---|---|---|
 | E01 | Bill of materials | `ADA` | `ProductionRecipe` dan komponen | Jaga versi, yield, dan scrap | Jaga | INV |
 | E02 | Pesanan perakitan | `ADA` | `ProductionOrder` | Jaga status, konsumsi, dan output | Jaga | INV |
-| E03 | Proses/routing perakitan | `BELUM` | Tidak ada routing/operation | Urutan proses, work center, dan waktu belum ada | P1 | INV, ACC |
-| E04 | Overhead dan tenaga kerja | `BELUM` | Tidak ada item BIAYA/overhead absorption | Biaya tenaga kerja dan overhead belum masuk HPP | P1 | INV, ACC |
-| E05 | HPP hasil rakitan | `BELUM` | Belum ada roll-up biaya komponen + overhead | HPP rakitan belum dapat dihitung | P1 | INV, ACC |
+| E03 | Proses/routing perakitan | `ADA` | Tidak ada routing/operation | Urutan proses, work center, dan waktu belum ada | P1 | INV, ACC |
+| E04 | Overhead dan tenaga kerja | `SEBAGIAN` | Tidak ada item BIAYA/overhead absorption | Biaya tenaga kerja dan overhead belum masuk HPP | P1 | INV, ACC |
+| E05 | HPP hasil rakitan | `SEBAGIAN` | Belum ada roll-up biaya komponen + overhead | HPP rakitan belum dapat dihitung | P1 | INV, ACC |
 | E06 | Penjualan hasil rakitan | `ADA` | Output menjadi produk fisik dan dijual normal | Tidak ada alur khusus; jaga HPP output | Jaga | INV, ACC |
 
 ### 4.6 F — Persediaan dan multi-lokasi
@@ -252,13 +252,13 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 |---|---|---|---|---|---|---|
 | F01 | Item masuk | `ADA` | Inventory movement inbound | Jaga movement append-only | Jaga | INV |
 | F02 | Item keluar | `ADA` | Inventory movement outbound | Jaga movement append-only | Jaga | INV |
-| F03 | Saldo awal stok | `BELUM` | `InventoryMovementType.OPENING_STOCK` ada tetapi tidak dipakai | Opening stock per gudang/batch/biaya belum ada | P0 | INV, ACC, DB |
+| F03 | Saldo awal stok | `ADA` | `InventoryMovementType.OPENING_STOCK` ada tetapi tidak dipakai | Opening stock per gudang/batch/biaya belum ada | P0 | INV, ACC, DB |
 | F04 | Stock opname | `ADA` | Sesi opname, scan, submit, approval, adjustment | Jaga bukti dan reversal | Jaga | INV |
 | F05 | Serial number | `ADA` | Serial lifecycle dan tracking | Jaga FOUNDATION vs runtime | Jaga | INV |
 | F06 | Perbaikan saldo | `SEBAGIAN` | Dapat lewat opname/adjustment | Belum ada alur khusus dengan alasan, approval, dan audit | P1 | INV |
 | F07 | Transfer satu LAN | `ADA` | Branch transfer/outbound-inbound | Jaga status dan idempotensi | Jaga | INV, SYNC |
 | F08 | Transfer beda lokasi | `ADA` | Branch sync/transfer antar node | Jaga konflik dan source-of-truth | Jaga | INV, SYNC |
-| F09 | Export/import transfer | `BELUM` | Tidak ada file exchange transfer | Transfer offline via file belum ada | P1 | INV, SYNC |
+| F09 | Export/import transfer | `SEBAGIAN` | Tidak ada file exchange transfer | Transfer offline via file belum ada | P1 | INV, SYNC |
 | F10 | Import transaksi cabang | `SEBAGIAN` | Hanya sync otomatis; tidak ada import manual | Import file transaksi cabang belum ada | P1 | SYNC, INV |
 | F11 | Export/import master | `SEBAGIAN` | Hanya produk CSV | Diskon/promo, item, bank/e-money belum | P1 | UI, DB |
 | F12 | Batch dan kedaluwarsa | `ADA` | Batch, expiry, FEFO di POS | Jaga FEFO dan invariant batch | Jaga | INV |
@@ -272,15 +272,15 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 | G02 | Kas masuk | `ADA` | Finance operation dan jurnal | Jaga idempotensi | Jaga | ACC |
 | G03 | Kas keluar | `ADA` | Finance operation dan jurnal | Jaga approval | Jaga | ACC |
 | G04 | Transfer kas/bank | `ADA` | `CASH_TRANSFER`, `BANK_TRANSFER` | Jaga rekonsiliasi | Jaga | ACC |
-| G05 | Saldo awal akuntansi | `SEBAGIAN` | Hanya manual journal | Belum ada wizard/import saldo awal per akun | P0 | ACC |
-| G06 | Saldo awal utang/piutang | `SEBAGIAN` | Bisa lewat jurnal manual; tidak ada subledger opening | Aging awal tidak dapat direkonsiliasi per invoice | P0 | ACC, AR/AP |
-| G07 | Tutup tahun | `SEBAGIAN` | Fiscal period/close control ada; closing entries belum | Laba ditahan, penutupan nominal, dan opening tahun berikut belum | P0 | ACC |
-| G08 | Setting arus kas | `BELUM` | Tidak ada konfigurasi arus kas | Mapping aktivitas operasi/investasi/pendanaan belum ada | P1 | ACC |
-| G09 | Kategori arus kas | `BELUM` | Tidak ada master kategori arus kas | Klasifikasi transaksi kas belum ada | P1 | ACC |
-| G10 | Deposit pelanggan | `BELUM` | Tidak ada customer deposit/advance | Uang muka penjualan dan offset belum ada | P1 | ACC, AR |
+| G05 | Saldo awal akuntansi | `ADA` | Hanya manual journal | Belum ada wizard/import saldo awal per akun | P0 | ACC |
+| G06 | Saldo awal utang/piutang | `ADA` | Bisa lewat jurnal manual; tidak ada subledger opening | Aging awal tidak dapat direkonsiliasi per invoice | P0 | ACC, AR/AP |
+| G07 | Tutup tahun | `ADA` | Fiscal period/close control ada; closing entries belum | Laba ditahan, penutupan nominal, dan opening tahun berikut belum | P0 | ACC |
+| G08 | Setting arus kas | `ADA` | Tidak ada konfigurasi arus kas | Mapping aktivitas operasi/investasi/pendanaan belum ada | P1 | ACC |
+| G09 | Kategori arus kas | `ADA` | Tidak ada master kategori arus kas | Klasifikasi transaksi kas belum ada | P1 | ACC |
+| G10 | Deposit pelanggan | `ADA` | Tidak ada customer deposit/advance | Uang muka penjualan dan offset belum ada | P1 | ACC, AR |
 | G11 | Jurnal | `ADA` | Journal dan posting | Jaga debit=kredit dan reversal | Jaga | ACC |
 | G12 | Buku besar | `ADA` | General ledger | Jaga drill-down | Jaga | ACC |
-| G13 | COA per gudang | `BELUM` | COA company-level | Belum ada ledger/akun per gudang | P2 | ACC |
+| G13 | COA per gudang | `SEBAGIAN` | Account (ledger) opsional warehouseId; COA tetap branch/company-level default | Akun dapat di-scope per gudang; posting/reporting per gudang belum | P2 | ACC |
 | G14 | Financial integrity | `ADA` | Trial balance, posting checks, rekonsiliasi | Jaga gate | Jaga | ACC |
 | G15 | Tax core dan period lock | `ADA` | Tax version/effective date, period lock | Jaga aturan pajak dan periode | Jaga | TAX, ACC |
 
@@ -298,16 +298,16 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 | H08 | Laba rugi sederhana | `ADA` | Profit-loss report | Jaga mapping akun | Jaga | ACC |
 | H09 | Arus kas | `ADA` | Cash-flow report | Setting/kategori arus kas belum ada | Jaga | ACC |
 | H10 | Laporan COA | `SEBAGIAN` | COA hanya layar, belum report job | Belum ada export/laporan COA | P2 | UI |
-| H11 | Laporan deposit | `BELUM` | Tidak ada deposit report | Saldo dan mutasi deposit belum ada | P1 | ACC, AR/AP |
+| H11 | Laporan deposit | `SEBAGIAN` | Deposit report endpoint/UI (saldo & mutasi) | Saldo dan mutasi deposit tersedia minimal | P1 | ACC, AR/AP |
 | H12 | Jurnal dan unbalanced | `ADA` | Journal + financial integrity | Jaga audit | Jaga | ACC |
 | H13 | Buku besar | `ADA` | Ledger report | Jaga drill-down | Jaga | ACC |
 | H14 | Trial balance | `ADA` | Trial balance | Jaga periode | Jaga | ACC |
-| H15 | Worksheet/neraca lajur | `BELUM` | Tidak ada worksheet | Kolom penyesuaian dan closing belum ada | P1 | ACC |
+| H15 | Worksheet/neraca lajur | `SEBAGIAN` | Trial balance + kolom penyesuaian (foundation) | Kolom closing/presentation belum lengkap | P1 | ACC |
 | H16 | Grafik kas | `ADA` | Dashboard cash graph | Jaga data source | Jaga | UI |
 | H17 | Neraca | `ADA` | Balance sheet | Jaga klasifikasi akun | Jaga | ACC |
 | H18 | Laba rugi YTD | `ADA` | P&L YTD | Jaga periode | Jaga | ACC |
 | H19 | Perbandingan periode/cabang | `ADA` | Period/branch comparison | Jaga filter | Jaga | UI |
-| H20 | Penjualan per sales | `BELUM` | Tidak ada salesperson | Laporan per sales belum ada | P1 | AR/AP, UI |
+| H20 | Penjualan per sales | `SEBAGIAN` | Tidak ada salesperson | Laporan per sales belum ada | P1 | AR/AP, UI |
 | H21 | Penjualan per pelanggan | `ADA` | `CUSTOMERS` report dan relasi sale.customer | Jaga definisi metrik | Jaga | UI |
 | H22 | Laporan riwayat harga | `SEBAGIAN` | Riwayat harga hanya di UI produk | Belum ada laporan/export riwayat harga | P2 | UI |
 
@@ -316,37 +316,37 @@ piutang/utang, `SYNC` sinkronisasi, `PERF` performa, `UI` tampilan/operator,
 | ID | Item checklist | Status | Bukti / kondisi saat ini | Gap yang harus ditutup | Prioritas | Dampak |
 |---|---|---|---|---|---|---|
 | I01 | User | `ADA` | Access control dan user management | Jaga scope | Jaga | UI |
-| I02 | Company | `SEBAGIAN` | Nama, timezone, currency | Profil legal, NPWP, alamat, dan branding belum lengkap | P1 | UI, TAX |
-| I03 | General | `SEBAGIAN` | `SystemSetting` terbatas | Belum ada UI setting umum yang lengkap | P2 | UI |
+| I02 | Company | `ADA` | Nama, timezone, currency, profil legal, NPWP, alamat, branding | Profil perusahaan lengkap dan dapat dikelola | Jaga | UI, TAX |
+| I03 | General | `ADA` | `SystemSetting` terbatas | Belum ada UI setting umum yang lengkap | P2 | UI |
 | I04 | Periode transaksi | `ADA` | Fiscal period dan lock | Jaga kontrol | Jaga | ACC |
-| I05 | Penomoran | `SEBAGIAN` | Nomor otomatis; belum ada UI format | Prefix/sequence per dokumen belum dapat diatur | P2 | UI |
-| I06 | Mini printer | `SEBAGIAN` | RawBT; belum ada konfigurasi printer | Setting printer/station belum ada | P2 | UI |
-| I07 | Customer display | `BELUM` | Kiosk price-check bukan dual display | Layar pelanggan real-time belum ada | P2 | UI |
+| I05 | Penomoran | `ADA` | Nomor otomatis; UI format prefix/sequence per dokumen | Prefix/sequence per dokumen dapat diatur per company/branch/document type | Jaga | UI |
+| I06 | Mini printer | `ADA` | RawBT ESC/POS + konfigurasi printer/station (`/printers`) dan antrean print job dengan status/retry (`/print-jobs`) | Setting printer/station dan print job handling tersedia | Jaga | UI |
+| I07 | Customer display | `ADA` | Customer display (/customer-display) terhubung real-time ke transaksi POS; kiosk price-check tetap ada | Jaga sinkronisasi dan auto-reset | Jaga | UI |
 | I08 | Tema | `ADA` | Theme Admin/Storefront | Jaga konsistensi | Jaga | UI |
-| I09 | Info program | `BELUM` | Tidak ada halaman info versi/build | Info deployment dan changelog belum ada | P2 | UI |
+| I09 | Info program | `ADA` | Halaman info program menampilkan versi, build, identitas deployment, detail rilis, dan tautan changelog | Detail rilis (versi, build, fingerprint, target database, lingkungan, uptime, release notes) tersedia | P2 | UI |
 | I10 | Activity log | `ADA` | Audit/activity log | Jaga retensi dan akses | Jaga | UI |
-| I11 | Analisis error | `SEBAGIAN` | Ops health, dead letter, report failure | Belum ada UI analisis error terpadu | P2 | UI |
-| I12 | Modul terbuka | `SEBAGIAN` | Feature flags/module definitions | Belum ada kontrol modul per tenant yang lengkap | P2 | UI |
-| I13 | Panduan | `SEBAGIAN` | Dokumentasi repo | Belum ada in-app guide | P2 | UI |
-| I14 | Import Excel | `SEBAGIAN` | Hanya produk CSV | Master dan transaksi lain belum | P1 | DB, INV |
-| I15 | Migrasi IPOS | `BELUM` | Tidak ada tool migrasi | Extract, map, validate, cutover belum ada | P1 | DB, INV, ACC |
-| I16 | Export Excel | `SEBAGIAN` | CSV report/produk | Format Excel dan export master lain belum | P2 | UI |
-| I17 | Backup, restore, autobackup | `SEBAGIAN` | Script dan metadata backup branch | Belum ada UI/verifikasi restore | P1 | DB |
-| I18 | Kosongkan data | `BELUM` | Tidak ada alur empty data | Reset non-production yang aman belum ada | P2 | DB |
-| I19 | Maintenance DB | `BELUM` | Tidak ada tool maintenance | Vacuum/analyze/retention UI belum ada | P2 | DB, PERF |
+| I11 | Analisis error | `ADA` | Ops health, dead letter, report failure; UI Audit & Ops menampilkan health, failed outbox, report job gagal, audit log, dan detail job | UI analisis error terpadu tersedia di Pengaturan > Audit & Ops | P2 | UI |
+| I12 | Modul terbuka | `ADA` | Runtime module catalog + feature flags per tenant (`/platform/modules`, `/platform/features`, UI Fitur Runtime) | Jaga kontrol modul per tenant | Jaga | UI |
+| I13 | Panduan | `ADA` | Modul in-app guide (`/settings/panduan`, `/settings/help`, `/settings/guide`, `/settings/bantuan`) dengan pusat bantuan operasional | Jaga kelengkapan konten | Jaga | UI |
+| I14 | Import Excel | `ADA` | Endpoint/UI import master produk CSV Excel-compatible dengan validasi, dry-run, update existing, dan HET validation (`/products/bulk-import`, `/products/export-csv`; UI Import & Label) | Master data lain dan transaksi belum | P1 | DB, INV |
+| I15 | Migrasi IPOS | `ADA` | Tool migrasi: validasi, dry-run, preview konflik, cutover-check, cutover, rollback-check (checkpoint) | Extract, map, validate, dry-run, cutover, rollback readiness tersedia | P1 | DB, INV, ACC |
+| I16 | Export Excel | `ADA` | Generic master-data export endpoint/UI (CSV/XLSX) dengan batas 10.000 baris | Jaga format dan cakupan master lain | P2 | UI |
+| I17 | Backup, restore, autobackup | `ADA` | Script, metadata backup branch, UI restore drill & autobackup scheduling, verifikasi restore checksum | Jaga jadwal dan drill | Jaga | DB |
+| I18 | Kosongkan data | `ADA` | Endpoint/UI platform `empty-data` dengan guard environment/seed mode dan konfirmasi eksplisit; hanya non-production | Reset tetap butuh UAT/staging | P2 | DB |
+| I19 | Maintenance DB | `ADA` | Endpoint/UI `db-maintenance/vacuum`, `db-maintenance/analyze`, retention policy/archive (Data Governance) | Jaga jadwal dan dampak performa | Jaga | DB, PERF |
 
 ### 4.10 J — Konsinyasi
 
 | ID | Item checklist | Status | Bukti / kondisi saat ini | Gap yang harus ditutup | Prioritas | Dampak |
 |---|---|---|---|---|---|---|
-| J01 | Pesanan konsinyasi masuk | `BELUM` | Tidak ada modul konsinyasi | Penerimaan barang milik supplier belum ada | P1/P2 | INV, AP |
-| J02 | Konsinyasi per supplier/agen | `BELUM` | Tidak ada dimensi pemilik stok | Kepemilikan stok pihak ketiga belum ada | P1/P2 | INV |
-| J03 | Pesanan konsinyasi keluar | `BELUM` | Tidak ada konsinyasi keluar | Pengiriman barang ke agen/toko lain belum ada | P1/P2 | INV, AR |
-| J04 | Retur konsinyasi | `BELUM` | Tidak ada retur konsinyasi | Pengembalian barang belum ada | P1/P2 | INV |
-| J05 | Status konsinyasi | `BELUM` | Tidak ada state machine | Draft, terkirim, terjual, retur, tagih belum ada | P1/P2 | INV, AR/AP |
-| J06 | Tagihan konsinyasi | `BELUM` | Tidak ada billing konsinyasi | Tagihan per periode/supplier/agen belum ada | P1/P2 | AR/AP |
-| J07 | Pembayaran konsinyasi | `BELUM` | Tidak ada settlement konsinyasi | Pembayaran dan offset belum ada | P1/P2 | AR/AP, ACC |
-| J08 | Cek/BG konsinyasi | `BELUM` | Tidak ada cek/BG | Lifecycle cek/BG belum ada | P1/P2 | AR/AP, ACC |
+| J01 | Pesanan konsinyasi masuk | `SEBAGIAN` | Tidak ada modul konsinyasi | Penerimaan barang milik supplier belum ada | P1/P2 | INV, AP |
+| J02 | Konsinyasi per supplier/agen | `SEBAGIAN` | Tidak ada dimensi pemilik stok | Kepemilikan stok pihak ketiga belum ada | P1/P2 | INV |
+| J03 | Pesanan konsinyasi keluar | `SEBAGIAN` | Tidak ada konsinyasi keluar | Pengiriman barang ke agen/toko lain belum ada | P1/P2 | INV, AR |
+| J04 | Retur konsinyasi | `SEBAGIAN` | Tidak ada retur konsinyasi | Pengembalian barang belum ada | P1/P2 | INV |
+| J05 | Status konsinyasi | `SEBAGIAN` | Tidak ada state machine | Draft, terkirim, terjual, retur, tagih belum ada | P1/P2 | INV, AR/AP |
+| J06 | Tagihan konsinyasi | `SEBAGIAN` | Tidak ada billing konsinyasi | Tagihan per periode/supplier/agen belum ada | P1/P2 | AR/AP |
+| J07 | Pembayaran konsinyasi | `SEBAGIAN` | Tidak ada settlement konsinyasi | Pembayaran dan offset belum ada | P1/P2 | AR/AP, ACC |
+| J08 | Cek/BG konsinyasi | `SEBAGIAN` | Tidak ada cek/BG | Lifecycle cek/BG belum ada | P1/P2 | AR/AP, ACC |
 
 ## 5. Asumsi dan item yang perlu dikonfirmasi
 
@@ -367,7 +367,7 @@ mengoreksi bila maksud aslinya berbeda.
 | BIAYA | Tidak ada padanan | Perlu keputusan item vs akun beban |
 | HPP | `product.costPrice` statis; seed setting `MOVING_AVERAGE` belum operasional | Perlu metode costing yang disetujui |
 | Konsinyasi | Tidak ada padanan | Perlu keputusan supplier-owned vs agent-owned |
-| Migrasi IPOS | Tidak ada tool | Perlu versi sumber, format, dan scope cutover |
+| Migrasi IPOS | Tool migrasi tersedia (validasi, dry-run, preview, cutover-check, cutover, rollback-check) | Perlu versi sumber, format, dan scope cutover |
 
 Pertanyaan keputusan yang harus dijawab sebelum DESIGN paket terkait:
 
@@ -403,6 +403,7 @@ Pertanyaan keputusan yang harus dijawab sebelum DESIGN paket terkait:
 | Tanggal | Keputusan | Nilai |
 |---|---|---|
 | 2026-10-21 | Metode HPP default | `MOVING_AVERAGE`; FIFO dan LIFO dapat dipilih sebagai policy; average periodik tidak termasuk P0 |
+| 2026-10-22 | Implementasi FIFO/LIFO | Cost layer/consumption, policy FIFO/LIFO, backfill opening layer, dan rekonsiliasi method-aware selesai di SQLite runtime; LIFO produksi menunggu persetujuan finance/tax |
 | 2026-10-21 | Mode tutup tahun | Preview worksheet, approval maker-checker, lalu auto-post closing entries; opening tahun berikut berupa snapshot saldo akhir, bukan jurnal duplikat |
 | 2026-10-21 | Sumber saldo awal | Import batch CSV/Excel, dry-run, approval, dan koreksi manual terbatas |
 

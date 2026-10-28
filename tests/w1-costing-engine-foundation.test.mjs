@@ -19,7 +19,7 @@ const manufacturing = read('apps/api/src/manufacturing/manufacturing.service.ts'
 const batchFefo = read('apps/api/src/common/batch-fefo.ts');
 const seed = read('apps/api/prisma/seed.ts');
 const manifest = JSON.parse(read('config/expand-migration-order.json'));
-const costingItem = JSON.parse(read('work-items/active/T360-20261021-134120-costing-engine-dan-valuasi-persediaan.json'));
+const costingItem = JSON.parse(read('work-items/completed/T360-20261021-134120-costing-engine-dan-valuasi-persediaan.json'));
 
 test('all runtime schemas expose the costing models, occurredAt, and idempotency keys', () => {
   for (const schema of schemas) {
@@ -74,6 +74,33 @@ test('moving average posting is transactional, CAS-versioned, idempotent, and ba
   assert.match(service, /uncostedQuantity/);
   assert.match(service, /averageCost: quantity > 0 \? value\.div\(quantity\)/);
   assert.match(service, /policy\.mode === 'ACTIVE' && result\.uncostedQuantity > 0/);
+});
+
+test('FIFO and LIFO consume cost layers by receivedAt and keep state as the aggregate', () => {
+  assert.match(service, /private layerOrder\(method/);
+  assert.match(service, /method === 'LIFO'/);
+  assert.match(service, /\[\{ receivedAt: 'desc' \}, \{ id: 'desc' \}\]/);
+  assert.match(service, /\[\{ receivedAt: 'asc' \}, \{ id: 'asc' \}\]/);
+  assert.match(service, /planConsumption\(/);
+  assert.match(service, /preferredLayerSourceEventId/);
+  assert.match(service, /candidates\.findIndex\(\(layer\) => layer\.sourceEventId === preferredLayerSourceEventId\)/);
+  assert.match(service, /status: 'OPEN',\s+remainingQty: \{ gt: 0 \}/);
+  assert.match(service, /remainingQty: consumption\.remainingQty \+ consumption\.quantity/);
+  assert.match(service, /inventoryCostConsumption\.create/);
+  assert.match(service, /newLayer: policy\.method !== 'MOVING_AVERAGE'/);
+  assert.match(service, /sourceEventId: eventId/);
+  assert.match(service, /originalQty: quantity/);
+  assert.match(service, /consumptions: plan\.consumptions/);
+  const policyService = read('apps/api/src/inventory/costing-policy.service.ts');
+  assert.match(policyService, /'MOVING_AVERAGE', 'FIFO', 'LIFO'/);
+  assert.match(policyService, /COSTING_METHOD_CUTOVER_REQUIRED/);
+  assert.match(policyService, /method,/);
+  const rebuildService = read('apps/api/src/inventory/costing-rebuild.service.ts');
+  assert.match(rebuildService, /resolveMethod\(/);
+  assert.match(rebuildService, /layersCreated/);
+  assert.match(rebuildService, /inventoryCostLayer\.create/);
+  assert.match(rebuildService, /eventType: 'OPENING'/);
+  assert.match(rebuildService, /method: run\.method/);
 });
 
 test('sales posts ISSUE per FEFO batch and derives sale/line cost from the ledger', () => {
@@ -177,6 +204,8 @@ test('production consumes component cost and receives output cost from the ledge
 test('purchase return credits inventory at ledger cost and posts the purchase price variance', () => {
   assert.match(returns, /this\.costing\.resolveMode\(tx, scope\.companyId, scope\.branchId, postedAt\)/);
   assert.match(returns, /this\.costing\.recordPurchaseReturn\(tx, \{/);
+  assert.match(returns, /sourceType: 'GoodsReceipt',\s+sourceId: sourceReceipt\.id,\s+sourceLineKey: originalReceiptItem\.id,\s+eventType: 'RECEIPT'/);
+  assert.match(returns, /preferredLayerSourceEventId: originCostEvent\?\.id/);
   assert.match(returns, /operationKey: `purchase-return-cost:/);
   assert.match(returns, /sourceLineKey: item\.id/);
   assert.match(returns, /inventory: inventoryCost/);
@@ -210,10 +239,26 @@ test('costing policy API is permissioned, tenant-scoped, and blocks backdated ac
   assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('valuation'\)/);
   assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('layers'\)/);
   assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('reconciliation'\)/);
+  assert.match(controller, /@Permissions\('inventory\.costing\.rebuild'\) @Post\('rebuild'\)/);
+  assert.match(controller, /@Permissions\('inventory\.costing\.rebuild'\) @Post\('rebuild-runs\/:id\/approve'\)/);
+  assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('rebuild-runs'\)/);
+  assert.match(controller, /@Permissions\('inventory\.costing\.view'\) @Get\('rebuild-runs\/:id'\)/);
   const reportService = read('apps/api/src/inventory/costing-report.service.ts');
   assert.match(reportService, /branchId: scope\.branchId/);
   assert.match(reportService, /groupBy\(\{ by: \['warehouseId'\]/);
   assert.match(reportService, /quantityDifference/);
+  assert.match(reportService, /journalLine\.aggregate/);
+  assert.match(reportService, /code: '1301'/);
+  assert.match(reportService, /valueDifferenceVsGl/);
+  assert.match(reportService, /WAREHOUSE_FILTER/);
+  const rebuildService = read('apps/api/src/inventory/costing-rebuild.service.ts');
+  assert.match(rebuildService, /COSTING_REBUILD_MAKER_CHECKER/);
+  assert.match(rebuildService, /operationKey/);
+  assert.match(rebuildService, /inventoryCostState\.createMany/);
+  assert.match(rebuildService, /status: 'COMPLETED'/);
+  assert.match(rebuildService, /COSTING_REBUILD_FLAG_ENABLED/);
+  assert.match(rebuildService, /P2002/);
+  assert.match(rebuildService, /inventoryBatch/);
   assert.match(seed, /'inventory\.costing\.view','inventory\.costing\.manage','inventory\.costing\.rebuild'/);
   const adminMatrix = seed.slice(seed.indexOf("['ADMIN', ["), seed.indexOf("['CASHIER'"));
   const warehouseMatrix = seed.slice(seed.indexOf("['WAREHOUSE', ["), seed.indexOf("['PURCHASING'"));
@@ -232,7 +277,7 @@ test('costing policy API is permissioned, tenant-scoped, and blocks backdated ac
   assert.match(read('apps/api/src/inventory/inventory.module.ts'), /InventoryCostingReportService/);
 });
 
-test('ADR is accepted and the costing work item entered IMPLEMENTATION', () => {
+test('ADR is accepted and the costing work item reached CLOSED', () => {
   assert.match(read('docs/adr/ADR-T360-20261021-134120-COSTING-METHOD.md'), /\*\*Status:\*\* ACCEPTED/);
-  assert.equal(costingItem.phase, 'IMPLEMENTATION');
+  assert.equal(costingItem.phase, 'CLOSED');
 });

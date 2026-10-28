@@ -706,9 +706,10 @@ export class AdvancedInventoryService {
         if (!costingEnabled) continue;
         if (difference > 0) {
           const batchKey = item.batchNumber ?? '';
-          const state = await tx.inventoryCostState.findUnique({ where: { companyId_branchId_warehouseId_productId_batchKey_method: {
-            companyId: scope.companyId, branchId: scope.branchId, warehouseId: warehouse.id, productId: item.productId, batchKey, method: 'MOVING_AVERAGE',
-          } } });
+          const current = await this.costing.state(tx, {
+            companyId: scope.companyId, branchId: scope.branchId, warehouseId: warehouse.id, productId: item.productId, batchKey,
+          }, occurredAt);
+          const state = current.id ? current : null;
           if (!state || state.quantity <= 0) {
             if (costingActive) throw new ConflictException(`Costing ACTIVE menolak penambahan opname ${item.productId} tanpa biaya rata-rata; seed biaya awal terlebih dahulu.`);
             continue;

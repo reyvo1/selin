@@ -108,9 +108,10 @@ export class SalesService {
     product: { id: string; unit: string; salePrice: Prisma.Decimal | number | string },
     input: { quantity: number; barcodeCode?: string; productUnitId?: string; variantId?: string },
     segmentCode?: string | null,
+    customerRegionId?: string | null,
     occurredAt?: Date,
   ) {
-    return resolveSellingUnitLine(client, scope, product, input, segmentCode, occurredAt);
+    return resolveSellingUnitLine(client, scope, product, input, segmentCode, customerRegionId, occurredAt);
   }
 
   private async tenderDefinitions(client: Prisma.TransactionClient | PrismaService, scope: TenantScope, activeOnly = true) {
@@ -624,14 +625,14 @@ export class SalesService {
     if (products.length !== ids.length) throw new BadRequestException('Satu atau lebih produk tidak ditemukan.');
 
     const quoteCustomer = dto.customerId
-      ? await this.prisma.customer.findFirst({ where: { id: dto.customerId, companyId: scope.companyId }, select: { id: true, customerType: true } })
-      : null;
+          ? await this.prisma.customer.findFirst({ where: { id: dto.customerId, companyId: scope.companyId }, select: { id: true, customerType: true, customerRegionId: true } })
+          : null;
     if (dto.customerId && !quoteCustomer) throw new BadRequestException('Pelanggan tidak ditemukan.');
     let rawSubtotal = new Prisma.Decimal(0);
     const raw: Array<{ input: (typeof dto.items)[number]; product: (typeof products)[number]; line: Prisma.Decimal; conversion: Awaited<ReturnType<SalesService['resolveSellingLine']>> }> = [];
     for (const input of dto.items) {
       const product = products.find((value) => value.id === input.productId)!;
-      const conversion = await this.resolveSellingLine(this.prisma, scope, product, input, quoteCustomer?.customerType);
+      const conversion = await this.resolveSellingLine(this.prisma, scope, product, input, quoteCustomer?.customerType, quoteCustomer?.customerRegionId ?? null);
       const line = conversion.sellingUnitPrice.mul(conversion.unitQuantity);
       rawSubtotal = rawSubtotal.add(line);
       raw.push({ input, product, line, conversion });
@@ -683,11 +684,12 @@ export class SalesService {
       const discountedBase = item.line.sub(share);
       const calc = await this.accounting.calculateTax(
         this.prisma,
-        item.input.taxCodeId ?? item.product.salesTaxCodeId ?? undefined,
+        item.input.taxCodeId ?? item.product.salesTaxCodeId ?? (await this.accounting.resolveWarehouseTaxCode(this.prisma, scope.companyId, warehouse.id, 'SALE', new Date())) ?? undefined,
         discountedBase,
         scope.companyId,
         new Date(),
         ['SALE', 'OTHER'],
+        item.input.taxIncluded,
       );
       netTotal = netTotal.add(calc.net);
       taxTotal = taxTotal.add(calc.tax);
@@ -1076,18 +1078,22 @@ export class SalesService {
         if (crossTenant) return this.denyTenantAccess(user, scope, 'Product', crossTenant.id);
         throw new BadRequestException('Satu atau lebih produk tidak ditemukan.');
       }
+      if (products.some((product) => product.productType === 'EXPENSE')) {
+        throw new BadRequestException('Item bertipe BIAYA (EXPENSE) tidak dapat dijual.');
+      }
       const saleCustomer = dto.customerId
-        ? await tx.customer.findFirst({ where: { id: dto.customerId, companyId: scope.companyId }, select: { id: true, customerType: true, name: true, taxIdNumber: true } })
-        : null;
+              ? await tx.customer.findFirst({ where: { id: dto.customerId, companyId: scope.companyId }, select: { id: true, customerType: true, customerRegionId: true, name: true, taxIdNumber: true, salespersonId: true } })
+              : null;
       if (dto.customerId && !saleCustomer) throw new BadRequestException('Pelanggan tidak ditemukan.');
       let rawSubtotal = new Prisma.Decimal(0), costTotal = new Prisma.Decimal(0);
       const raw: Array<{ input: (typeof dto.items)[number]; product: (typeof products)[number]; line: Prisma.Decimal; conversion: Awaited<ReturnType<SalesService['resolveSellingLine']>> }> = [];
       for (const input of dto.items) {
         const product = products.find((value) => value.id === input.productId)!;
-        const conversion = await this.resolveSellingLine(tx, scope, product, input, saleCustomer?.customerType, occurredAt);
+        const conversion = await this.resolveSellingLine(tx, scope, product, input, saleCustomer?.customerType, saleCustomer?.customerRegionId ?? null, occurredAt);
         const line = conversion.sellingUnitPrice.mul(conversion.unitQuantity);
         rawSubtotal = rawSubtotal.add(line);
-        costTotal = costTotal.add(new Prisma.Decimal(product.costPrice).mul(conversion.baseQuantity));
+        const isStockTracked = !['SERVICE', 'NON_INVENTORY', 'EXPENSE'].includes(product.productType);
+        if (isStockTracked) costTotal = costTotal.add(new Prisma.Decimal(product.costPrice).mul(conversion.baseQuantity));
         raw.push({ input, product, line, conversion });
       }
       const discount = new Prisma.Decimal(dto.discount ?? 0);
@@ -1152,12 +1158,13 @@ export class SalesService {
         allocatedDiscount = allocatedDiscount.add(share);
         const discountedBase = item.line.sub(share);
         const calc = await this.accounting.calculateTax(
-          tx,
-          item.input.taxCodeId ?? item.product.salesTaxCodeId ?? undefined,
-          discountedBase,
-          scope.companyId,
-          occurredAt,
+                   tx,
+                   item.input.taxCodeId ?? item.product.salesTaxCodeId ?? (await this.accounting.resolveWarehouseTaxCode(tx, scope.companyId, warehouse.id, 'SALE', occurredAt)) ?? undefined,
+                   discountedBase,
+                   scope.companyId,
+                   occurredAt,
           ['SALE', 'OTHER'],
+          item.input.taxIncluded,
         );
         netTotal = netTotal.add(calc.net); taxTotal = taxTotal.add(calc.tax); total = total.add(calc.gross);
         prepared.push({
@@ -1185,8 +1192,10 @@ export class SalesService {
         }
       }
       for (const item of prepared) {
-        const inventory = await tx.inventory.findUnique({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: item.productId } } });
         const product = products.find((value) => value.id === item.productId)!;
+        const isStockTracked = !['SERVICE', 'NON_INVENTORY', 'EXPENSE'].includes(product.productType);
+        if (!isStockTracked) continue;
+        const inventory = await tx.inventory.findUnique({ where: { warehouseId_productId: { warehouseId: warehouse.id, productId: item.productId } } });
         if ((!inventory || inventory.available < item.quantity) && !product.allowNegativeStock) throw new BadRequestException(`Stok ${product.name} tidak mencukupi.`);
       }
       const costingMode = await this.costing.resolveMode(tx, scope.companyId, scope.branchId, occurredAt);
@@ -1211,6 +1220,17 @@ export class SalesService {
       }
       if (onAccountAmount.greaterThan(0) && !dto.customerId) throw new BadRequestException('Penjualan piutang wajib memiliki pelanggan.');
       if (onAccountAmount.greaterThan(saleTotal)) throw new BadRequestException('Piutang pelanggan melebihi total transaksi.');
+      if (onAccountAmount.greaterThan(0) && dto.customerId) {
+        const customer = await tx.customer.findUnique({ where: { id: dto.customerId }, select: { creditLimit: true } });
+        if (customer?.creditLimit != null) {
+          const outstanding = await tx.sale.aggregate({ where: { customerId: dto.customerId, status: 'COMPLETED' }, _sum: { total: true } });
+          // crude: outstanding total (not net of payments); refine later with receivable settlement
+          const currentOutstanding = new Prisma.Decimal(outstanding._sum.total ?? 0);
+          if (currentOutstanding.add(onAccountAmount).greaterThan(customer.creditLimit)) {
+            throw new BadRequestException('Piutang melebihi credit limit pelanggan.');
+          }
+        }
+      }
       if (options.offline && onAccountAmount.greaterThan(0)) throw new BadRequestException('Penjualan piutang tidak boleh direkam saat offline.');
 
       const tenderDue = saleTotal.sub(onAccountAmount).toDecimalPlaces(2);
@@ -1240,7 +1260,7 @@ export class SalesService {
       const saleEventType = onAccountAmount.greaterThan(0) || settlementComponentCount > 1 ? 'SALE_SPLIT' : !cashSettlement.isZero() ? 'SALE_CASH' : 'SALE_BANK';
       const sale = await tx.sale.create({ data: {
         number: await nextDocumentNumber(tx, { companyId: scope.companyId, branchId: scope.branchId, documentType: 'SALE', prefix: 'POS' }), branchId: scope.branchId, warehouseId: warehouse.id, customerId: dto.customerId,
-        cashierShiftId, subtotal: rawSubtotal, discount: totalDiscount, tax: taxTotal, serviceFee, total: saleTotal, costTotal: costingActive ? new Prisma.Decimal(0) : costTotal, createdAt: occurredAt,
+        cashierShiftId, salespersonId: (dto.salespersonId?.trim() || saleCustomer?.salespersonId) ?? null, subtotal: rawSubtotal, discount: totalDiscount, tax: taxTotal, serviceFee, total: saleTotal, costTotal: costingActive ? new Prisma.Decimal(0) : costTotal, createdAt: occurredAt,
       } });
       const saleItems: Array<{ id: string }> = [];
       for (const item of prepared) {
@@ -1253,6 +1273,9 @@ export class SalesService {
       }
       let saleCostTotal = new Prisma.Decimal(0);
       for (const [lineIndex, item] of prepared.entries()) {
+        const lineProduct = products.find((value) => value.id === item.productId)!;
+        const isStockTrackedLine = !['SERVICE', 'NON_INVENTORY', 'EXPENSE'].includes(lineProduct.productType);
+        if (!isStockTrackedLine) continue;
         let saleLineCost = new Prisma.Decimal(0);
         const allocations = await consumeAvailableLocationStock(tx, { warehouseId: warehouse.id, productId: item.productId, quantity: item.quantity });
         const inventory = await tx.inventory.update({

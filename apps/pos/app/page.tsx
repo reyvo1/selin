@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { clearPosTokens, posAuthFetch, storePosTokens } from './auth-fetch';
-import { Search, ScanBarcode, ShoppingCart, Trash2, Minus, Plus, CreditCard, UserRound, Coins, PackageSearch, Wifi, WifiOff, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Store, X, WalletCards, ClipboardList } from 'lucide-react';
+import { Search, ScanBarcode, ShoppingCart, Trash2, Minus, Plus, CreditCard, UserRound, Coins, PackageSearch, Wifi, WifiOff, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Store, X, WalletCards, ClipboardList, Monitor } from 'lucide-react';
 import { PosShell, PosWorkspace } from './pos-shell';
 import { ModalPortal, useEscapeToClose, useModalFocus } from './modal-portal';
 import { T360ThemeToggle } from './theme-client';
@@ -1037,6 +1037,53 @@ return () => { active = false; window.clearInterval(interval); window.removeEven
     if (workspace === 'SHIFT' && token && apiOnline) void loadShiftControl();
   }, [workspace, token, apiOnline, shift?.id]);
 
+  // Broadcast the in-progress transaction to the customer-facing display (second screen).
+  // The display is a separate tab/device and listens on a same-origin BroadcastChannel plus a
+  // localStorage fallback, so it never needs a handle on this window.
+  useEffect(() => {
+    if (!token) return;
+    if (typeof window === 'undefined') return;
+    const subtotalFallback = cart.reduce((sum, item) => sum + cartItemUnitPrice(item) * item.quantity * item.quantityFactor, 0);
+    const activeQuote = apiOnline ? quote : null;
+    const displaySubtotal = activeQuote?.subtotal ?? subtotalFallback;
+    const displayTax = activeQuote?.tax ?? 0;
+    const displayTotal = activeQuote?.total ?? Math.max(0, subtotalFallback - discount) + serviceFee;
+    const selectedCustomer = customers.find((c) => c.id === customerId);
+    const items = cart.map((item) => {
+      const cartVariant = item.variantId ? shownVariant(item.product, item.variantId) : undefined;
+      return {
+        name: item.product.name + (cartVariant ? ` · ${cartVariant.name}` : ''),
+        quantity: item.quantity,
+        unit: item.unitCode,
+        price: cartItemUnitPrice(item) * item.quantityFactor,
+        lineTotal: cartItemUnitPrice(item) * item.quantity * item.quantityFactor,
+      };
+    });
+    const payload = cart.length === 0
+      ? { type: 'idle', branchId: warehouseId, items: [], total: 0 }
+      : {
+          type: 'transaction',
+          branchId: warehouseId,
+          branchName: manifest?.branch?.name,
+          customer: selectedCustomer?.name,
+          items,
+          subtotal: displaySubtotal,
+          discount,
+          tax: displayTax,
+          serviceFee,
+          total: displayTotal,
+          status: 'shopping',
+        };
+    try { localStorage.setItem('toko360.customerDisplay', JSON.stringify(payload)); } catch { /* noop */ }
+    try {
+      if (typeof BroadcastChannel === 'function') {
+        const bc = new BroadcastChannel('toko360.customerDisplay');
+        bc.postMessage(payload);
+        bc.close();
+      }
+    } catch { /* noop */ }
+  }, [token, cart, discount, serviceFee, quote, customerId, customers, warehouseId, manifest, apiOnline]);
+
   if (!token) return <main className="login"><T360ThemeToggle className="loginThemeToggle" /><form onSubmit={submitLogin}><span>KASIR TOKO360</span><h1>Masuk ke terminal kasir.</h1>{message && <p className="notice">{message}</p>}{offlineQueue.length > 0 && <p className="notice">Ada {offlineQueue.length} transaksi offline tersimpan pada perangkat ini. Login dengan kasir asal untuk menyinkronkan.</p>}<label>Email<input type="email" value={login.email} onChange={(e) => setLogin({ ...login, email: e.target.value })} /></label><label>Password<input type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label><label>Kode 2FA / recovery (jika aktif)<input value={login.twoFactorCode} onChange={(e) => setLogin({ ...login, twoFactorCode: e.target.value })} autoComplete="one-time-code" /></label><button>Masuk</button></form></main>;
 
   const activeQuote = apiOnline ? quote : offlineQuoteState.quote;
@@ -1067,7 +1114,7 @@ return () => { active = false; window.clearInterval(interval); window.removeEven
     conflictCount={pendingSaleReturns.length}
     companyName={manifest?.company?.name ?? 'Toko360'}
     branchName={manifest?.branch?.name ?? manifest?.branch?.code ?? 'Cabang aktif'}
-    warehouseControl={<><label>Gudang/toko<select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setCart([]); }}>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>{ownedOfflineQueue.length > 0 && <button className="syncButton" disabled={!apiOnline || syncBusy} onClick={() => void syncOfflineQueue(token, hasOfflineConflict)}><RefreshCw size={14} className={syncBusy ? 'spin' : ''} /> {syncBusy ? 'SYNC...' : 'SYNC'}</button>}<button className="deviceLink" type="button" onClick={() => openDeviceScreen('/stock-count/')}><ClipboardList size={14} /> Hitung stok</button><button className="deviceLink" type="button" onClick={() => openDeviceScreen('/kiosk/')}><ScanBarcode size={14} /> Cek harga</button><button className="logout" onClick={() => void logout()}>Keluar</button></>}
+    warehouseControl={<><label>Gudang/toko<select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setCart([]); }}>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></label>{ownedOfflineQueue.length > 0 && <button className="syncButton" disabled={!apiOnline || syncBusy} onClick={() => void syncOfflineQueue(token, hasOfflineConflict)}><RefreshCw size={14} className={syncBusy ? 'spin' : ''} /> {syncBusy ? 'SYNC...' : 'SYNC'}</button>}<button className="deviceLink" type="button" onClick={() => openDeviceScreen('/stock-count/')}><ClipboardList size={14} /> Hitung stok</button><button className="deviceLink" type="button" onClick={() => openDeviceScreen('/kiosk/')}><ScanBarcode size={14} /> Cek harga</button><button className="deviceLink" type="button" onClick={() => openDeviceScreen('/customer-display/')}><Monitor size={14} /> Layar pelanggan</button><button className="logout" onClick={() => void logout()}>Keluar</button></>}
   >
     <StaffMemoWidget token={token} />
     {message && <div className={`notice ${(message.includes('berhasil') || message.includes('tersimpan')) ? 'toastLike success' : 'toastLike error'}`}>{(message.includes('berhasil') || message.includes('tersimpan')) ? <CheckCircle2 size={16} /> : <XCircle size={16} />} {message}</div>}

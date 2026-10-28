@@ -245,8 +245,9 @@ export class OrdersService {
         throw new BadRequestException('Produk tidak ditemukan.');
       }
 
+      const warehouseTaxCodeId = await this.accounting.resolveWarehouseTaxCode(tx, branch.companyId, warehouse.id, 'SALE', new Date());
       const requestedTaxCodeIds = [...new Set(dto.items
-        .map((input) => input.taxCodeId ?? products.find((product) => product.id === input.productId)?.salesTaxCodeId)
+        .map((input) => input.taxCodeId ?? products.find((product) => product.id === input.productId)?.salesTaxCodeId ?? warehouseTaxCodeId)
         .filter((value): value is string => Boolean(value)))];
       if (requestedTaxCodeIds.length) {
         const availableTaxCodes = await tx.taxCode.count({
@@ -294,6 +295,7 @@ export class OrdersService {
           product,
           input,
           customerIdentity?.customer.customerType ?? 'RETAIL',
+          customerIdentity?.customer.customerRegionId ?? null,
           transactionAt,
         );
         const inventory = await tx.inventory.findUnique({
@@ -337,11 +339,12 @@ export class OrdersService {
         const discountedBase = item.line.sub(share);
         const calc = await this.accounting.calculateTax(
           tx,
-          item.input.taxCodeId ?? item.product.salesTaxCodeId ?? undefined,
+          item.input.taxCodeId ?? item.product.salesTaxCodeId ?? warehouseTaxCodeId ?? undefined,
           discountedBase,
           branch.companyId,
           transactionAt,
           ['SALE', 'OTHER'],
+          item.input.taxIncluded,
         );
         netTotal = netTotal.add(calc.net);
         taxTotal = taxTotal.add(calc.tax);

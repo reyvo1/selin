@@ -12,8 +12,8 @@ import { CreateAccountDto, CreateAccountingCloseControlDto, CreatePostingRuleDto
   constructor(private readonly accounting: AccountingCoreService) {}
 
   @Roles('SUPER_ADMIN','OWNER','FINANCE','AUDITOR') @Permissions('finance.view') @Get('accounts')
-  accounts(@CurrentUser() user: AuthUser) {
-    return this.accounting.listAccounts(user);
+  accounts(@CurrentUser() user: AuthUser, @Query('warehouseId') warehouseId?: string) {
+    return this.accounting.listAccounts(user, warehouseId);
   }
 
   @Roles('SUPER_ADMIN','OWNER','FINANCE') @Permissions('accounting.rule.manage') @Post('accounts')
@@ -42,8 +42,8 @@ import { CreateAccountDto, CreateAccountingCloseControlDto, CreatePostingRuleDto
   }
 
   @Roles('SUPER_ADMIN','OWNER','FINANCE','AUDITOR') @Permissions('tax.view') @Get('tax-codes')
-  taxCodes(@CurrentUser() user: AuthUser, @Query('companyId') companyId?: string) {
-    return this.accounting.listTaxCodes(user, companyId);
+  taxCodes(@CurrentUser() user: AuthUser, @Query('companyId') companyId?: string, @Query('warehouseId') warehouseId?: string) {
+    return this.accounting.listTaxCodes(user, companyId, warehouseId);
   }
 
   @Roles('SUPER_ADMIN','OWNER','FINANCE') @Permissions('tax.manage') @Post('tax-codes')

@@ -21,6 +21,14 @@
     "T360-20261009-ppob-paid-fulfillment",
     "T360-20261012-f11-purchase-uom-request",
     "T360-20261015-product-imagery",
-    "T360-20261021-134120-costing-engine"
+    "T360-20261021-134120-costing-engine",
+    "T360-20261021-134133-opening-balance-year-end",
+    "T360-20261028-product-datasheet",
+    "T360-20261028-product-datasheet-structured",
+    "T360-20261028-department",
+    "T360-20261028-hr-department",
+    "T360-20261028-tax-per-warehouse",
+    "T360-20261028-trade-in",
+    "T360-20261028-coa-per-warehouse"
   ]
 }

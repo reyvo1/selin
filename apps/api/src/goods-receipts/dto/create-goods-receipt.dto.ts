@@ -9,7 +9,9 @@ class GoodsReceiptItemDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiryDate?: string;
   @ApiPropertyOptional({ type: [String], description: 'Wajib tepat sebanyak acceptedQty untuk produk dengan trackSerial.' }) @IsOptional() @IsArray() @ArrayUnique() @IsString({ each: true }) serialNumbers?: string[];
   @ApiPropertyOptional({ description: 'Override tax code produk untuk penerimaan ini.' }) @IsOptional() @IsString() taxCodeId?: string;
+  @ApiPropertyOptional({ default: false, description: 'Mode pajak per baris: true = harga sudah termasuk pajak (inclusive).' }) @IsOptional() @IsBoolean() taxIncluded?: boolean;
 }
+
 export class CreateGoodsReceiptDto {
   @ApiPropertyOptional({ description: 'Kunci idempotensi untuk retry penerimaan yang aman.' }) @IsOptional() @IsString() idempotencyKey?: string;
   @ApiProperty() @IsString() purchaseOrderId!: string;

@@ -6,13 +6,15 @@ import { Permissions } from '../auth/permissions.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { InventoryCostingPolicyService } from './costing-policy.service';
 import { InventoryCostingReportService } from './costing-report.service';
-import { CreateCostingPolicyDto } from './dto/costing.dto';
+import { CreateCostingPolicyDto, CreateCostingRebuildDto } from './dto/costing.dto';
+import { InventoryCostingRebuildService } from './costing-rebuild.service';
 
 @ApiTags('inventory-costing') @ApiBearerAuth() @Controller('inventory/costing')
 export class InventoryCostingController {
   constructor(
     private readonly policies: InventoryCostingPolicyService,
     private readonly reports: InventoryCostingReportService,
+    private readonly rebuilds: InventoryCostingRebuildService,
   ) {}
 
   @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('policies')
@@ -41,6 +43,37 @@ export class InventoryCostingController {
     return this.policies.valuation(user, { warehouseId, productId });
   }
 
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('preview-issue')
+  previewIssue(
+    @CurrentUser() user: AuthUser,
+    @Query('warehouseId') warehouseId?: string,
+    @Query('productId') productId?: string,
+    @Query('batchKey') batchKey?: string,
+    @Query('occurredAt') occurredAt?: string,
+    @Query('quantity') quantity?: string,
+  ) {
+    return this.policies.previewIssue(user, { warehouseId, productId, batchKey, occurredAt, quantity });
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('valuation-layers')
+  valuationByLayer(
+    @CurrentUser() user: AuthUser,
+    @Query('warehouseId') warehouseId?: string,
+    @Query('productId') productId?: string,
+  ) {
+    return this.reports.valuationByLayer(user, { warehouseId, productId });
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('parallel-run')
+  parallelRun(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    return this.reports.parallelRun(user, { from, to, warehouseId });
+  }
+
   @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('layers')
   layers(
     @CurrentUser() user: AuthUser,
@@ -63,5 +96,35 @@ export class InventoryCostingController {
     @Query('onlyDifferences') onlyDifferences?: string,
   ) {
     return this.reports.reconciliation(user, { warehouseId, productId, limit, onlyDifferences });
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE') @Permissions('inventory.costing.rebuild') @Post('rebuild')
+  requestRebuild(@Body() dto: CreateCostingRebuildDto, @CurrentUser() user: AuthUser) {
+    return this.rebuilds.request(user, dto);
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('rebuild-runs')
+  listRebuildRuns(
+    @CurrentUser() user: AuthUser,
+    @Query('status') status?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.rebuilds.list(user, { status, limit, cursor });
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE','AUDITOR') @Permissions('inventory.costing.view') @Get('rebuild-runs/:id')
+  getRebuildRun(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.rebuilds.get(user, id);
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE') @Permissions('inventory.costing.rebuild') @Post('rebuild-runs/:id/approve')
+  approveRebuild(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.rebuilds.approve(user, id);
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','FINANCE') @Permissions('inventory.costing.rebuild') @Post('rebuild-runs/:id/resume')
+  resumeRebuild(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.rebuilds.resume(user, id);
   }
 }

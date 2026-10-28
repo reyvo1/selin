@@ -2,7 +2,7 @@
 -- GENERATED FILE - jangan edit manual.
 -- Regenerate: npm run db:baseline:postgres
 -- Source schema: apps/api/prisma/schema.postgresql.prisma
--- Post-migration files: 1
+-- Post-migration files: 2
 
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
@@ -200,6 +200,18 @@ CREATE TYPE "DeliveryStopStatus" AS ENUM ('PENDING', 'ARRIVED', 'DELIVERED', 'PA
 CREATE TYPE "AutomationJobStatus" AS ENUM ('PENDING', 'PROCESSING', 'SUCCEEDED', 'RETRYING', 'FAILED', 'CANCELLED');
 
 -- CreateEnum
+CREATE TYPE "OpeningBalanceType" AS ENUM ('STOCK', 'AR', 'AP', 'GL');
+
+-- CreateEnum
+CREATE TYPE "OpeningBalanceStatus" AS ENUM ('DRAFT', 'VALIDATING', 'VALIDATED', 'WAITING_APPROVAL', 'APPROVED', 'POSTING', 'POSTED', 'FAILED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "OpeningLedgerKind" AS ENUM ('AR', 'AP');
+
+-- CreateEnum
+CREATE TYPE "OpeningLedgerStatus" AS ENUM ('OPEN', 'PARTIALLY_SETTLED', 'SETTLED', 'WRITTEN_OFF');
+
+-- CreateEnum
 CREATE TYPE "SyncNodeRole" AS ENUM ('CENTRAL', 'BRANCH');
 
 -- CreateEnum
@@ -386,7 +398,16 @@ CREATE TABLE "DataArchiveRun" (
 CREATE TABLE "Company" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "legalName" TEXT,
     "slug" TEXT,
+    "taxIdNumber" TEXT,
+    "address" TEXT,
+    "phone" TEXT,
+    "email" TEXT,
+    "website" TEXT,
+    "logoUrl" TEXT,
+    "brandColor" TEXT,
+    "branding" JSONB,
     "timezone" TEXT NOT NULL DEFAULT 'Asia/Makassar',
     "currency" TEXT NOT NULL DEFAULT 'IDR',
     "metadata" JSONB,
@@ -425,6 +446,35 @@ CREATE TABLE "Warehouse" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Warehouse_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProductionRouting" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "recipeId" TEXT NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "operations" JSONB NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ProductionRouting_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "WorkCenter" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "hourlyRate" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WorkCenter_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -551,6 +601,12 @@ CREATE TABLE "Product" (
     "name" TEXT NOT NULL,
     "description" TEXT,
     "imageUrl" TEXT,
+    "datasheetUrl" TEXT,
+    "datasheet" JSONB,
+    "datasheetAttributes" JSONB,
+    "datasheetAttachments" JSONB,
+    "attributes" JSONB,
+    "attachments" JSONB,
     "unit" TEXT NOT NULL,
     "costPrice" DECIMAL(18,2) NOT NULL,
     "salePrice" DECIMAL(18,2) NOT NULL,
@@ -617,6 +673,7 @@ CREATE TABLE "ProductionOrder" (
     "plannedOutputQty" INTEGER NOT NULL,
     "actualOutputQty" INTEGER,
     "totalCost" DECIMAL(65,30),
+    "totalOverhead" DECIMAL(65,30),
     "notes" TEXT,
     "releasedAt" TIMESTAMP(3),
     "startedAt" TIMESTAMP(3),
@@ -641,6 +698,59 @@ CREATE TABLE "ProductionOrderComponent" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "ProductionOrderComponent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SupplierDeposit" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "supplierId" TEXT NOT NULL,
+    "amount" DECIMAL(65,30) NOT NULL,
+    "balance" DECIMAL(65,30) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'OPEN',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SupplierDeposit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SupplierPrice" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT,
+    "supplierId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "variantId" TEXT,
+    "productUnitId" TEXT,
+    "unitCode" TEXT,
+    "minQty" DECIMAL(65,30) NOT NULL DEFAULT 1,
+    "price" DECIMAL(65,30) NOT NULL,
+    "effectiveFrom" TIMESTAMP(3),
+    "effectiveTo" TIMESTAMP(3),
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SupplierPrice_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SupplierPriceHistory" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT,
+    "supplierId" TEXT,
+    "productId" TEXT,
+    "field" TEXT NOT NULL,
+    "oldValue" DECIMAL(65,30),
+    "newValue" DECIMAL(65,30),
+    "changedById" TEXT,
+    "changedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SupplierPriceHistory_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -782,6 +892,7 @@ CREATE TABLE "PurchaseOrder" (
     "subtotal" DECIMAL(18,2) NOT NULL,
     "discount" DECIMAL(18,2) NOT NULL DEFAULT 0,
     "tax" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "taxIncluded" BOOLEAN NOT NULL DEFAULT false,
     "total" DECIMAL(18,2) NOT NULL,
     "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -861,6 +972,227 @@ CREATE TABLE "GoodsReceiptItem" (
 );
 
 -- CreateTable
+CREATE TABLE "CustomerGroup" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "discountPct" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CustomerGroup_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CustomerRegion" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "discountPct" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CustomerRegion_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CommissionRule" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT,
+    "branchId" TEXT,
+    "name" TEXT NOT NULL,
+    "basis" TEXT NOT NULL DEFAULT 'REVENUE',
+    "rate" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CommissionRule_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CommissionPayout" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "salespersonId" TEXT NOT NULL,
+    "periodStart" TIMESTAMP(3) NOT NULL,
+    "periodEnd" TIMESTAMP(3) NOT NULL,
+    "amount" DECIMAL(65,30) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CommissionPayout_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CustomerDeposit" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "amount" DECIMAL(65,30) NOT NULL,
+    "balance" DECIMAL(65,30) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'OPEN',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CustomerDeposit_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "TradeIn" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "originalProductId" TEXT NOT NULL,
+    "newProductId" TEXT,
+    "tradeValue" DECIMAL(18,2) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "TradeIn_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Cheque" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "direction" TEXT NOT NULL,
+    "number" TEXT NOT NULL,
+    "partyType" TEXT NOT NULL,
+    "partyId" TEXT NOT NULL,
+    "amount" DECIMAL(65,30) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'RECEIVED',
+    "dueDate" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Cheque_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SalesOrder" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "customerId" TEXT,
+    "salespersonId" TEXT,
+    "number" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "subtotal" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "discount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "tax" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "total" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "dpAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "settledAmount" DECIMAL(65,30) NOT NULL DEFAULT 0,
+    "notes" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SalesOrder_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SalesOrderItem" (
+    "id" TEXT NOT NULL,
+    "salesOrderId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "unitPrice" DECIMAL(65,30) NOT NULL,
+    "subtotal" DECIMAL(65,30) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SalesOrderItem_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SalesOrderPayment" (
+    "id" TEXT NOT NULL,
+    "salesOrderId" TEXT NOT NULL,
+    "amount" DECIMAL(65,30) NOT NULL,
+    "method" TEXT NOT NULL,
+    "paidAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SalesOrderPayment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ConsignmentOrder" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "supplierId" TEXT,
+    "customerId" TEXT,
+    "number" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ConsignmentOrder_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ConsignmentItem" (
+    "id" TEXT NOT NULL,
+    "consignmentOrderId" TEXT NOT NULL,
+    "productId" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "ownership" TEXT NOT NULL DEFAULT 'SUPPLIER',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ConsignmentItem_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ConsignmentSettlement" (
+    "id" TEXT NOT NULL,
+    "consignmentOrderId" TEXT NOT NULL,
+    "amount" DECIMAL(65,30) NOT NULL,
+    "settledAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ConsignmentSettlement_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "CashFlowCategory" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT,
+    "branchId" TEXT,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "kind" TEXT NOT NULL DEFAULT 'OPERATING',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CashFlowCategory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "TransferFile" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "direction" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "TransferFile_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Customer" (
     "id" TEXT NOT NULL,
     "companyId" TEXT,
@@ -872,6 +1204,10 @@ CREATE TABLE "Customer" (
     "address" TEXT,
     "points" INTEGER NOT NULL DEFAULT 0,
     "customerType" TEXT NOT NULL DEFAULT 'RETAIL',
+    "customerGroupId" TEXT,
+    "customerRegionId" TEXT,
+    "creditLimit" DECIMAL(65,30),
+    "salespersonId" TEXT,
     "taxIdNumber" TEXT,
     "taxProfile" JSONB,
     "defaultTaxCodeId" TEXT,
@@ -1010,6 +1346,7 @@ CREATE TABLE "Sale" (
     "warehouseId" TEXT NOT NULL,
     "customerId" TEXT,
     "cashierShiftId" TEXT,
+    "salespersonId" TEXT,
     "channel" "SaleChannel" NOT NULL DEFAULT 'POS',
     "status" "SaleStatus" NOT NULL DEFAULT 'COMPLETED',
     "subtotal" DECIMAL(18,2) NOT NULL,
@@ -1157,6 +1494,7 @@ CREATE TABLE "PaymentProviderEvent" (
 CREATE TABLE "Account" (
     "id" TEXT NOT NULL,
     "branchId" TEXT NOT NULL,
+    "warehouseId" TEXT,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "type" "AccountType" NOT NULL,
@@ -1348,7 +1686,7 @@ CREATE TABLE "NumberSequence" (
     "branchId" TEXT,
     "documentType" TEXT NOT NULL,
     "prefix" TEXT NOT NULL,
-    "format" TEXT NOT NULL DEFAULT '{PREFIX}-{YYYY}{MM}-{NUMBER}',
+    "format" TEXT NOT NULL DEFAULT '{PREFIX}-{SCOPE}-{YYYY}{MM}-{NUMBER}',
     "nextNumber" INTEGER NOT NULL DEFAULT 1,
     "padding" INTEGER NOT NULL DEFAULT 6,
     "resetPolicy" TEXT NOT NULL DEFAULT 'MONTHLY',
@@ -2985,6 +3323,7 @@ CREATE TABLE "TaxRuleSet" (
 CREATE TABLE "TaxRule" (
     "id" TEXT NOT NULL,
     "taxRuleSetId" TEXT NOT NULL,
+    "warehouseId" TEXT,
     "code" TEXT NOT NULL,
     "priority" INTEGER NOT NULL DEFAULT 0,
     "conditions" JSONB NOT NULL,
@@ -3234,6 +3573,7 @@ CREATE TABLE "AccountingPosting" (
 CREATE TABLE "TaxCode" (
     "id" TEXT NOT NULL,
     "companyId" TEXT NOT NULL,
+    "warehouseId" TEXT,
     "code" TEXT NOT NULL,
     "version" INTEGER NOT NULL DEFAULT 1,
     "name" TEXT NOT NULL,
@@ -3322,6 +3662,161 @@ CREATE TABLE "AccountingCloseControl" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "AccountingCloseControl_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OpeningBalanceBatch" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "type" "OpeningBalanceType" NOT NULL,
+    "cutoverDate" TIMESTAMP(3) NOT NULL,
+    "sourceFileName" TEXT,
+    "sourceChecksum" TEXT,
+    "status" "OpeningBalanceStatus" NOT NULL DEFAULT 'DRAFT',
+    "operationKey" TEXT NOT NULL,
+    "controlAccountCode" TEXT,
+    "offsetAccountCode" TEXT,
+    "suspenseAccountCode" TEXT,
+    "sourceStorageKey" TEXT,
+    "retentionUntil" TIMESTAMP(3),
+    "totalDebit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "totalCredit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "rowCount" INTEGER NOT NULL DEFAULT 0,
+    "validRowCount" INTEGER NOT NULL DEFAULT 0,
+    "errorRowCount" INTEGER NOT NULL DEFAULT 0,
+    "createdBy" TEXT,
+    "approvedBy" TEXT,
+    "postedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OpeningBalanceBatch_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OpeningBalanceRow" (
+    "id" TEXT NOT NULL,
+    "batchId" TEXT NOT NULL,
+    "rowNumber" INTEGER NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "payloadHash" TEXT NOT NULL,
+    "rawPayload" JSONB,
+    "productId" TEXT,
+    "warehouseId" TEXT,
+    "locationCode" TEXT,
+    "batchNumber" TEXT,
+    "expiryDate" TIMESTAMP(3),
+    "quantity" INTEGER,
+    "unitCost" DECIMAL(20,6),
+    "customerId" TEXT,
+    "supplierId" TEXT,
+    "documentNumber" TEXT,
+    "documentDate" TIMESTAMP(3),
+    "dueDate" TIMESTAMP(3),
+    "subtotal" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "taxCodeId" TEXT,
+    "taxCodeVersion" INTEGER,
+    "taxRateSnapshot" DECIMAL(20,6),
+    "taxAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "total" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "paidAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "accountCode" TEXT,
+    "debit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "credit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "description" TEXT,
+    "errorCode" TEXT,
+    "errorMessage" TEXT,
+    "postedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OpeningBalanceRow_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OpeningLedgerDocument" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "rowId" TEXT NOT NULL,
+    "kind" "OpeningLedgerKind" NOT NULL,
+    "customerId" TEXT,
+    "supplierId" TEXT,
+    "documentNumber" TEXT NOT NULL,
+    "documentDate" TIMESTAMP(3) NOT NULL,
+    "dueDate" TIMESTAMP(3) NOT NULL,
+    "subtotal" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "taxCodeId" TEXT,
+    "taxCodeVersion" INTEGER,
+    "taxRateSnapshot" DECIMAL(20,6),
+    "taxAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "total" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "paidAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "settledAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "outstandingAmount" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "controlAccountCode" TEXT NOT NULL,
+    "status" "OpeningLedgerStatus" NOT NULL DEFAULT 'OPEN',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OpeningLedgerDocument_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "OpeningLedgerSettlement" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "documentId" TEXT NOT NULL,
+    "financeTransactionId" TEXT NOT NULL,
+    "amount" DECIMAL(18,2) NOT NULL,
+    "settledAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "status" TEXT NOT NULL DEFAULT 'POSTED',
+    "operationKey" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "OpeningLedgerSettlement_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "YearEndCloseRun" (
+    "id" TEXT NOT NULL,
+    "companyId" TEXT NOT NULL,
+    "branchId" TEXT NOT NULL,
+    "fiscalYear" INTEGER NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'DRAFT',
+    "retainedEarningsAccountCode" TEXT NOT NULL,
+    "incomeSummaryAccountCode" TEXT NOT NULL,
+    "netIncome" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "totalDebit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "totalCredit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "previewJson" JSONB,
+    "operationKey" TEXT NOT NULL,
+    "approvedBy" TEXT,
+    "postedAt" TIMESTAMP(3),
+    "journalEntryId" TEXT,
+    "reversalEventId" TEXT,
+    "createdBy" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "YearEndCloseRun_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "YearEndCloseLine" (
+    "id" TEXT NOT NULL,
+    "runId" TEXT NOT NULL,
+    "accountCode" TEXT NOT NULL,
+    "debit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "credit" DECIMAL(18,2) NOT NULL DEFAULT 0,
+    "lineType" TEXT NOT NULL,
+    "description" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "YearEndCloseLine_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -3939,6 +4434,7 @@ CREATE TABLE "PromoRule" (
     "minSubtotal" DECIMAL(65,30) NOT NULL DEFAULT 0,
     "maxDiscount" DECIMAL(65,30),
     "memberTier" TEXT,
+    "customerRegionId" TEXT,
     "channel" TEXT NOT NULL DEFAULT 'ALL',
     "productIds" JSONB,
     "minQuantity" INTEGER,
@@ -4062,6 +4558,7 @@ CREATE TABLE "ProductPrice" (
     "productUnitId" TEXT,
     "branchId" TEXT,
     "segmentCode" TEXT NOT NULL DEFAULT 'RETAIL',
+    "customerRegionId" TEXT,
     "unitCode" TEXT,
     "minQty" DECIMAL(65,30) NOT NULL DEFAULT 1,
     "price" DECIMAL(65,30) NOT NULL,
@@ -4405,6 +4902,15 @@ CREATE UNIQUE INDEX "Warehouse_code_key" ON "Warehouse"("code");
 CREATE INDEX "Warehouse_branchId_idx" ON "Warehouse"("branchId");
 
 -- CreateIndex
+CREATE INDEX "ProductionRouting_companyId_recipeId_isActive_idx" ON "ProductionRouting"("companyId", "recipeId", "isActive");
+
+-- CreateIndex
+CREATE INDEX "WorkCenter_companyId_branchId_isActive_idx" ON "WorkCenter"("companyId", "branchId", "isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "WorkCenter_companyId_branchId_code_key" ON "WorkCenter"("companyId", "branchId", "code");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
@@ -4496,6 +5002,15 @@ CREATE INDEX "ProductionOrderComponent_productId_idx" ON "ProductionOrderCompone
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ProductionOrderComponent_orderId_productId_key" ON "ProductionOrderComponent"("orderId", "productId");
+
+-- CreateIndex
+CREATE INDEX "SupplierDeposit_companyId_branchId_supplierId_idx" ON "SupplierDeposit"("companyId", "branchId", "supplierId");
+
+-- CreateIndex
+CREATE INDEX "SupplierPrice_companyId_supplierId_productId_isActive_idx" ON "SupplierPrice"("companyId", "supplierId", "productId", "isActive");
+
+-- CreateIndex
+CREATE INDEX "SupplierPriceHistory_companyId_supplierId_productId_changed_idx" ON "SupplierPriceHistory"("companyId", "supplierId", "productId", "changedAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Supplier_code_key" ON "Supplier"("code");
@@ -4631,6 +5146,69 @@ CREATE INDEX "GoodsReceiptItem_goodsReceiptId_idx" ON "GoodsReceiptItem"("goodsR
 
 -- CreateIndex
 CREATE INDEX "GoodsReceiptItem_productId_idx" ON "GoodsReceiptItem"("productId");
+
+-- CreateIndex
+CREATE INDEX "CustomerGroup_companyId_isActive_idx" ON "CustomerGroup"("companyId", "isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CustomerGroup_companyId_code_key" ON "CustomerGroup"("companyId", "code");
+
+-- CreateIndex
+CREATE INDEX "CustomerRegion_companyId_isActive_idx" ON "CustomerRegion"("companyId", "isActive");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "CustomerRegion_companyId_code_key" ON "CustomerRegion"("companyId", "code");
+
+-- CreateIndex
+CREATE INDEX "CommissionRule_companyId_branchId_isActive_idx" ON "CommissionRule"("companyId", "branchId", "isActive");
+
+-- CreateIndex
+CREATE INDEX "CommissionPayout_companyId_branchId_salespersonId_idx" ON "CommissionPayout"("companyId", "branchId", "salespersonId");
+
+-- CreateIndex
+CREATE INDEX "CustomerDeposit_companyId_branchId_customerId_idx" ON "CustomerDeposit"("companyId", "branchId", "customerId");
+
+-- CreateIndex
+CREATE INDEX "TradeIn_companyId_branchId_status_idx" ON "TradeIn"("companyId", "branchId", "status");
+
+-- CreateIndex
+CREATE INDEX "TradeIn_originalProductId_idx" ON "TradeIn"("originalProductId");
+
+-- CreateIndex
+CREATE INDEX "Cheque_companyId_branchId_status_idx" ON "Cheque"("companyId", "branchId", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SalesOrder_number_key" ON "SalesOrder"("number");
+
+-- CreateIndex
+CREATE INDEX "SalesOrder_companyId_branchId_status_idx" ON "SalesOrder"("companyId", "branchId", "status");
+
+-- CreateIndex
+CREATE INDEX "SalesOrder_companyId_branchId_salespersonId_idx" ON "SalesOrder"("companyId", "branchId", "salespersonId");
+
+-- CreateIndex
+CREATE INDEX "SalesOrderItem_salesOrderId_idx" ON "SalesOrderItem"("salesOrderId");
+
+-- CreateIndex
+CREATE INDEX "SalesOrderPayment_salesOrderId_idx" ON "SalesOrderPayment"("salesOrderId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ConsignmentOrder_number_key" ON "ConsignmentOrder"("number");
+
+-- CreateIndex
+CREATE INDEX "ConsignmentOrder_companyId_branchId_status_idx" ON "ConsignmentOrder"("companyId", "branchId", "status");
+
+-- CreateIndex
+CREATE INDEX "ConsignmentItem_consignmentOrderId_idx" ON "ConsignmentItem"("consignmentOrderId");
+
+-- CreateIndex
+CREATE INDEX "ConsignmentSettlement_consignmentOrderId_idx" ON "ConsignmentSettlement"("consignmentOrderId");
+
+-- CreateIndex
+CREATE INDEX "CashFlowCategory_companyId_branchId_isActive_idx" ON "CashFlowCategory"("companyId", "branchId", "isActive");
+
+-- CreateIndex
+CREATE INDEX "TransferFile_companyId_branchId_status_idx" ON "TransferFile"("companyId", "branchId", "status");
 
 -- CreateIndex
 CREATE INDEX "Customer_companyId_name_id_idx" ON "Customer"("companyId", "name", "id");
@@ -5482,6 +6060,78 @@ CREATE INDEX "AccountingCloseControl_companyId_status_periodEnd_idx" ON "Account
 CREATE UNIQUE INDEX "AccountingCloseControl_companyId_branchId_module_periodStar_key" ON "AccountingCloseControl"("companyId", "branchId", "module", "periodStart", "periodEnd");
 
 -- CreateIndex
+CREATE INDEX "OpeningBalanceBatch_companyId_branchId_type_cutoverDate_idx" ON "OpeningBalanceBatch"("companyId", "branchId", "type", "cutoverDate");
+
+-- CreateIndex
+CREATE INDEX "OpeningBalanceBatch_companyId_branchId_status_createdAt_idx" ON "OpeningBalanceBatch"("companyId", "branchId", "status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "OpeningBalanceBatch_companyId_status_cutoverDate_idx" ON "OpeningBalanceBatch"("companyId", "status", "cutoverDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OpeningBalanceBatch_companyId_operationKey_key" ON "OpeningBalanceBatch"("companyId", "operationKey");
+
+-- CreateIndex
+CREATE INDEX "OpeningBalanceRow_batchId_status_rowNumber_idx" ON "OpeningBalanceRow"("batchId", "status", "rowNumber");
+
+-- CreateIndex
+CREATE INDEX "OpeningBalanceRow_productId_warehouseId_idx" ON "OpeningBalanceRow"("productId", "warehouseId");
+
+-- CreateIndex
+CREATE INDEX "OpeningBalanceRow_customerId_documentNumber_idx" ON "OpeningBalanceRow"("customerId", "documentNumber");
+
+-- CreateIndex
+CREATE INDEX "OpeningBalanceRow_supplierId_documentNumber_idx" ON "OpeningBalanceRow"("supplierId", "documentNumber");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OpeningBalanceRow_batchId_rowNumber_key" ON "OpeningBalanceRow"("batchId", "rowNumber");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OpeningLedgerDocument_rowId_key" ON "OpeningLedgerDocument"("rowId");
+
+-- CreateIndex
+CREATE INDEX "OpeningLedgerDocument_companyId_branchId_kind_status_dueDat_idx" ON "OpeningLedgerDocument"("companyId", "branchId", "kind", "status", "dueDate");
+
+-- CreateIndex
+CREATE INDEX "OpeningLedgerDocument_customerId_status_dueDate_idx" ON "OpeningLedgerDocument"("customerId", "status", "dueDate");
+
+-- CreateIndex
+CREATE INDEX "OpeningLedgerDocument_supplierId_status_dueDate_idx" ON "OpeningLedgerDocument"("supplierId", "status", "dueDate");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OpeningLedgerDocument_companyId_branchId_kind_documentNumbe_key" ON "OpeningLedgerDocument"("companyId", "branchId", "kind", "documentNumber");
+
+-- CreateIndex
+CREATE INDEX "OpeningLedgerSettlement_companyId_branchId_settledAt_idx" ON "OpeningLedgerSettlement"("companyId", "branchId", "settledAt");
+
+-- CreateIndex
+CREATE INDEX "OpeningLedgerSettlement_financeTransactionId_idx" ON "OpeningLedgerSettlement"("financeTransactionId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OpeningLedgerSettlement_companyId_branchId_operationKey_key" ON "OpeningLedgerSettlement"("companyId", "branchId", "operationKey");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OpeningLedgerSettlement_documentId_financeTransactionId_key" ON "OpeningLedgerSettlement"("documentId", "financeTransactionId");
+
+-- CreateIndex
+CREATE INDEX "YearEndCloseRun_companyId_branchId_fiscalYear_status_idx" ON "YearEndCloseRun"("companyId", "branchId", "fiscalYear", "status");
+
+-- CreateIndex
+CREATE INDEX "YearEndCloseRun_companyId_status_createdAt_idx" ON "YearEndCloseRun"("companyId", "status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "YearEndCloseRun_journalEntryId_idx" ON "YearEndCloseRun"("journalEntryId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "YearEndCloseRun_companyId_branchId_fiscalYear_operationKey_key" ON "YearEndCloseRun"("companyId", "branchId", "fiscalYear", "operationKey");
+
+-- CreateIndex
+CREATE INDEX "YearEndCloseLine_runId_lineType_idx" ON "YearEndCloseLine"("runId", "lineType");
+
+-- CreateIndex
+CREATE INDEX "YearEndCloseLine_accountCode_idx" ON "YearEndCloseLine"("accountCode");
+
+-- CreateIndex
 CREATE INDEX "AssetCategory_companyId_assetType_isActive_idx" ON "AssetCategory"("companyId", "assetType", "isActive");
 
 -- CreateIndex
@@ -5722,7 +6372,7 @@ CREATE INDEX "ProductBarcode_productId_variantId_isPrimary_idx" ON "ProductBarco
 CREATE INDEX "ProductBarcode_productUnitId_idx" ON "ProductBarcode"("productUnitId");
 
 -- CreateIndex
-CREATE INDEX "ProductPrice_productId_variantId_branchId_segmentCode_isAct_idx" ON "ProductPrice"("productId", "variantId", "branchId", "segmentCode", "isActive", "minQty");
+CREATE INDEX "ProductPrice_productId_variantId_branchId_segmentCode_custo_idx" ON "ProductPrice"("productId", "variantId", "branchId", "segmentCode", "customerRegionId", "isActive", "minQty");
 
 -- CreateIndex
 CREATE INDEX "ProductPrice_productUnitId_idx" ON "ProductPrice"("productUnitId");
@@ -5971,6 +6621,12 @@ ALTER TABLE "GoodsReceiptItem" ADD CONSTRAINT "GoodsReceiptItem_purchaseOrderIte
 ALTER TABLE "GoodsReceiptItem" ADD CONSTRAINT "GoodsReceiptItem_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "SalesOrderItem" ADD CONSTRAINT "SalesOrderItem_salesOrderId_fkey" FOREIGN KEY ("salesOrderId") REFERENCES "SalesOrder"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SalesOrderPayment" ADD CONSTRAINT "SalesOrderPayment_salesOrderId_fkey" FOREIGN KEY ("salesOrderId") REFERENCES "SalesOrder"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Customer" ADD CONSTRAINT "Customer_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -6133,6 +6789,18 @@ ALTER TABLE "AccountingPosting" ADD CONSTRAINT "AccountingPosting_accountingEven
 ALTER TABLE "TaxTransaction" ADD CONSTRAINT "TaxTransaction_accountingEventId_fkey" FOREIGN KEY ("accountingEventId") REFERENCES "AccountingEvent"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "OpeningBalanceRow" ADD CONSTRAINT "OpeningBalanceRow_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "OpeningBalanceBatch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OpeningLedgerDocument" ADD CONSTRAINT "OpeningLedgerDocument_rowId_fkey" FOREIGN KEY ("rowId") REFERENCES "OpeningBalanceRow"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "OpeningLedgerSettlement" ADD CONSTRAINT "OpeningLedgerSettlement_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "OpeningLedgerDocument"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "YearEndCloseLine" ADD CONSTRAINT "YearEndCloseLine_runId_fkey" FOREIGN KEY ("runId") REFERENCES "YearEndCloseRun"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "InspectionTemplateItem" ADD CONSTRAINT "InspectionTemplateItem_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "InspectionTemplate"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -6192,3 +6860,13 @@ CREATE INDEX IF NOT EXISTS "Product_name_trgm_idx"
 
 CREATE INDEX IF NOT EXISTS "ProductVariant_name_trgm_idx"
   ON "ProductVariant" USING gin ("name" gin_trgm_ops);
+
+-- Post-migration: 002-opening-year-end-posted-scope.sql
+-- Satu fiscal year per company/branch hanya boleh memiliki satu YearEndCloseRun POSTED.
+-- Prisma tidak dapat mengekspresikan partial unique index, sehingga index ini
+-- ditambahkan ke baseline melalui post-migration SQL.
+-- File ini hanya untuk PostgreSQL; SQLite memakai versi di migration expand.
+
+CREATE UNIQUE INDEX IF NOT EXISTS "YearEndCloseRun_posted_scope_key"
+  ON "YearEndCloseRun" ("companyId", "branchId", "fiscalYear")
+  WHERE "status" = 'POSTED';

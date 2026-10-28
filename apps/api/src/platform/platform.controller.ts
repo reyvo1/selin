@@ -10,6 +10,7 @@ import {
   CreateApprovalPolicyDto, CreateApprovalRequestDto, CreateBusinessRuleDto, CreateCustomFieldDto,
   CreateIntegrationDto, CreateUiSchemaDto, CreateWebhookDto, DecideApprovalDto, DelegateApprovalDto, UpdateBusinessRuleDto, UpdateIntegrationDto,
   SetCustomFieldValueDto, UpdateTenantProfileDto, UpsertFeatureFlagDto, UpsertSettingDto,
+  EmptyNonProductionDataDto,
 } from './dto/platform.dto';
 import { PlatformService } from './platform.service';
 
@@ -88,5 +89,20 @@ import { PlatformService } from './platform.service';
 
   @Roles('SUPER_ADMIN','OWNER','ADMIN','AUDITOR') @Permissions('audit.view') @Get('outbox') outbox(@CurrentUser() user: AuthUser, @Query('limit') limit?: string) { return this.platform.outbox(user, limit ? Number(limit) : 100); }
 
-  @Roles('SUPER_ADMIN','OWNER','ADMIN','AUDITOR') @Permissions('audit.view') @Get('ops-health') opsHealth(@CurrentUser() user: AuthUser) { return this.platform.opsHealth(user); }
+  @Roles('SUPER_ADMIN','OWNER','ADMIN') @Permissions('platform.configure') @Post('empty-data')
+  emptyData(@Body() dto: EmptyNonProductionDataDto, @CurrentUser() user: AuthUser) {
+    return this.platform.emptyNonProductionData(user, dto);
   }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN') @Permissions('platform.configure') @Post('db-maintenance/vacuum')
+  dbMaintenanceVacuum(@CurrentUser() user: AuthUser) {
+    return this.platform.dbMaintenanceVacuum(user);
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN') @Permissions('platform.configure') @Post('db-maintenance/analyze')
+  dbMaintenanceAnalyze(@CurrentUser() user: AuthUser) {
+    return this.platform.dbMaintenanceAnalyze(user);
+  }
+
+  @Roles('SUPER_ADMIN','OWNER','ADMIN','AUDITOR') @Permissions('audit.view') @Get('ops-health') opsHealth(@CurrentUser() user: AuthUser) { return this.platform.opsHealth(user); }
+}

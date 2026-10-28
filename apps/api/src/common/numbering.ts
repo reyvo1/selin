@@ -26,10 +26,21 @@ async function resolveDocumentScopeCode(
   return company.slug?.trim() || companyId;
 }
 
-function formatNumber(prefix: string, scopeCode: string, now: Date, seq: number, padding: number): string {
-  const yyyy = now.getUTCFullYear();
+function formatDocumentNumber(format: string, prefix: string, scopeCode: string, now: Date, seq: number, padding: number): string {
+  const yyyy = String(now.getUTCFullYear());
+  const yy = yyyy.slice(-2);
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
-  return `${prefix}-${scopeCode}-${yyyy}${mm}-${String(seq).padStart(padding, '0')}`;
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  const number = String(seq).padStart(padding, '0');
+  const template = (format && format.trim()) || '{PREFIX}-{SCOPE}-{YYYY}{MM}-{NUMBER}';
+  return template
+    .replace(/{PREFIX}/g, prefix)
+    .replace(/{SCOPE}/g, scopeCode)
+    .replace(/{YYYY}/g, yyyy)
+    .replace(/{YY}/g, yy)
+    .replace(/{MM}/g, mm)
+    .replace(/{DD}/g, dd)
+    .replace(/{NUMBER}/g, number);
 }
 
 /**
@@ -54,7 +65,7 @@ export async function nextDocumentNumber(
     companyId: string;
     branchId?: string | null;
     documentType: string;
-    prefix: string;
+    prefix?: string;
     padding?: number;
     resetPolicy?: 'MONTHLY' | 'YEARLY' | 'NEVER';
   },
@@ -62,31 +73,36 @@ export async function nextDocumentNumber(
   const observedAt = new Date();
   const company = await tx.company.findUnique({ where: { id: opts.companyId }, select: { timezone: true } });
   if (!company) throw new Error('Company nomor dokumen tidak ditemukan.');
-  const local = zonedDateParts(observedAt, company.timezone);
-  // `now` intentionally represents the company wall-clock encoded as UTC so the existing
-  // formatter stays deterministic while the persisted reset timestamp remains a real instant.
-  const now = new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute));
-  const period = opts.resetPolicy === 'NEVER'
-    ? 'ALL'
-    : opts.resetPolicy === 'YEARLY'
-      ? String(now.getUTCFullYear())
-      : `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
   const scopeCode = await resolveDocumentScopeCode(tx, opts.companyId, opts.branchId);
 
   // Cari row sequence (findFirst karena compound unique tidak mendukung null secara type-safe)
   let row = await tx.numberSequence.findFirst({
     where: { companyId: opts.companyId, branchId: opts.branchId ?? null, documentType: opts.documentType },
   });
+  const effectivePrefix = (opts.prefix ?? row?.prefix ?? opts.documentType).toString().trim();
+  const effectiveResetPolicy = (row?.resetPolicy ?? opts.resetPolicy ?? 'MONTHLY') as 'MONTHLY' | 'YEARLY' | 'NEVER';
+  const effectivePadding = row?.padding ?? opts.padding ?? 6;
+  const effectiveFormat = row?.format ?? '{PREFIX}-{SCOPE}-{YYYY}{MM}-{NUMBER}';
   if (!row) {
     row = await tx.numberSequence.create({
-      data: { companyId: opts.companyId, branchId: opts.branchId ?? null, documentType: opts.documentType, prefix: opts.prefix, nextNumber: 1, resetPolicy: opts.resetPolicy ?? 'MONTHLY', lastResetAt: observedAt },
+      data: { companyId: opts.companyId, branchId: opts.branchId ?? null, documentType: opts.documentType, prefix: effectivePrefix, format: effectiveFormat, padding: effectivePadding, nextNumber: 1, resetPolicy: effectiveResetPolicy, lastResetAt: observedAt },
     });
   }
+
+  const local = zonedDateParts(observedAt, company.timezone);
+  // `now` intentionally represents the company wall-clock encoded as UTC so the existing
+  // formatter stays deterministic while the persisted reset timestamp remains a real instant.
+  const now = new Date(Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute));
+  const period = effectiveResetPolicy === 'NEVER'
+    ? 'ALL'
+    : effectiveResetPolicy === 'YEARLY'
+      ? String(now.getUTCFullYear())
+      : `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 
   let current = row.nextNumber;
   if (period !== 'ALL' && row.lastResetAt) {
     const last = zonedDateParts(row.lastResetAt, company.timezone);
-    const rowPeriod = opts.resetPolicy === 'YEARLY'
+    const rowPeriod = effectiveResetPolicy === 'YEARLY'
       ? String(last.year)
       : `${last.year}${String(last.month).padStart(2, '0')}`;
     if (rowPeriod !== period) current = 1;
@@ -109,7 +125,10 @@ export async function nextDocumentNumber(
   });
   if (bumped.count !== 1) throw new Error(`Konflik sequence ${opts.documentType}; ulangi transaksi.`);
 
-  return formatNumber(opts.prefix, scopeCode, now, current, opts.padding ?? 6);
+  const normalizedFormat = effectiveFormat === '{PREFIX}-{YYYY}{MM}-{NUMBER}'
+    ? '{PREFIX}-{SCOPE}-{YYYY}{MM}-{NUMBER}'
+    : effectiveFormat;
+  return formatDocumentNumber(normalizedFormat, row.prefix || effectivePrefix, scopeCode, now, current, effectivePadding);
 }
 
 /** Legacy fallback (random) — dipertahankan untuk konteks tanpa tenant. */
@@ -118,4 +137,12 @@ export function documentNumber(prefix: string): string {
   const date = now.toISOString().slice(0, 10).replaceAll('-', '');
   const random = Math.floor(100000 + Math.random() * 900000);
   return `${prefix}-${date}-${random}`;
+}
+
+
+/** Legacy formatter retained for compatibility with older tests/source contracts. */
+export function formatNumber(prefix: string, scopeCode: string, now: Date, seq: number, padding: number): string {
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  return `${prefix}-${scopeCode}-${yyyy}${mm}-${String(seq).padStart(padding, '0')}`;
 }

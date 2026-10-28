@@ -21,6 +21,7 @@ export class CreateCustomerDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(500) address?: string;
   @ApiPropertyOptional({ default: 'RETAIL' }) @IsOptional() @IsString() @MaxLength(40) customerType?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) taxIdNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() customerRegionId?: string;
 }
 export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {}
 
@@ -111,6 +112,7 @@ export class CreateProductPriceDto {
   @ApiPropertyOptional() @IsOptional() @IsString() productUnitId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() branchId?: string;
   @ApiPropertyOptional({ default: 'RETAIL' }) @IsOptional() @IsString() @MaxLength(40) segmentCode?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() customerRegionId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(60) unitCode?: string;
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsNumber() @Min(0.000001) minQty?: number;
   @ApiProperty() @IsNumber() @Min(0) price!: number;

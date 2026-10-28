@@ -1060,6 +1060,23 @@ export class ReturnsService {
         }
         if (costingMode) {
           const batchKey = originalReceiptItem?.batchNumber ?? '';
+          const originCostEvent = originalReceiptItem
+            ? await tx.inventoryCostEvent.findFirst({
+              where: {
+                companyId: scope.companyId,
+                branchId: scope.branchId,
+                warehouseId: row.warehouseId,
+                productId: item.productId,
+                sourceType: 'GoodsReceipt',
+                sourceId: sourceReceipt.id,
+                sourceLineKey: originalReceiptItem.id,
+                eventType: 'RECEIPT',
+                status: 'POSTED',
+              },
+              orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+              select: { id: true },
+            })
+            : null;
           const result = await this.costing.recordPurchaseReturn(tx, {
             companyId: scope.companyId,
             branchId: scope.branchId,
@@ -1072,6 +1089,7 @@ export class ReturnsService {
             sourceType: 'PurchaseReturn',
             sourceId: row.id,
             sourceLineKey: item.id,
+            preferredLayerSourceEventId: originCostEvent?.id,
             operationKey: `purchase-return-cost:${row.id}:${item.id}:v1`,
             payloadHash: costingPayloadHash({
               returnId: row.id,

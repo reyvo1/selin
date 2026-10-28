@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 
-const PROMO_TYPES = ['PERCENT', 'AMOUNT', 'QUANTITY_BREAK', 'BOGO', 'BUNDLE'] as const;
+const PROMO_TYPES = ['PERCENT', 'AMOUNT', 'QUANTITY_BREAK', 'BOGO', 'BUNDLE', 'TEBUS_MURAH'] as const;
 const PROMO_CHANNELS = ['ALL', 'POS', 'STOREFRONT'] as const;
 
 export class CreatePromoRuleDto {
@@ -12,6 +12,7 @@ export class CreatePromoRuleDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) minSubtotal?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) maxDiscount?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(40) memberTier?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() customerRegionId?: string;
   @ApiPropertyOptional({ enum: PROMO_CHANNELS, default: 'ALL' }) @IsOptional() @IsIn(PROMO_CHANNELS) channel?: typeof PROMO_CHANNELS[number];
   @ApiPropertyOptional({ type: [String], description: 'Kosong berarti semua produk.' }) @IsOptional() @IsArray() @IsString({ each: true }) productIds?: string[];
   @ApiPropertyOptional({ description: 'QUANTITY_BREAK/BUNDLE: minimum unit eligible.' }) @IsOptional() @IsInt() @Min(1) minQuantity?: number;
@@ -30,6 +31,7 @@ export class UpdatePromoRuleDto {
   @IsOptional() @IsNumber() @Min(0) minSubtotal?: number;
   @IsOptional() @IsNumber() @Min(0) maxDiscount?: number;
   @IsOptional() @IsString() @MaxLength(40) memberTier?: string;
+  @IsOptional() @IsString() customerRegionId?: string;
   @IsOptional() @IsIn(PROMO_CHANNELS) channel?: typeof PROMO_CHANNELS[number];
   @IsOptional() @IsArray() @IsString({ each: true }) productIds?: string[];
   @IsOptional() @IsInt() @Min(1) minQuantity?: number;

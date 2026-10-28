@@ -2,7 +2,7 @@
 
 - Checkpoint baseline: `RC0.5.3.1_EMBEDDED_INSTRUCTIONS_DYNAMIC_CHAT_HANDOFF`
 - Work item: `work-items/active/T360-20261021-134120-costing-engine-dan-valuasi-persediaan.json`
-- Branch: `feature/t360-20261021-134120-costing-engine-dan-valuasi-persediaan`
+- Branch: `feature/T360-20261021-134120-costing-engine-dan-valuasi-persediaan`
 - Phase: `IMPLEMENTATION`
 - Owner: `architecture`
 
@@ -83,8 +83,26 @@
   audit `COSTING_POLICY_CREATED`, CAS `updateMany` status `DRAFT`, dan audit
   `COSTING_POLICY_ACTIVATED`.
 - Permission `inventory.costing.view`, `inventory.costing.manage`, dan
-  `inventory.costing.rebuild` ditambahkan ke seed; `rebuild` masih reserved
-  karena endpoint rebuild belum ada.
+  `inventory.costing.rebuild` ditambahkan ke seed. ADMIN/FINANCE mendapat
+  view/manage/rebuild, AUDITOR hanya view, WAREHOUSE tidak mendapat manage.
+- `InventoryCostingRebuildService` menambahkan backfill snapshot:
+  `POST /inventory/costing/rebuild` membuat run PENDING,
+  `POST /inventory/costing/rebuild-runs/:id/approve` menjalankan snapshot
+  dengan maker-checker, dan `GET /inventory/costing/rebuild-runs[/:id]`
+  membaca status. `operationKey` unik + replay, flag wajib OFF, scope tanpa
+  cost event/state, maksimum 5.000 baris, batch harus cocok dengan inventory.
+- Rekonsiliasi sekarang menyertakan saldo akun `1301` per branch dan
+  `valueDifferenceVsGl`; perbandingan dinonaktifkan untuk filter produk
+  maupun gudang karena jurnal hanya memiliki dimensi branch.
+- Engine FIFO/LIFO selesai: layer order, consumption/preview, CAS layer,
+  sale return layer, policy method-aware, report/valuation method-aware.
+- Backfill FIFO/LIFO membuat `OPENING` event + layer, bukan hanya state;
+  `layersCreated` tercatat pada statistik run.
+- Opname positif membaca state sesuai policy aktif, bukan hardcoded
+  `MOVING_AVERAGE`.
+- Retur pembelian FIFO/LIFO memprioritaskan layer dari receipt event asal
+  melalui `goodsReceiptItemId` → `InventoryCostEvent` `GoodsReceipt`/`RECEIPT`;
+  bila layer asal habis/tidak tersedia, konsumsi jatuh ke urutan FIFO/LIFO.
 - `consumeProductBatchesFefo` mengembalikan alokasi batch
   `{ batchId, batchNumber, quantity }` agar costing memakai batch yang benar.
 - Test fondasi dan runtime ditambahkan/diperbarui:
@@ -94,27 +112,39 @@
   `tests/w1-costing-sale-runtime.test.mjs` (ACTIVE FEFO, non-batch sentinel,
   penolakan uncosted atomik, pemulihan batch/cost retur penjualan, retur
   supplier moving-average + variance, order ship/return, transfer, opname,
-  produksi, dan maintenance runtime).
+  produksi, dan maintenance runtime), serta
+  `tests/w1-costing-fifo-lifo-runtime.test.mjs` (FIFO/LIFO, layer asal retur
+  pembelian, concurrency unit terakhir, backdated rejection, ACTIVE/SHADOW,
+  report/valuation, replay receipt/issue, volume 2.000 layer dengan query plan
+  berindeks, backfill opening).
 - Baseline PostgreSQL diregenerasi (219314 byte) dan `db:baseline:postgres:check`
   PASS.
 
 ## Belum dikerjakan
 
-- Rebuild SHADOW/backfill dan endpoint rebuild/rebuild-runs.
-- Rekonsiliasi vs GL dan layer explorer FIFO/LIFO; layer/reconciliation
-  state vs Inventory sudah tersedia read-only.
-- FIFO/LIFO layer/consumption masih ditolak service; P0 baru moving average.
-- Negative stock policy dan penanganan state negatif end-to-end.
+- Replay event historis/rebuild penuh dengan checkpoint-resume; backfill
+  snapshot saat ini dibatasi 5.000 baris dan sinkron.
+- Jurnal opening/GL untuk snapshot dan aktivasi flag di database TEST.
+- UI pemilihan metode dan persetujuan finance/tax untuk LIFO produksi.
 - PostgreSQL migration rehearsal (butuh `T360_MIGRATION_DATABASE_URL`).
-- Integration/concurrency/performance test khusus costing dan staging/UAT.
+- Penerimaan backdated pada periode terbuka tanpa event setelahnya (jalur
+  acceptance belum diuji terpisah); penolakan periode fiskal tertutup dan
+  `AccountingCloseControl` sudah diuji. Concurrency/backdated rejection/replay
+  receipt+issue/volume layer sudah tercakup runtime SQLite.
 - Rollback drill dan bukti staging.
 
 ## Hasil quality gate
 
 - `node scripts/workflow.mjs validate`: PASS 73 work item / 8 delivery wave.
-- `npm run validate:repo`: PASS 1312 files / 208 Prisma models.
-- `npm run quality:fast`: PASS 2025/2025 test, lint, `db:local:prepare`,
-  dan worker build.
+- `npm run validate:repo`: PASS 1314 files / 208 Prisma models.
+- `npm run quality:recorded:fast`: PASS **2038/2038 test**, lint,
+  `db:local:prepare`, dan worker build
+  (`logs/quality-fast-2026-10-22T06-43-11.150Z.log`).
+- `node --test` costing 3 file: PASS 42/42 (16 static + 26 runtime) setelah
+  atribusi layer asal retur pembelian, concurrency, backdated rejection,
+  replay issue, volume 2.000 layer dengan query plan berindeks, dan penolakan
+  sale pada periode fiskal tertutup maupun accounting close control tanpa
+  mutasi parsial.
 - `npm run db:migrations:rehearse:sqlite`: PASS 1 migration.
 - `npm run db:baseline:postgres:check`: PASS (baseline sinkron).
 - `git diff --check`: PASS setelah pembaruan handoff.
@@ -129,9 +159,14 @@
 - Policy ACTIVE melalui API belum mengaktifkan feature flag dan belum
   menjalankan rebuild/backfill; flag tetap harus dinyalakan terpisah setelah
   rekonsiliasi.
-- Valuasi API hanya membaca state saat ini. Rekonsiliasi state vs Inventory
-  dan layer OPEN sudah ada; rekonsiliasi vs GL belum, dan layer FIFO/LIFO
-  belum diimplementasikan.
+- Valuasi API hanya membaca state saat ini. Rekonsiliasi state vs Inventory,
+  layer OPEN, dan akun `1301` sudah ada; perbandingan GL tidak tersedia saat
+  filter produk/gudang aktif. FIFO/LIFO sudah berjalan, termasuk prioritas
+  layer receipt asal untuk retur pembelian; UI pemilihan metode belum ada.
+- Backfill snapshot memakai `Inventory` saat approval, bukan posisi pada
+  `cutoverAt`; `cutoverAt`/`snapshotAt` dicatat di statistik. FIFO/LIFO
+  membuat `OPENING` event + layer, tetapi belum ada jurnal opening,
+  checkpoint-resume, atau run asinkron.
 - Pesanan lama yang sudah dikirim sebelum integrasi ini tidak memiliki ISSUE
   event; retur order ACTIVE untuk pesanan tersebut akan fail-closed sampai
   backfill/opening dijalankan. Pada mode SHADOW/flag OFF tanpa trace, quantity
@@ -151,6 +186,7 @@
 
 ## Langkah aman berikutnya
 
-1. Implementasikan rebuild SHADOW/backfill ISSUE untuk pesanan/transfer lama
-   dan opening cost state.
-2. Rekonsiliasi vs GL, lalu uji aktivasi flag pada database TEST.
+1. Uji backfill + rekonsiliasi FIFO/LIFO pada database TEST dan putuskan
+   jurnal opening bersama work item saldo awal.
+2. Implementasikan replay event/rebuild penuh dengan checkpoint-resume, lalu
+   concurrency/performance/staging.

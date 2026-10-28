@@ -3,16 +3,19 @@ import { CostingPolicyStatus, Prisma } from '@prisma/client';
 import { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCostingPolicyDto } from './dto/costing.dto';
+import { InventoryCostingService } from './costing.service';
 
 type TenantScope = { companyId: string; branchId: string };
 type CostingPolicyQuery = { limit?: string; cursor?: string; status?: string; method?: string };
 type CostingValuationQuery = { warehouseId?: string; productId?: string };
 
 const STATUSES: CostingPolicyStatus[] = ['DRAFT', 'ACTIVE', 'RETIRED'];
+const METHODS = ['MOVING_AVERAGE', 'FIFO', 'LIFO'] as const;
+type CostingMethod = (typeof METHODS)[number];
 
 @Injectable()
 export class InventoryCostingPolicyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly costing: InventoryCostingService = new InventoryCostingService()) {}
 
   private requireTenantScope(user: AuthUser): TenantScope {
     if (!user.companyId || !user.branchId) {
@@ -32,8 +35,8 @@ export class InventoryCostingPolicyService {
     if (query.status && !STATUSES.includes(query.status as CostingPolicyStatus)) {
       throw new BadRequestException({ code: 'COSTING_POLICY_STATUS_INVALID', message: 'Status policy costing tidak valid.' });
     }
-    if (query.method && query.method !== 'MOVING_AVERAGE') {
-      throw new BadRequestException({ code: 'COSTING_METHOD_UNSUPPORTED', message: 'Metode costing hanya MOVING_AVERAGE pada fase ini.' });
+    if (query.method && !METHODS.includes(query.method as CostingMethod)) {
+      throw new BadRequestException({ code: 'COSTING_METHOD_UNSUPPORTED', message: 'Metode costing tidak valid.' });
     }
     const take = this.limit(query.limit);
     const rows = await this.prisma.costingPolicy.findMany({
@@ -41,7 +44,7 @@ export class InventoryCostingPolicyService {
         companyId: scope.companyId,
         OR: [{ branchId: scope.branchId }, { branchId: null }],
         ...(query.status ? { status: query.status as CostingPolicyStatus } : {}),
-        ...(query.method ? { method: query.method as 'MOVING_AVERAGE' } : {}),
+        ...(query.method ? { method: query.method as CostingMethod } : {}),
       },
       take: take + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
@@ -56,8 +59,8 @@ export class InventoryCostingPolicyService {
     if (dto.branchId && dto.branchId !== scope.branchId) {
       throw new ForbiddenException({ code: 'TENANT_ACCESS_DENIED', message: 'Policy hanya boleh dibuat untuk branch pada token.' });
     }
-    if (dto.method !== 'MOVING_AVERAGE') {
-      throw new BadRequestException({ code: 'COSTING_METHOD_UNSUPPORTED', message: 'Metode costing hanya MOVING_AVERAGE pada fase ini.' });
+    if (!METHODS.includes(dto.method)) {
+      throw new BadRequestException({ code: 'COSTING_METHOD_UNSUPPORTED', message: 'Metode costing tidak valid.' });
     }
     const effectiveFrom = new Date(dto.effectiveFrom);
     if (Number.isNaN(effectiveFrom.getTime())) {
@@ -118,6 +121,20 @@ export class InventoryCostingPolicyService {
       throw new BadRequestException({ code: 'COSTING_POLICY_BACKDATED', message: 'Policy dengan effectiveFrom di masa lalu tidak boleh diaktifkan tanpa rebuild/backfill.' });
     }
     return this.prisma.$transaction(async (tx) => {
+      const conflictingEvent = await tx.inventoryCostEvent.findFirst({
+        where: {
+          companyId: scope.companyId,
+          ...(policy.branchId ? { branchId: policy.branchId } : {}),
+          method: { not: policy.method },
+        },
+        select: { id: true },
+      });
+      if (conflictingEvent) {
+        throw new ConflictException({
+          code: 'COSTING_METHOD_CUTOVER_REQUIRED',
+          message: 'Metode lain sudah memiliki event costing pada branch ini. Jalankan rebuild/cutover sebelum mengaktifkan metode baru.',
+        });
+      }
       const changed = await tx.costingPolicy.updateMany({ where: { id: policy.id, status: 'DRAFT' }, data: { status: 'ACTIVE', approvedBy: user.sub, approvedAt: new Date() } });
       if (changed.count !== 1) {
         throw new ConflictException({ code: 'COSTING_POLICY_NOT_DRAFT', message: 'Policy sudah diubah oleh proses lain; muat ulang sebelum aktivasi.' });
@@ -131,6 +148,21 @@ export class InventoryCostingPolicyService {
     });
   }
 
+  private async activeMethod(scope: TenantScope): Promise<CostingMethod> {
+    const now = new Date();
+    const branchPolicy = await this.prisma.costingPolicy.findFirst({
+      where: { companyId: scope.companyId, branchId: scope.branchId, status: 'ACTIVE', effectiveFrom: { lte: now } },
+      orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
+      select: { method: true },
+    });
+    const policy = branchPolicy ?? await this.prisma.costingPolicy.findFirst({
+      where: { companyId: scope.companyId, branchId: null, status: 'ACTIVE', effectiveFrom: { lte: now } },
+      orderBy: [{ effectiveFrom: 'desc' }, { version: 'desc' }],
+      select: { method: true },
+    });
+    return (policy?.method ?? 'MOVING_AVERAGE') as CostingMethod;
+  }
+
   async valuation(user: AuthUser, query: CostingValuationQuery) {
     const scope = this.requireTenantScope(user);
     if (query.warehouseId) {
@@ -140,9 +172,11 @@ export class InventoryCostingPolicyService {
       });
       if (!warehouse) throw new NotFoundException({ code: 'WAREHOUSE_NOT_FOUND', message: 'Gudang tidak ditemukan pada tenant pengguna.' });
     }
+    const method = await this.activeMethod(scope);
     const where: Prisma.InventoryCostStateWhereInput = {
       companyId: scope.companyId,
       branchId: scope.branchId,
+      method,
       ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
       ...(query.productId ? { productId: query.productId } : {}),
     };
@@ -167,6 +201,39 @@ export class InventoryCostingPolicyService {
       const warehouse = byId.get(group.warehouseId);
       return { warehouseId: group.warehouseId, code: warehouse?.code ?? null, name: warehouse?.name ?? null, quantity: groupQuantity, value: groupValue.toFixed(2) };
     });
-    return { asOf: new Date().toISOString(), method: 'MOVING_AVERAGE', totals: { quantity, value: value.toFixed(2) }, byWarehouse };
+    return { asOf: new Date().toISOString(), method, totals: { quantity, value: value.toFixed(2) }, byWarehouse };
+  }
+
+  async previewIssue(user: AuthUser, query: { warehouseId?: string; productId?: string; batchKey?: string; occurredAt?: string; quantity?: string }) {
+    const scope = this.requireTenantScope(user);
+    if (!query.warehouseId || !query.productId) {
+      throw new BadRequestException({ code: 'COSTING_SCOPE_REQUIRED', message: 'warehouseId dan productId wajib untuk preview costing.' });
+    }
+    const warehouse = await this.prisma.warehouse.findFirst({ where: { id: query.warehouseId, branchId: scope.branchId, branch: { companyId: scope.companyId } }, select: { id: true } });
+    if (!warehouse) throw new NotFoundException({ code: 'WAREHOUSE_NOT_FOUND', message: 'Gudang tidak ditemukan pada tenant pengguna.' });
+    const product = await this.prisma.product.findFirst({ where: { id: query.productId, companyId: scope.companyId }, select: { id: true } });
+    if (!product) throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND', message: 'Produk tidak ditemukan pada tenant pengguna.' });
+    const quantity = Number(query.quantity ?? 0);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException({ code: 'COSTING_QUANTITY_INVALID', message: 'Quantity preview costing harus bilangan bulat positif.' });
+    }
+    const occurredAt = query.occurredAt ? new Date(query.occurredAt) : new Date();
+    if (Number.isNaN(occurredAt.getTime())) {
+      throw new BadRequestException({ code: 'COSTING_OCCURRED_AT_INVALID', message: 'occurredAt bukan tanggal yang valid.' });
+    }
+    const result = await this.prisma.$transaction((tx) => this.costing.previewIssue(tx, {
+      companyId: scope.companyId,
+      branchId: scope.branchId,
+      warehouseId: query.warehouseId!,
+      productId: query.productId!,
+      batchKey: query.batchKey,
+    }, occurredAt, quantity));
+    return {
+      asOf: occurredAt.toISOString(),
+      method: await this.activeMethod(scope),
+      cost: result.cost.toFixed(2),
+      unitCost: result.unitCost.toFixed(6),
+      uncostedQuantity: result.uncostedQuantity,
+    };
   }
 }

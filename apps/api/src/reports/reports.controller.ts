@@ -44,6 +44,17 @@ import { ReportsService } from './reports.service';
     return this.reports.trialBalance(user, from, to, companyId, branchId);
   }
 
+  @Get('worksheet')
+  worksheet(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.reports.worksheet(user, from, to, companyId, branchId);
+  }
+
   @Get('balance-sheet')
   balanceSheet(
     @CurrentUser() user: AuthUser,
@@ -177,6 +188,15 @@ import { ReportsService } from './reports.service';
   @Get('dead-stock')
   deadStock(@CurrentUser() user: AuthUser, @Query('days') days?: string, @Query('limit') limit?: string) {
     return this.reports.deadStock(user, days, limit);
+  }
+
+  @Get('deposits')
+  deposits(
+    @CurrentUser() user: AuthUser,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.reports.depositReport(user, from, to);
   }
 
   @Get('customer-rfm')

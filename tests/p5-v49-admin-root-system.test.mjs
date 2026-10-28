@@ -40,8 +40,8 @@ test('P5 V4.11 Admin uses one searchable hierarchical domain and subdomain navig
   assert.doesNotMatch(shell,/adminModuleDirectory|moduleOpen|className="domainTabs/);
   assert.equal((navigation.match(/route:\s*'\//g)||[]).length,15);
   assert.match(navigation,/key:\s*'manufacturing'[\s\S]{0,300}?route:\s*'\/manufacturing'/);
-  assert.equal(context.rows.length,70);
-  assert.equal(context.expectedContextualViews,70);
+  assert.equal(context.rows.length,82);
+  assert.equal(context.expectedContextualViews,82);
   for (const route of [
     ['master-data','bulk-labels'],
     ['manufacturing','recipes'],

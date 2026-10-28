@@ -40,6 +40,9 @@ export class AppController {
       status: 'ok',
       service: 'toko360-api',
       timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV ?? 'development',
+      uptimeSeconds: Math.round(process.uptime()),
+      nodeVersion: process.version,
       release: {
         version: process.env.APP_VERSION ?? '0.5.3',
         sourceFingerprint: process.env.T360_SOURCE_FINGERPRINT ?? null,

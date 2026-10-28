@@ -2,10 +2,20 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { AccountType, Prisma, TaxTransactionDirection } from '@prisma/client';
 import { AuthUser } from '../auth/auth.types';
 import { businessMonthStart, parseBusinessDateBoundary } from '../common/business-time';
+import { hashPayload } from '../common/idempotency';
 import { nextDocumentNumber } from '../common/numbering';
 import { decodeCursor, parsePageLimit, toCursorPage } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveWarehouseTaxCode } from '../common/warehouse-tax';
 import { CreateAccountDto, CreateAccountingCloseControlDto, CreatePostingRuleDto, CreateTaxCodeDto, PostManualAccountingEventDto, UpdateAccountDto } from './dto/accounting-core.dto';
+
+export const SYSTEM_JOURNAL_EVENT_TYPES = ['OPENING_BALANCE', 'YEAR_END_CLOSE'] as const;
+export type SystemJournalEventType = (typeof SYSTEM_JOURNAL_EVENT_TYPES)[number];
+
+const SYSTEM_JOURNAL_SOURCES: Record<SystemJournalEventType, readonly string[]> = {
+  OPENING_BALANCE: ['OPENING_BALANCE_BATCH', 'OPENING_BALANCE_CORRECTION'],
+  YEAR_END_CLOSE: ['YEAR_END_CLOSE_RUN', 'YEAR_END_CLOSE_PRIOR_PERIOD_ADJUSTMENT'],
+};
 
 export interface OperationalEventLineInput {
   itemType?: string;
@@ -52,6 +62,40 @@ export interface PostOperationalEventInput {
   lines?: OperationalEventLineInput[];
   taxLines?: OperationalTaxLineInput[];
   context?: Prisma.InputJsonValue;
+}
+
+export interface SystemJournalLineInput {
+  accountCode: string;
+  debit?: Prisma.Decimal.Value;
+  credit?: Prisma.Decimal.Value;
+  description?: string;
+}
+
+export interface PostSystemJournalInput {
+  companyId: string;
+  branchId: string;
+  eventType: SystemJournalEventType;
+  sourceType: string;
+  sourceId: string;
+  idempotencyKey: string;
+  businessDate: Date;
+  currency?: string;
+  description?: string;
+  lines: SystemJournalLineInput[];
+  context?: Prisma.InputJsonValue;
+  actorId?: string;
+}
+
+export interface PostReversalInput {
+  companyId: string;
+  branchId: string;
+  originalEventId: string;
+  idempotencyKey: string;
+  businessDate: Date;
+  reason: string;
+  sourceType?: string;
+  sourceId?: string;
+  actorId?: string;
 }
 
 type DbClient = Prisma.TransactionClient | PrismaService;
@@ -116,6 +160,43 @@ export class AccountingCoreService {
     }
   }
 
+  private async assertPostingWindowOpen(
+    client: DbClient,
+    companyId: string,
+    branchId: string,
+    businessDate: Date,
+    eventType: string,
+  ): Promise<void> {
+    const closeControl = await client.accountingCloseControl.findFirst({
+      where: {
+        companyId,
+        status: 'CLOSED',
+        periodStart: { lte: businessDate },
+        periodEnd: { gte: businessDate },
+        module: { in: ['ACCOUNTING', eventType] },
+        OR: [{ branchId }, { branchId: null }],
+      },
+      orderBy: [{ branchId: 'desc' }, { periodEnd: 'desc' }],
+    });
+    if (closeControl) {
+      throw new BadRequestException(`Accounting close control ${closeControl.module} menutup posting pada periode ${closeControl.periodStart.toISOString().slice(0, 10)} sampai ${closeControl.periodEnd.toISOString().slice(0, 10)}.`);
+    }
+
+    // Period close enforcement: SOFT_CLOSED maupun CLOSED sama-sama membekukan posting normal.
+    // Koreksi harus dilakukan setelah period direopen secara eksplisit (SOFT_CLOSED) atau pada periode baru.
+    const fiscalPeriod = await client.fiscalPeriod.findFirst({
+      where: {
+        companyId,
+        branchId,
+        startDate: { lte: businessDate },
+        endDate: { gte: businessDate },
+      },
+      orderBy: { startDate: 'desc' },
+    });
+    if (fiscalPeriod && fiscalPeriod.status !== 'OPEN') {
+      throw new BadRequestException(`Periode fiskal berstatus ${fiscalPeriod.status}; posting jurnal ke periode ini tidak diizinkan.`);
+    }
+  }
 
   async listCloseControls(user: AuthUser) {
     const scope = this.requireTenantScope(user);
@@ -179,11 +260,26 @@ export class AccountingCoreService {
     });
   }
 
-  async listAccounts(user: AuthUser) {
+  async listAccounts(user: AuthUser): Promise<any>;
+  async listAccounts(user: AuthUser, requestedWarehouseId?: string): Promise<any>;
+  async listAccounts(user: AuthUser, requestedWarehouseId?: string) {
     const scope = this.requireTenantScope(user);
+    if (requestedWarehouseId) {
+      const warehouse = await this.prisma.warehouse.findFirst({
+        where: { id: requestedWarehouseId, branchId: scope.branchId, branch: { companyId: scope.companyId } },
+        select: { id: true },
+      });
+      if (!warehouse) return this.denyTenantAccess(this.prisma, user, scope, 'Warehouse', requestedWarehouseId);
+    }
     return this.prisma.account.findMany({
-      where: { branchId: scope.branchId, branch: { companyId: scope.companyId } },
-      select: { id: true, code: true, name: true, type: true, isActive: true },
+      where: {
+        branchId: scope.branchId,
+        branch: { companyId: scope.companyId },
+        ...(requestedWarehouseId
+          ? { OR: [{ warehouseId: requestedWarehouseId }, { warehouseId: null }] }
+          : {}),
+      },
+      select: { id: true, code: true, name: true, type: true, isActive: true, warehouseId: true },
       orderBy: [{ code: 'asc' }, { id: 'asc' }],
     });
   }
@@ -193,11 +289,18 @@ export class AccountingCoreService {
     const code = dto.code.trim().toUpperCase();
     const name = dto.name.trim();
     if (!code || !name) throw new BadRequestException('Kode dan nama akun wajib diisi.');
+    if (dto.warehouseId) {
+      const warehouse = await this.prisma.warehouse.findFirst({
+        where: { id: dto.warehouseId, branchId: scope.branchId, branch: { companyId: scope.companyId } },
+        select: { id: true },
+      });
+      if (!warehouse) return this.denyTenantAccess(this.prisma, user, scope, 'Warehouse', dto.warehouseId);
+    }
     return this.prisma.$transaction(async (tx) => {
       const duplicate = await tx.account.findUnique({ where: { branchId_code: { branchId: scope.branchId, code } } });
       if (duplicate) throw new BadRequestException(`Akun ${code} sudah ada pada branch ini.`);
-      const account = await tx.account.create({ data: { branchId: scope.branchId, code, name, type: dto.type as AccountType } });
-      await tx.auditLog.create({ data: { companyId: scope.companyId, userId: user.sub, action: 'CREATE_ACCOUNT', entityType: 'Account', entityId: account.id, payload: { branchId: scope.branchId, code, type: dto.type } } });
+      const account = await tx.account.create({ data: { branchId: scope.branchId, code, name, type: dto.type as AccountType, warehouseId: dto.warehouseId ?? null } });
+      await tx.auditLog.create({ data: { companyId: scope.companyId, userId: user.sub, action: 'CREATE_ACCOUNT', entityType: 'Account', entityId: account.id, payload: { branchId: scope.branchId, warehouseId: dto.warehouseId ?? null, code, type: dto.type } } });
       return account;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
@@ -207,6 +310,13 @@ export class AccountingCoreService {
     return this.prisma.$transaction(async (tx) => {
       const account = (await tx.account.findFirst({ where: { id, branchId: scope.branchId, branch: { companyId: scope.companyId } } }))
         ?? (await this.denyTenantAccess(tx, user, scope, 'Account', id));
+      if (dto.warehouseId !== undefined && dto.warehouseId) {
+        const warehouse = await tx.warehouse.findFirst({
+          where: { id: dto.warehouseId, branchId: scope.branchId, branch: { companyId: scope.companyId } },
+          select: { id: true },
+        });
+        if (!warehouse) return this.denyTenantAccess(tx, user, scope, 'Warehouse', dto.warehouseId);
+      }
       const journalUsage = dto.type && dto.type !== account.type
         ? await tx.journalLine.count({ where: { accountId: id } }) : 0;
       if (journalUsage > 0) throw new BadRequestException('Tipe akun yang sudah memiliki histori jurnal tidak boleh diubah. Buat akun baru untuk klasifikasi baru.');
@@ -215,7 +325,7 @@ export class AccountingCoreService {
         const usedByRule = activeRules.find((rule) => Array.isArray(rule.journalLines) && rule.journalLines.some((line) => typeof line === 'object' && line !== null && (line as { accountCode?: string }).accountCode === account.code));
         if (usedByRule) throw new BadRequestException(`Akun ${account.code} masih dipakai posting rule ACTIVE ${usedByRule.code}. Nonaktifkan/versikan rule terlebih dahulu.`);
       }
-      const updated = await tx.account.update({ where: { id }, data: { ...(dto.name !== undefined ? { name: dto.name.trim() } : {}), ...(dto.type !== undefined ? { type: dto.type as AccountType } : {}), ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}) } });
+      const updated = await tx.account.update({ where: { id }, data: { ...(dto.name !== undefined ? { name: dto.name.trim() } : {}), ...(dto.type !== undefined ? { type: dto.type as AccountType } : {}), ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}), ...(dto.warehouseId !== undefined ? { warehouseId: dto.warehouseId || null } : {}) } });
       await tx.auditLog.create({ data: { companyId: scope.companyId, userId: user.sub, action: 'UPDATE_ACCOUNT', entityType: 'Account', entityId: id, payload: { branchId: scope.branchId, name: dto.name, type: dto.type, isActive: dto.isActive } } });
       return updated;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -257,11 +367,23 @@ export class AccountingCoreService {
     return { event, rules, journalEntry, source: { type: event.sourceType, id: event.sourceId } };
   }
 
-  async listTaxCodes(user: AuthUser, requestedCompanyId?: string) {
+  async listTaxCodes(user: AuthUser, requestedCompanyId?: string, requestedWarehouseId?: string) {
     const scope = this.requireTenantScope(user);
     await this.assertRequestedScope(this.prisma, user, scope, requestedCompanyId, undefined, 'TaxCode');
+    if (requestedWarehouseId) {
+      const warehouse = await this.prisma.warehouse.findFirst({
+        where: { id: requestedWarehouseId, branchId: scope.branchId, branch: { companyId: scope.companyId } },
+        select: { id: true },
+      });
+      if (!warehouse) return this.denyTenantAccess(this.prisma, user, scope, 'Warehouse', requestedWarehouseId);
+    }
     return this.prisma.taxCode.findMany({
-      where: { companyId: scope.companyId },
+      where: {
+        companyId: scope.companyId,
+        ...(requestedWarehouseId
+          ? { OR: [{ warehouseId: requestedWarehouseId }, { warehouseId: null }] }
+          : {}),
+      },
       orderBy: [{ scope: 'asc' }, { code: 'asc' }, { version: 'desc' }],
     });
   }
@@ -300,6 +422,7 @@ export class AccountingCoreService {
           companyId: scope.companyId,
           code,
           status: 'ACTIVE',
+          warehouseId: dto.warehouseId ?? null,
           ...(excludeId ? { id: { not: excludeId } } : {}),
           AND: [
             effectiveFrom ? { OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveFrom } }] } : {},
@@ -315,6 +438,13 @@ export class AccountingCoreService {
   async createTaxCode(dto: CreateTaxCodeDto, user: AuthUser) {
     const scope = this.requireTenantScope(user);
     await this.assertRequestedScope(this.prisma, user, scope, dto.companyId, undefined, 'TaxCode');
+    if (dto.warehouseId) {
+      const warehouse = await this.prisma.warehouse.findFirst({
+        where: { id: dto.warehouseId, branchId: scope.branchId, branch: { companyId: scope.companyId } },
+        select: { id: true },
+      });
+      if (!warehouse) return this.denyTenantAccess(this.prisma, user, scope, 'Warehouse', dto.warehouseId);
+    }
     const code = dto.code.trim().toUpperCase();
     const version = dto.version ?? 1;
     return this.prisma.$transaction(async (tx) => {
@@ -329,6 +459,7 @@ export class AccountingCoreService {
       const data = {
         name: dto.name.trim(), scope: dto.scope, rate: new Prisma.Decimal(dto.rate), inclusive: dto.inclusive ?? false,
         recoverable: dto.recoverable ?? false,
+        warehouseId: dto.warehouseId ?? null,
         payableAccountCode: dto.payableAccountCode?.trim().toUpperCase() || null,
         receivableAccountCode: dto.receivableAccountCode?.trim().toUpperCase() || null,
         expenseAccountCode: dto.expenseAccountCode?.trim().toUpperCase() || null,
@@ -365,6 +496,7 @@ export class AccountingCoreService {
           payableAccountCode: taxCode.payableAccountCode ?? undefined, receivableAccountCode: taxCode.receivableAccountCode ?? undefined,
           expenseAccountCode: taxCode.expenseAccountCode ?? undefined, effectiveFrom: taxCode.effectiveFrom?.toISOString(), effectiveTo: taxCode.effectiveTo?.toISOString(),
           status: 'ACTIVE', calculationRules: taxCode.calculationRules as Record<string, unknown> | undefined, legalReference: taxCode.legalReference ?? undefined,
+          warehouseId: taxCode.warehouseId ?? undefined,
         }, taxCode.id);
       }
       const updated = await tx.taxCode.update({ where: { id }, data: { status } });
@@ -597,6 +729,7 @@ export class AccountingCoreService {
     companyId?: string,
     effectiveAt: Date = new Date(),
     expectedScopes?: string[],
+    inclusiveOverride?: boolean,
   ) {
     const grossOrBase = new Prisma.Decimal(amount);
     if (!taxCodeId) return { taxCode: null, net: grossOrBase, tax: new Prisma.Decimal(0), gross: grossOrBase };
@@ -612,7 +745,8 @@ export class AccountingCoreService {
     }
     const rate = new Prisma.Decimal(taxCode.rate);
     if (rate.lessThan(0)) throw new BadRequestException('Tarif pajak tidak valid.');
-    if (taxCode.inclusive && rate.greaterThan(0)) {
+    const isInclusive = inclusiveOverride ?? taxCode.inclusive;
+    if (isInclusive && rate.greaterThan(0)) {
       const divisor = new Prisma.Decimal(1).add(rate);
       const net = grossOrBase.div(divisor).toDecimalPlaces(2);
       const tax = grossOrBase.sub(net);
@@ -620,6 +754,61 @@ export class AccountingCoreService {
     }
     const tax = grossOrBase.mul(rate).toDecimalPlaces(2);
     return { taxCode, net: grossOrBase, tax, gross: grossOrBase.add(tax) };
+  }
+
+  async resolveWarehouseTaxCode(
+    client: any,
+    companyId: string,
+    warehouseId?: string | null,
+    scope?: string | null,
+    effectiveAt: Date = new Date(),
+    fallbackToCompany: boolean = true,
+  ): Promise<string | null> {
+    return resolveWarehouseTaxCode(client, companyId, warehouseId, scope, effectiveAt, fallbackToCompany);
+  }
+
+  async resolveWarehouseTax(
+    client: any,
+    companyId: string,
+    warehouseId?: string | null,
+    scope?: string | null,
+    effectiveAt: Date = new Date(),
+    fallbackToCompany: boolean = true,
+  ): Promise<string | null> {
+    return this.resolveWarehouseTaxCode(client, companyId, warehouseId, scope, effectiveAt, fallbackToCompany);
+  }
+
+  async resolveTaxCodeForWarehouse(
+    client: any,
+    companyId: string,
+    warehouseId?: string | null,
+    scope?: string | null,
+    effectiveAt: Date = new Date(),
+    fallbackToCompany: boolean = true,
+  ): Promise<string | null> {
+    return this.resolveWarehouseTaxCode(client, companyId, warehouseId, scope, effectiveAt, fallbackToCompany);
+  }
+
+  async resolveTaxForWarehouse(
+    client: any,
+    companyId: string,
+    warehouseId?: string | null,
+    scope?: string | null,
+    effectiveAt: Date = new Date(),
+    fallbackToCompany: boolean = true,
+  ): Promise<string | null> {
+    return this.resolveWarehouseTaxCode(client, companyId, warehouseId, scope, effectiveAt, fallbackToCompany);
+  }
+
+  async selectWarehouseTaxCode(
+    client: any,
+    companyId: string,
+    warehouseId?: string | null,
+    scope?: string | null,
+    effectiveAt: Date = new Date(),
+    fallbackToCompany: boolean = true,
+  ): Promise<string | null> {
+    return this.resolveWarehouseTaxCode(client, companyId, warehouseId, scope, effectiveAt, fallbackToCompany);
   }
 
   async postOperationalEvent(client: DbClient, input: PostOperationalEventInput) {
@@ -674,35 +863,7 @@ export class AccountingCoreService {
     });
     if (!rule) throw new BadRequestException(`Accounting posting rule ACTIVE untuk ${input.eventType} belum dikonfigurasi.`);
 
-    const closeControl = await client.accountingCloseControl.findFirst({
-      where: {
-        companyId: input.companyId,
-        status: 'CLOSED',
-        periodStart: { lte: businessDate },
-        periodEnd: { gte: businessDate },
-        module: { in: ['ACCOUNTING', input.eventType] },
-        OR: [{ branchId: input.branchId }, { branchId: null }],
-      },
-      orderBy: [{ branchId: 'desc' }, { periodEnd: 'desc' }],
-    });
-    if (closeControl) {
-      throw new BadRequestException(`Accounting close control ${closeControl.module} menutup posting pada periode ${closeControl.periodStart.toISOString().slice(0, 10)} sampai ${closeControl.periodEnd.toISOString().slice(0, 10)}.`);
-    }
-
-    // Period close enforcement: SOFT_CLOSED maupun CLOSED sama-sama membekukan posting normal.
-    // Koreksi harus dilakukan setelah period direopen secara eksplisit (SOFT_CLOSED) atau pada periode baru.
-    const fiscalPeriod = await client.fiscalPeriod.findFirst({
-      where: {
-        companyId: input.companyId,
-        branchId: input.branchId,
-        startDate: { lte: businessDate },
-        endDate: { gte: businessDate },
-      },
-      orderBy: { startDate: 'desc' },
-    });
-    if (fiscalPeriod && fiscalPeriod.status !== 'OPEN') {
-      throw new BadRequestException(`Periode fiskal berstatus ${fiscalPeriod.status}; posting jurnal ke periode ini tidak diizinkan.`);
-    }
+    await this.assertPostingWindowOpen(client, input.companyId, input.branchId, businessDate, input.eventType);
 
     const amounts = Object.fromEntries(Object.entries(input.amounts).map(([key, value]) => [key, new Prisma.Decimal(value)]));
     const netAmount = amounts.net ?? amounts.revenue ?? amounts.inventory ?? amounts.expense ?? amounts.asset ?? amounts.gain ?? amounts.loss ?? new Prisma.Decimal(0);
@@ -791,6 +952,312 @@ export class AccountingCoreService {
     });
     return client.accountingEvent.update({
       where: { id: event.id }, data: { status: 'POSTED', journalEntryId: journalEntry.id },
+      include: { postings: true, taxTransactions: true, lines: true },
+    });
+  }
+
+  async postSystemJournal(client: DbClient, input: PostSystemJournalInput) {
+    const eventType = input.eventType;
+    if (!(SYSTEM_JOURNAL_EVENT_TYPES as readonly string[]).includes(eventType)) {
+      throw new BadRequestException(`Event type ${eventType} tidak diizinkan untuk system journal.`);
+    }
+    const allowedSources = SYSTEM_JOURNAL_SOURCES[eventType];
+    const sourceType = input.sourceType?.trim().toUpperCase();
+    if (!sourceType || !allowedSources.includes(sourceType)) {
+      throw new BadRequestException(`Source type ${input.sourceType ?? ''} tidak diizinkan untuk ${eventType}.`);
+    }
+    const sourceId = input.sourceId?.trim();
+    const idempotencyKey = input.idempotencyKey?.trim();
+    if (!sourceId) throw new BadRequestException('Source id system journal wajib diisi.');
+    if (!idempotencyKey) throw new BadRequestException('Idempotency key system journal wajib diisi.');
+    const businessDate = input.businessDate instanceof Date ? input.businessDate : new Date(input.businessDate as unknown as string);
+    if (Number.isNaN(businessDate.getTime())) throw new BadRequestException('Tanggal system journal tidak valid.');
+    if (!input.lines?.length) throw new BadRequestException('System journal minimal memiliki satu baris.');
+
+    const normalizedLines = input.lines.map((line, index) => {
+      const accountCode = line.accountCode?.trim().toUpperCase();
+      if (!accountCode) throw new BadRequestException(`Account code baris ${index + 1} wajib diisi.`);
+      const debit = new Prisma.Decimal(line.debit ?? 0).toDecimalPlaces(2);
+      const credit = new Prisma.Decimal(line.credit ?? 0).toDecimalPlaces(2);
+      if (debit.isNegative() || credit.isNegative()) throw new BadRequestException(`Nilai baris ${index + 1} tidak boleh negatif.`);
+      if (!debit.isZero() && !credit.isZero()) throw new BadRequestException(`Baris ${index + 1} hanya boleh berisi debit atau kredit.`);
+      if (debit.isZero() && credit.isZero()) throw new BadRequestException(`Baris ${index + 1} tidak boleh bernilai nol.`);
+      return { accountCode, debit, credit, description: line.description?.trim() || undefined };
+    });
+    const totalDebit = normalizedLines.reduce((total, line) => total.add(line.debit), new Prisma.Decimal(0));
+    const totalCredit = normalizedLines.reduce((total, line) => total.add(line.credit), new Prisma.Decimal(0));
+    if (!totalDebit.equals(totalCredit)) {
+      throw new BadRequestException(`System journal tidak seimbang. Debit ${totalDebit.toFixed(2)}, kredit ${totalCredit.toFixed(2)}.`);
+    }
+    if (totalDebit.isZero()) throw new BadRequestException('System journal tidak boleh bernilai nol.');
+
+    const canonicalLines = normalizedLines.map((line) => ({
+      accountCode: line.accountCode,
+      debit: line.debit.toFixed(2),
+      credit: line.credit.toFixed(2),
+      description: line.description ?? null,
+    })).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    const payloadHash = hashPayload({
+      version: 1,
+      eventType,
+      sourceType,
+      sourceId,
+      businessDate: businessDate.toISOString(),
+      currency: input.currency ?? 'IDR',
+      lines: canonicalLines,
+    });
+
+    const existing = await client.accountingEvent.findUnique({
+      where: { companyId_idempotencyKey: { companyId: input.companyId, idempotencyKey } },
+      include: { postings: true, taxTransactions: true, lines: true },
+    });
+    if (existing) {
+      const context = existing.context as unknown as { systemJournal?: { version?: number; payloadHash?: string } } | null;
+      const sameIdentity = existing.branchId === input.branchId
+        && existing.eventType === eventType
+        && existing.sourceType === sourceType
+        && existing.sourceId === sourceId;
+      if (!sameIdentity || context?.systemJournal?.version !== 1 || context.systemJournal.payloadHash !== payloadHash) {
+        throw new BadRequestException('Idempotency key system journal sudah digunakan untuk payload yang berbeda.');
+      }
+      return existing;
+    }
+
+    const branch = await client.branch.findFirst({
+      where: { id: input.branchId, companyId: input.companyId, isActive: true },
+      select: { id: true },
+    });
+    if (!branch) throw new BadRequestException('Branch system journal tidak ditemukan pada company transaksi.');
+    await this.assertPostingWindowOpen(client, input.companyId, input.branchId, businessDate, eventType);
+
+    const codes = [...new Set(normalizedLines.map((line) => line.accountCode))];
+    const accounts = await client.account.findMany({
+      where: { branchId: input.branchId, code: { in: codes } },
+      select: { id: true, code: true, isActive: true },
+    });
+    const accountMap = new Map(accounts.map((account) => [account.code, account]));
+    const missing = codes.filter((code) => !accountMap.has(code));
+    if (missing.length) throw new BadRequestException(`Akun belum dikonfigurasi: ${missing.join(', ')}.`);
+    const inactive = accounts.filter((account) => !account.isActive).map((account) => account.code);
+    if (inactive.length) throw new BadRequestException(`Akun tidak aktif: ${inactive.join(', ')}.`);
+
+    const context = {
+      ...(input.context && typeof input.context === 'object' && !Array.isArray(input.context)
+        ? input.context as Record<string, Prisma.InputJsonValue>
+        : {}),
+      systemJournal: { version: 1, payloadHash, eventType, sourceType, sourceId },
+    } as Prisma.InputJsonValue;
+
+    const event = await client.accountingEvent.create({
+      data: {
+        companyId: input.companyId,
+        branchId: input.branchId,
+        eventType,
+        sourceType,
+        sourceId,
+        idempotencyKey,
+        businessDate,
+        currency: input.currency ?? 'IDR',
+        netAmount: totalDebit,
+        taxAmount: new Prisma.Decimal(0),
+        grossAmount: totalDebit,
+        status: 'VALIDATED',
+        context,
+        lines: {
+          create: normalizedLines.map((line, index) => ({
+            lineNumber: index + 1,
+            itemType: 'ACCOUNT',
+            itemId: accountMap.get(line.accountCode)!.id,
+            description: line.description ?? `${line.accountCode} ${line.debit.isZero() ? 'KREDIT' : 'DEBIT'}`,
+            netAmount: line.debit.isZero() ? line.credit : line.debit,
+            grossAmount: line.debit.isZero() ? line.credit : line.debit,
+          })),
+        },
+      },
+    });
+
+    const journalEntry = await client.journalEntry.create({
+      data: {
+        number: await nextDocumentNumber(client, { companyId: input.companyId, branchId: input.branchId, documentType: 'JOURNAL', prefix: 'JRN' }),
+        date: businessDate,
+        referenceType: sourceType,
+        referenceId: sourceId,
+        description: input.description?.trim() || `${eventType} ${sourceType} ${sourceId}`,
+        lines: {
+          create: normalizedLines.map((line) => ({
+            accountId: accountMap.get(line.accountCode)!.id,
+            debit: line.debit,
+            credit: line.credit,
+          })),
+        },
+      },
+    });
+
+    await client.accountingPosting.create({
+      data: {
+        accountingEventId: event.id,
+        ruleId: null,
+        journalEntryId: journalEntry.id,
+        postingTrace: {
+          journalType: 'SYSTEM',
+          eventType,
+          sourceType,
+          sourceId,
+          payloadHash,
+          debitTotal: totalDebit.toFixed(2),
+          creditTotal: totalCredit.toFixed(2),
+        },
+      },
+    });
+    await client.auditLog.create({
+      data: {
+        companyId: input.companyId,
+        userId: input.actorId,
+        action: 'POST_SYSTEM_JOURNAL',
+        entityType: 'AccountingEvent',
+        entityId: event.id,
+        payload: { eventType, sourceType, sourceId, journalEntryId: journalEntry.id, payloadHash, debitTotal: totalDebit.toFixed(2), creditTotal: totalCredit.toFixed(2) },
+      },
+    });
+    return client.accountingEvent.update({
+      where: { id: event.id },
+      data: { status: 'POSTED', journalEntryId: journalEntry.id },
+      include: { postings: true, taxTransactions: true, lines: true },
+    });
+  }
+
+  async postReversal(client: DbClient, input: PostReversalInput) {
+    const idempotencyKey = input.idempotencyKey?.trim();
+    if (!idempotencyKey) throw new BadRequestException('Idempotency key reversal wajib diisi.');
+    const reason = input.reason?.trim();
+    if (!reason) throw new BadRequestException('Alasan reversal wajib diisi.');
+    const businessDate = input.businessDate instanceof Date ? input.businessDate : new Date(input.businessDate as unknown as string);
+    if (Number.isNaN(businessDate.getTime())) throw new BadRequestException('Tanggal reversal tidak valid.');
+
+    const payloadHash = hashPayload({
+      version: 1,
+      originalEventId: input.originalEventId,
+      businessDate: businessDate.toISOString(),
+      reason,
+      sourceType: input.sourceType ?? null,
+      sourceId: input.sourceId ?? null,
+    });
+    const existing = await client.accountingEvent.findUnique({
+      where: { companyId_idempotencyKey: { companyId: input.companyId, idempotencyKey } },
+      include: { postings: true, taxTransactions: true, lines: true },
+    });
+    if (existing) {
+      const context = existing.context as unknown as { systemReversal?: { version?: number; payloadHash?: string } } | null;
+      const sameIdentity = existing.branchId === input.branchId
+        && existing.reversalOfId === input.originalEventId;
+      if (!sameIdentity || context?.systemReversal?.version !== 1 || context.systemReversal.payloadHash !== payloadHash) {
+        throw new BadRequestException('Idempotency key reversal sudah digunakan untuk payload yang berbeda.');
+      }
+      return existing;
+    }
+
+    const original = await client.accountingEvent.findFirst({
+      where: { id: input.originalEventId, companyId: input.companyId, branchId: input.branchId },
+      include: { postings: true, lines: true },
+    });
+    if (!original) throw new NotFoundException('Event asal reversal tidak ditemukan pada tenant transaksi.');
+    if (!(SYSTEM_JOURNAL_EVENT_TYPES as readonly string[]).includes(original.eventType)) {
+      throw new BadRequestException(`Event ${original.eventType} tidak dapat dibalik melalui postReversal.`);
+    }
+    if (original.reversalOfId) throw new BadRequestException('Event reversal tidak dapat dibalik lagi.');
+    if (original.status !== 'POSTED') throw new BadRequestException(`Event ${original.id} berstatus ${original.status}; hanya event POSTED yang dapat dibalik.`);
+    const originalPosting = original.postings.find((posting) => posting.journalEntryId === original.journalEntryId);
+    if (!originalPosting || originalPosting.reversedAt) throw new BadRequestException(`Event ${original.id} sudah dibalik.`);
+    if (!original.journalEntryId) throw new BadRequestException(`Event ${original.id} tidak memiliki journal entry.`);
+    const originalJournal = await client.journalEntry.findUnique({
+      where: { id: original.journalEntryId },
+      include: { lines: true },
+    });
+    if (!originalJournal || !originalJournal.lines.length) throw new BadRequestException(`Journal entry event ${original.id} tidak ditemukan.`);
+    await this.assertPostingWindowOpen(client, input.companyId, input.branchId, businessDate, original.eventType);
+
+    const sourceType = input.sourceType?.trim().toUpperCase() || `${original.sourceType}_REVERSAL`;
+    const sourceId = input.sourceId?.trim() || original.sourceId;
+    const reversedLines = originalJournal.lines.map((line) => ({
+      accountId: line.accountId,
+      debit: line.credit,
+      credit: line.debit,
+    }));
+    const totalDebit = reversedLines.reduce((total, line) => total.add(line.debit), new Prisma.Decimal(0));
+    const totalCredit = reversedLines.reduce((total, line) => total.add(line.credit), new Prisma.Decimal(0));
+    if (!totalDebit.equals(totalCredit)) throw new BadRequestException('Jurnal asal tidak seimbang; reversal tidak dapat dibuat.');
+
+    const event = await client.accountingEvent.create({
+      data: {
+        companyId: input.companyId,
+        branchId: input.branchId,
+        eventType: original.eventType,
+        sourceType,
+        sourceId,
+        idempotencyKey,
+        businessDate,
+        currency: original.currency,
+        netAmount: original.netAmount,
+        taxAmount: new Prisma.Decimal(0),
+        grossAmount: original.grossAmount,
+        status: 'VALIDATED',
+        reversalOfId: original.id,
+        context: {
+          systemReversal: { version: 1, payloadHash, originalEventId: original.id, reason },
+        } as Prisma.InputJsonValue,
+        lines: {
+          create: reversedLines.map((line, index) => ({
+            lineNumber: index + 1,
+            itemType: 'ACCOUNT',
+            itemId: line.accountId,
+            description: `Reversal ${original.eventType} ${original.id}`,
+            netAmount: line.debit.isZero() ? line.credit : line.debit,
+            grossAmount: line.debit.isZero() ? line.credit : line.debit,
+          })),
+        },
+      },
+    });
+
+    const journalEntry = await client.journalEntry.create({
+      data: {
+        number: await nextDocumentNumber(client, { companyId: input.companyId, branchId: input.branchId, documentType: 'JOURNAL', prefix: 'JRN' }),
+        date: businessDate,
+        referenceType: sourceType,
+        referenceId: sourceId,
+        description: `Reversal ${original.eventType} ${original.sourceType} ${original.sourceId}: ${reason}`,
+        lines: { create: reversedLines },
+      },
+    });
+    await client.accountingPosting.create({
+      data: {
+        accountingEventId: event.id,
+        ruleId: null,
+        journalEntryId: journalEntry.id,
+        postingTrace: {
+          journalType: 'SYSTEM_REVERSAL',
+          eventType: original.eventType,
+          originalEventId: original.id,
+          payloadHash,
+          debitTotal: totalDebit.toFixed(2),
+          creditTotal: totalCredit.toFixed(2),
+        },
+      },
+    });
+    await client.accountingEvent.update({ where: { id: original.id }, data: { status: 'REVERSED' } });
+    await client.accountingPosting.update({ where: { id: originalPosting.id }, data: { status: 'REVERSED', reversedAt: new Date() } });
+    await client.auditLog.create({
+      data: {
+        companyId: input.companyId,
+        userId: input.actorId,
+        action: 'POST_SYSTEM_REVERSAL',
+        entityType: 'AccountingEvent',
+        entityId: event.id,
+        payload: { originalEventId: original.id, journalEntryId: journalEntry.id, payloadHash, reason },
+      },
+    });
+    return client.accountingEvent.update({
+      where: { id: event.id },
+      data: { status: 'POSTED', journalEntryId: journalEntry.id },
       include: { postings: true, taxTransactions: true, lines: true },
     });
   }

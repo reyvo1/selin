@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { AuthUser } from '../auth/auth.types';
 import { decodeCursor, parsePageLimit, toCursorPage } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateDepartmentDto, CreateEmployeeAssignmentDto, CreateEmployeeDto, CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreatePositionDto, ReviewHrRequestDto, ReviewOvertimeRequestDto, UpdateEmployeeDto } from './dto/hr.dto';
+import { CreateDepartmentDto, CreateEmployeeAssignmentDto, CreateEmployeeDto, CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreatePositionDto, ReviewHrRequestDto, ReviewOvertimeRequestDto, UpdateEmployeeDto, UpdateDepartmentDto } from './dto/hr.dto';
 
 type DbClient = Prisma.TransactionClient | PrismaService;
 type TenantScope = { companyId: string; branchId: string };
@@ -230,7 +230,7 @@ export class HrService {
     return this.prisma.$transaction(async (tx) => {
       await this.assertDepartment(tx, user, scope, dto.parentId);
       const department = await tx.department.create({
-        data: { companyId: scope.companyId, code: dto.code, name: dto.name, parentId: dto.parentId },
+        data: { companyId: scope.companyId, code: dto.code.trim().toUpperCase(), name: dto.name.trim(), parentId: dto.parentId, costCenterId: dto.costCenterId?.trim() || undefined },
       });
       await tx.auditLog.create({
         data: {
@@ -243,6 +243,88 @@ export class HrService {
       });
       return department;
     });
+  }
+
+  async updateDepartment(id: string, dto: UpdateDepartmentDto, user: AuthUser) {
+    const scope = this.requireTenantScope(user);
+    await this.assertRequestedScope(this.prisma, user, scope, undefined, undefined, 'Department');
+    return this.prisma.$transaction(async (tx) => {
+      const department = await tx.department.findFirst({ where: { id, companyId: scope.companyId } });
+      if (!department) {
+        const exists = await tx.department.findUnique({ where: { id }, select: { id: true } });
+        if (exists) await this.denyTenantAccess(tx, user, scope, 'Department', id);
+        throw new NotFoundException('Departemen tidak ditemukan.');
+      }
+      if (dto.parentId !== undefined && dto.parentId === id) throw new BadRequestException('Departemen tidak dapat menjadi induk dirinya sendiri.');
+      await this.assertDepartment(tx, user, scope, dto.parentId === null ? undefined : dto.parentId);
+      const updated = await tx.department.update({
+        where: { id },
+        data: {
+          ...(dto.code !== undefined ? { code: dto.code.trim().toUpperCase() } : {}),
+          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+          ...(dto.parentId !== undefined ? { parentId: dto.parentId } : {}),
+          ...(dto.costCenterId !== undefined ? { costCenterId: dto.costCenterId?.trim() || null } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          companyId: scope.companyId,
+          userId: user.sub,
+          action: 'UPDATE_DEPARTMENT',
+          entityType: 'Department',
+          entityId: id,
+          payload: { branchId: scope.branchId },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async patchDepartment(id: string, dto: UpdateDepartmentDto, user: AuthUser) {
+    return this.updateDepartment(id, dto, user);
+  }
+
+  async deleteDepartment(id: string, user: AuthUser) {
+    const scope = this.requireTenantScope(user);
+    await this.assertRequestedScope(this.prisma, user, scope, undefined, undefined, 'Department');
+    return this.prisma.$transaction(async (tx) => {
+      const department = await tx.department.findFirst({ where: { id, companyId: scope.companyId } });
+      if (!department) {
+        const exists = await tx.department.findUnique({ where: { id }, select: { id: true } });
+        if (exists) await this.denyTenantAccess(tx, user, scope, 'Department', id);
+        throw new NotFoundException('Departemen tidak ditemukan.');
+      }
+      const [childCount, positionCount, employeeCount, assignmentCount] = await Promise.all([
+        tx.department.count({ where: { parentId: id, companyId: scope.companyId } }),
+        tx.position.count({ where: { departmentId: id, companyId: scope.companyId } }),
+        tx.employee.count({ where: { departmentId: id, companyId: scope.companyId, isActive: true } }),
+        tx.employeeAssignment.count({ where: { departmentId: id } }),
+      ]);
+      if (childCount > 0 || positionCount > 0 || employeeCount > 0 || assignmentCount > 0) {
+        throw new BadRequestException('Departemen masih dipakai oleh sub-departemen, jabatan, karyawan, atau assignment; nonaktifkan referensi terlebih dahulu.');
+      }
+      const updated = await tx.department.update({ where: { id }, data: { isActive: false } });
+      await tx.auditLog.create({
+        data: {
+          companyId: scope.companyId,
+          userId: user.sub,
+          action: 'DEACTIVATE_DEPARTMENT',
+          entityType: 'Department',
+          entityId: id,
+          payload: { branchId: scope.branchId },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async deactivateDepartment(id: string, user: AuthUser) {
+    return this.deleteDepartment(id, user);
+  }
+
+  async removeDepartment(id: string, user: AuthUser) {
+    return this.deleteDepartment(id, user);
   }
 
   async createPosition(dto: CreatePositionDto, user: AuthUser) {

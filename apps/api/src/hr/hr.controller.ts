@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Permissions } from '../auth/permissions.decorator';
-import { CreateDepartmentDto, CreateEmployeeAssignmentDto, CreateEmployeeDto, CreateLeaveTypeDto, CreatePositionDto, ReviewHrRequestDto, ReviewOvertimeRequestDto, UpdateEmployeeDto } from './dto/hr.dto';
+import { CreateDepartmentDto, CreateEmployeeAssignmentDto, CreateEmployeeDto, CreateLeaveTypeDto, CreatePositionDto, ReviewHrRequestDto, ReviewOvertimeRequestDto, UpdateEmployeeDto, UpdateDepartmentDto } from './dto/hr.dto';
 import { HrService } from './hr.service';
 
 @ApiTags('hr') @ApiBearerAuth() @Controller('hr')
@@ -42,6 +42,16 @@ import { HrService } from './hr.service';
   @Permissions('employee.manage') @Post('departments')
   department(@Body() dto: CreateDepartmentDto, @CurrentUser() user: AuthUser) {
     return this.hr.createDepartment(dto, user);
+  }
+
+  @Permissions('employee.manage') @Patch('departments/:id')
+  updateDepartment(@Param('id') id: string, @Body() dto: UpdateDepartmentDto, @CurrentUser() user: AuthUser) {
+    return this.hr.updateDepartment(id, dto, user);
+  }
+
+  @Permissions('employee.manage') @Delete('departments/:id')
+  removeDepartment(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.hr.deleteDepartment(id, user);
   }
 
   @Permissions('employee.manage') @Post('positions')

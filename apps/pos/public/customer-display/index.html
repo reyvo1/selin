@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Toko360 — Layar Pelanggan</title>
+    <!-- Customer-facing display surface, separate from the POS till. Served at /customer-display/. -->
+    <base href="/customer-display/" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <style>
+      :root { --ink: #eef4ff; --muted: #8fa3c4; --accent: #38bdf8; --ok: #4ade80; --bad: #f87171; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: #05070d; color: var(--ink);
+        font: 700 clamp(15px, 1.1vw + 10px, 22px)/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+        display: flex; flex-direction: column; overflow: hidden; text-align: center;
+      }
+      header { padding: 1.2vh 2vw .8vh; display: flex; gap: 1vw; align-items: center; justify-content: space-between; }
+      #branch { color: var(--muted); font-weight: 600; }
+      #status { font-size: .62em; padding: .35em .8em; border-radius: 999px; letter-spacing: .04em; }
+      #status.up { background: #06301d; color: var(--ok); }
+      #status.down { background: #3b0d10; color: var(--bad); }
+      #status.pending { background: #2a2410; color: #fbbf24; }
+      main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 4vw; min-height: 0; overflow: auto; }
+      #idle { color: var(--muted); }
+      #idle .big { font-size: 2.6em; color: var(--ink); display: block; margin-bottom: .2em; }
+      #display-panel { display: none; width: 100%; max-width: 900px; }
+      #display-panel.on { display: block; }
+      #d-title { font-size: 2.4em; line-height: 1.12; margin: 0 0 .4em; }
+      #d-items { list-style: none; padding: 0; margin: 0 0 .6em; text-align: left; max-height: 40vh; overflow: auto; }
+      #d-items li { display: flex; justify-content: space-between; gap: 1vw; padding: .35em 0; border-bottom: 1px solid #1a2336; font-size: .85em; }
+      #d-items .name { flex: 1; }
+      #d-items .qty { color: var(--muted); min-width: 3em; text-align: center; }
+      #d-items .price { min-width: 8em; text-align: right; color: var(--accent); }
+      #d-total { font-size: 5.4em; line-height: 1; color: var(--accent); letter-spacing: -.01em; margin-top: .2em; }
+      #d-meta { color: var(--muted); font-size: .78em; margin-top: .5em; }
+      #d-customer { color: var(--ok); font-size: 1em; margin-bottom: .3em; }
+      footer { padding: 1vh 2vw 2vh; color: var(--muted); font-size: .58em; font-weight: 600; }
+      #log { margin-top: .4em; min-height: 1.2em; font-size: .7em; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span id="branch">—</span>
+      <span id="status" class="pending">MENYAMBUNG…</span>
+    </header>
+    <main>
+      <div id="idle"><span class="big">Selamat datang</span>Layar pelanggan Toko360</div>
+      <div id="display-panel">
+        <div id="d-customer"></div>
+        <h1 id="d-title">Total belanja</h1>
+        <ul id="d-items"></ul>
+        <div id="d-total">Rp 0</div>
+        <div id="d-meta"></div>
+      </div>
+    </main>
+    <footer>
+      <div>Terima kasih telah berbelanja</div>
+      <div id="log"></div>
+    </footer>
+    <script src="./app.js"></script>
+  </body>
+</html>

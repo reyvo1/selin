@@ -4,12 +4,14 @@ import { IsArray, IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsNumber, IsObje
 
 
 export class CreateAccountDto {
+  @ApiPropertyOptional({ description: 'Gudang opsional; null berarti default level branch/company.' }) @IsOptional() @IsString() warehouseId?: string;
   @ApiProperty() @IsString() code!: string;
   @ApiProperty() @IsString() name!: string;
   @ApiProperty({ enum: ['ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE'] }) @IsIn(['ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE']) type!: 'ASSET'|'LIABILITY'|'EQUITY'|'REVENUE'|'EXPENSE';
 }
 
 export class UpdateAccountDto {
+  @ApiPropertyOptional({ description: 'Gudang opsional; null berarti default level branch/company.' }) @IsOptional() @IsString() warehouseId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
   @ApiPropertyOptional({ enum: ['ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE'] }) @IsOptional() @IsIn(['ASSET','LIABILITY','EQUITY','REVENUE','EXPENSE']) type?: 'ASSET'|'LIABILITY'|'EQUITY'|'REVENUE'|'EXPENSE';
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
@@ -23,6 +25,7 @@ enum TaxScopeDto { SALE='SALE', PURCHASE='PURCHASE', EXPENSE='EXPENSE', ASSET='A
 
 export class CreateTaxCodeDto {
   @ApiPropertyOptional({ description: 'Kompatibilitas lama; tenant tetap berasal dari token.' }) @IsOptional() @IsString() companyId?: string;
+  @ApiPropertyOptional({ description: 'Gudang opsional; null berarti default level company.' }) @IsOptional() @IsString() warehouseId?: string;
   @ApiProperty() @IsString() code!: string;
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @IsInt() @Min(1) version?: number;
   @ApiProperty() @IsString() name!: string;

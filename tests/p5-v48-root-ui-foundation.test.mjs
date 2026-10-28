@@ -45,7 +45,7 @@ test('P5 V4.11 Admin exposes every permission-visible domain and subdomain throu
   assert.match(adminShell,/data-admin-route=\{domainRoute\(item, view\)\}/);
   assert.doesNotMatch(adminShell,/adminModuleDirectory|moduleOpen|className="domainTabs/);
   assert.equal(context.rows.length,context.expectedContextualViews);
-  assert.equal(context.expectedContextualViews,70);
+  assert.equal(context.expectedContextualViews,82);
   for (const route of [
     ['master-data','bulk-labels'],
     ['manufacturing','recipes'],

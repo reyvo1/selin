@@ -7,6 +7,12 @@ Company ─ Branch ─ Warehouse ─ Inventory ─ InventoryMovement
                                   ├─ InventoryBatch
                                   └─ InventorySerial
 
+Company ─ Branch ─ CostingPolicy
+                 └─ InventoryCostState (per warehouse/product/batch/method)
+                      ├─ InventoryCostEvent ─ InventoryCostConsumption
+                      ├─ InventoryCostLayer ─ InventoryCostConsumption
+                      └─ CostingRebuildRun
+
 Supplier ─ PurchaseOrder ─ PurchaseOrderItem
                  └─ GoodsReceipt ─ GoodsReceiptItem
                  └─ PurchaseReturn / Item
@@ -59,3 +65,4 @@ Summary tables are derived and rebuildable. Source transactions and ledger remai
 - Fleet: Asset ↔ Vehicle → DeliveryTrip → DeliveryStop/DeliveryManifestItem; Vehicle → FuelTransaction/VehicleMeterReading.
 - Control: InspectionTemplate → InspectionTemplateItem; OperationalInspection → InspectionResultItem/InspectionEvidence; GatePass; OperationalConfirmation; OperationPolicy.
 - Automation: BusinessRule/EventOutbox → AutomationJob.
+- Costing: `CostingPolicy` (MOVING_AVERAGE/FIFO/LIFO) → `InventoryCostState` → append-only `InventoryCostEvent`; FIFO/LIFO consume `InventoryCostLayer` through `InventoryCostConsumption`; `CostingRebuildRun` menyimpan snapshot/backfill dengan maker-checker.

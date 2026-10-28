@@ -3,16 +3,16 @@
 ## Scope
 
 - API: **46 controllers / 532 handlers / 202 Prisma models**.
-- Admin: **15 primary workspaces / 70 contextual views**.
+- Admin: **15 primary workspaces / 90 contextual views**.
 - POS: **4 views**; Storefront: **5 views**; Employee Portal: **7 views**.
-- Static interaction inventory: **527 controls**.
+- Static interaction inventory: **625 controls**.
 
 ## Presentation authority
 
 | Surface | Files | Lines | Required semantic classes | Missing |
 |---|---:|---:|---:|---:|
-| admin | 50 | 10557 | 34 | 0 |
-| pos | 11 | 2185 | 5 | 0 |
+| admin | 73 | 15133 | 34 | 0 |
+| pos | 11 | 2232 | 5 | 0 |
 | storefront | 8 | 1129 | 30 | 0 |
 | employee-portal | 11 | 1096 | 21 | 0 |
 
@@ -20,30 +20,30 @@
 
 | Surface | Buttons | Links | Inert buttons | Inert links |
 |---|---:|---:|---:|---:|
-| admin | 399 | 2 | 0 | 0 |
-| pos | 58 | 1 | 0 | 0 |
+| admin | 494 | 4 | 0 | 0 |
+| pos | 59 | 1 | 0 | 0 |
 | storefront | 45 | 1 | 0 | 0 |
 | employee-portal | 20 | 1 | 0 | 0 |
 
 ## Admin domain/subdomain authority
 
-All **70/70** contextual destinations are source-mapped. No canonical Admin contextual domain is unmapped.
+All **90/90** contextual destinations are source-mapped. No canonical Admin contextual domain is unmapped.
 
 - **Dashboard** `/dashboard`: overview/root only
-- **Penjualan & Order** `/commerce`: `orders`, `fulfillment`, `returns`, `channels`
-- **Pembelian** `/procurement`: `requests`, `orders`, `receipts`, `supplier`
-- **Produksi** `/manufacturing`: `recipes`, `orders`
-- **Persediaan** `/inventory-control`: `overview`, `traceability`, `transfers`, `stocktake`, `returns`
+- **Penjualan & Order** `/commerce`: `orders`, `fulfillment`, `returns`, `channels`, `sales-orders`, `consignments`, `trade-ins`
+- **Pembelian** `/procurement`: `requests`, `orders`, `receipts`, `supplier`, `supplier-deposits`
+- **Produksi** `/manufacturing`: `recipes`, `orders`, `commissions`, `transfer-files`
+- **Persediaan** `/inventory-control`: `overview`, `traceability`, `transfers`, `stocktake`, `returns`, `costing`
 - **Kontrol Operasional** `/operations-control`: `inspections`, `evidence`, `gate-pass`, `delivery`
-- **Produk & Master Data** `/master-data`: `catalog`, `customers`, `products`, `pricing`, `references`, `bulk-labels`
-- **Keuangan** `/finance`: `ledger`, `tax`, `fiscal`, `payables`, `receivables`, `banking`
+- **Produk & Master Data** `/master-data`: `catalog`, `customers`, `products`, `pricing`, `references`, `bulk-labels`, `customer-groups`, `customer-regions`, `customer-deposits`
+- **Keuangan** `/finance`: `ledger`, `tax`, `fiscal`, `payables`, `receivables`, `banking`, `cheques`, `cash-flow-categories`, `opening-balance`
 - **Laporan & Analitik** `/reports`: `financial`, `operations`, `scheduled`, `owner`
 - **HRIS & Payroll** `/people`: `employees`, `attendance`, `payroll`, `compliance`
 - **Aset & Armada** `/assets-fleet`: `assets`, `maintenance`, `vehicles`, `trips`
 - **Forecast & Otomasi** `/intelligence`: `ai`, `forecast`, `automation`, `schedules`
 - **Integrasi & Notifikasi** `/integrations`: `providers`, `notifications`, `connections`, `devices`, `loyalty`, `ppob`
 - **Tenant & Organisasi** `/organization`: `organization`, `locations`, `references`
-- **Pengaturan & Akses** `/settings`: `features`, `users`, `platform`, `custom-fields`, `approvals`, `webhooks`, `ui-config`, `audit-ops`, `security`, `api-keys`, `data-governance`, `branch-sync`, `mobile-ops`, `setup`
+- **Pengaturan & Akses** `/settings`: `features`, `users`, `platform`, `custom-fields`, `approvals`, `webhooks`, `ui-config`, `audit-ops`, `security`, `api-keys`, `data-governance`, `branch-sync`, `mobile-ops`, `setup`, `printers`, `info-program`, `panduan`, `help`, `guide`, `bantuan`, `numbering`
 
 ## Capability exposure truth
 

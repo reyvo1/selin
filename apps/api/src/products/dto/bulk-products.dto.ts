@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BulkProductRowDto {
@@ -13,7 +13,7 @@ export class BulkProductRowDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) minStock?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() brandCode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() categorySlug?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() productType?: string;
+  @ApiPropertyOptional({ enum: ['PHYSICAL', 'SERVICE', 'NON_INVENTORY', 'ASSEMBLY', 'EXPENSE'] }) @IsOptional() @IsIn(['PHYSICAL', 'SERVICE', 'NON_INVENTORY', 'ASSEMBLY', 'EXPENSE']) @IsString() productType?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() trackBatch?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() trackExpiry?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() trackSerial?: boolean;

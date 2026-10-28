@@ -350,7 +350,7 @@ export class ProductsService {
     const barcode = row.barcode?.trim() || null;
     const productType = (row.productType ?? 'PHYSICAL').trim().toUpperCase();
     if (!sku || !name) throw new BadRequestException('SKU dan nama produk wajib diisi.');
-    if (!['PHYSICAL','SERVICE'].includes(productType)) throw new BadRequestException(`productType ${productType} tidak valid untuk ${sku}.`);
+    if (!['PHYSICAL','SERVICE','NON_INVENTORY','ASSEMBLY','EXPENSE'].includes(productType)) throw new BadRequestException(`productType ${productType} tidak valid untuk ${sku}.`);
     if (row.trackExpiry && !row.trackBatch) throw new BadRequestException(`Produk ${sku}: expiry membutuhkan batch.`);
     if (row.retailCeilingPrice != null && row.salePrice > row.retailCeilingPrice) throw new BadRequestException(`Produk ${sku}: harga jual melebihi HET.`);
     return { ...row, sku, name, unit, barcode, productType, brandCode: row.brandCode?.trim().toUpperCase() || null, categorySlug: row.categorySlug?.trim() || null };
@@ -436,6 +436,14 @@ export class ProductsService {
           // An empty string means "remove the photo". The validator already refused anything that
           // is not a plain http(s) URL, so this branch only ever stores text or null.
           ...(dto.imageUrl !== undefined ? { imageUrl: dto.imageUrl?.trim() || null } : {}),
+          ...(dto.datasheetUrl !== undefined ? { datasheetUrl: dto.datasheetUrl?.trim() || null } : {}),
+          ...(dto.datasheet !== undefined ? { datasheet: dto.datasheet ?? null } : {}),
+          ...(dto.datasheetAttributes !== undefined ? { datasheetAttributes: dto.datasheetAttributes ?? null } : {}),
+          ...(dto.datasheetAttachments !== undefined ? { datasheetAttachments: dto.datasheetAttachments ?? null } : {}),
+          ...(dto.datasheetSpecs !== undefined ? { datasheetSpecs: dto.datasheetSpecs ?? null } : {}),
+          ...(dto.datasheetFiles !== undefined ? { datasheetFiles: dto.datasheetFiles ?? null } : {}),
+          ...(dto.attributes !== undefined ? { attributes: dto.attributes ?? null } : {}),
+          ...(dto.attachments !== undefined ? { attachments: dto.attachments ?? null } : {}),
           ...(dto.unit !== undefined ? { unit: nextUnit } : {}),
           ...(dto.barcode !== undefined ? { barcode: dto.barcode || null } : {}),
           ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId || null } : {}),

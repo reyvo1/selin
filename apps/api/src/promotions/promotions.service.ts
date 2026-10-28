@@ -91,6 +91,23 @@ export function computeLineAwareDiscount(rule: PromoShape, subtotalValue: Prisma
       discount = new Prisma.Decimal(rule.value).mul(bundles);
       break;
     }
+    case 'TEBUS_MURAH': {
+      const buy = Math.max(1, rule.buyQuantity ?? 1);
+      const get = Math.max(1, rule.getQuantity ?? 1);
+      const specialPrice = new Prisma.Decimal(rule.value ?? 0);
+      const groups = Math.floor(eligibleQuantity / (buy + get));
+      const tebusUnits = groups * get;
+      let remaining = tebusUnits;
+      for (const line of [...eligible].sort((a, b) => Number(a.unitPrice) - Number(b.unitPrice))) {
+        if (remaining <= 0) break;
+        const fromLine = Math.min(remaining, Math.max(0, Math.floor(line.quantity)));
+        const unitPrice = new Prisma.Decimal(line.unitPrice);
+        const perUnitDiscount = unitPrice.sub(specialPrice);
+        if (perUnitDiscount.greaterThan(0)) discount = discount.add(perUnitDiscount.mul(fromLine));
+        remaining -= fromLine;
+      }
+      break;
+    }
     default:
       throw new BadRequestException(`Tipe promo ${rule.type} belum didukung.`);
   }
@@ -154,7 +171,7 @@ export class PromotionsService {
       const row = await tx.promoRule.create({ data: {
         companyId: scope.companyId, branchId: scope.branchId, name: dto.name.trim(), code: dto.code.trim().toUpperCase(), type: dto.type,
         value: new Prisma.Decimal(dto.value), minSubtotal: new Prisma.Decimal(dto.minSubtotal ?? 0), maxDiscount: dto.maxDiscount != null ? new Prisma.Decimal(dto.maxDiscount) : null,
-        memberTier: dto.memberTier?.trim().toUpperCase() || null, channel: dto.channel ?? 'ALL', productIds: productIds.length ? productIds : Prisma.JsonNull,
+        memberTier: dto.memberTier?.trim().toUpperCase() || null, channel: dto.channel ?? 'ALL', customerRegionId: dto.customerRegionId?.trim() || null, productIds: productIds.length ? productIds : Prisma.JsonNull,
         minQuantity: dto.minQuantity, buyQuantity: dto.buyQuantity, getQuantity: dto.getQuantity, usageLimit: dto.usageLimit, perCustomerLimit: dto.perCustomerLimit,
         startsAt, endsAt, createdById: user.sub,
       } });
@@ -183,6 +200,7 @@ export class PromotionsService {
         value: dto.value != null ? new Prisma.Decimal(dto.value) : undefined, minSubtotal: dto.minSubtotal != null ? new Prisma.Decimal(dto.minSubtotal) : undefined,
         maxDiscount: dto.maxDiscount != null ? new Prisma.Decimal(dto.maxDiscount) : undefined,
         ...(dto.memberTier !== undefined ? { memberTier: dto.memberTier.trim().toUpperCase() || null } : {}),
+        ...(dto.customerRegionId !== undefined ? { customerRegionId: dto.customerRegionId.trim() || null } : {}),
         ...(dto.channel !== undefined ? { channel: dto.channel } : {}), ...(dto.productIds !== undefined ? { productIds: productIds.length ? productIds : Prisma.JsonNull } : {}),
         ...(dto.minQuantity !== undefined ? { minQuantity: dto.minQuantity } : {}), ...(dto.buyQuantity !== undefined ? { buyQuantity: dto.buyQuantity } : {}),
         ...(dto.getQuantity !== undefined ? { getQuantity: dto.getQuantity } : {}), ...(dto.usageLimit !== undefined ? { usageLimit: dto.usageLimit } : {}),
@@ -236,6 +254,12 @@ export class PromotionsService {
       const actualTier = await this.customerTier(client, scope, customerId);
       if (!actualTier) throw new BadRequestException(`Promo ${normalizedCode} khusus tier ${rule.memberTier} dan membutuhkan pelanggan.`);
       if (actualTier.toUpperCase() !== rule.memberTier.toUpperCase()) throw new BadRequestException(`Promo ${normalizedCode} khusus tier ${rule.memberTier}; tier pelanggan saat ini ${actualTier}.`);
+    }
+    if (rule.customerRegionId) {
+      const customerRegionId = customerId
+        ? (await client.customer.findFirst({ where: { id: customerId, companyId: scope.companyId }, select: { customerRegionId: true } }))?.customerRegionId ?? null
+        : null;
+      if (!customerRegionId || customerRegionId !== rule.customerRegionId) throw new BadRequestException(`Promo ${normalizedCode} khusus wilayah pelanggan tertentu.`);
     }
     await this.assertQuota(client, rule, customerId);
     const scopedProducts = productIdsOf(rule.productIds);

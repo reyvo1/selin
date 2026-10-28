@@ -61,6 +61,15 @@ export default function PlatformControlView({token,mode}:Props){
   const [webhookForm,setWebhookForm]=useState({name:'',url:'',events:'order.created'});
   const [policyForm,setPolicyForm]=useState({code:'',name:'',entityType:'PURCHASE_REQUEST',steps:'[{"roles":["OWNER"]}]'});
   const [schemaForm,setSchemaForm]=useState({code:'admin.navigation',surface:'admin',version:1,schema:'{"domainViews":[]}'});
+  const [migrationEntity, setMigrationEntity] = useState('products');
+  const [migrationRows, setMigrationRows] = useState('[\n  { "sku": "SKU-001", "name": "Produk Contoh", "unit": "pcs", "costPrice": 1000, "salePrice": 1500 }\n]');
+  const [migrationResult, setMigrationResult] = useState<any>(null);
+  const [migrationPreview, setMigrationPreview] = useState<any>(null);
+  const [migrationCutover, setMigrationCutover] = useState<any>(null);
+  const [migrationRollback, setMigrationRollback] = useState<any>(null);
+  const [emptyDataConfirmation, setEmptyDataConfirmation] = useState('');
+  const [emptyDataConfirm, setEmptyDataConfirm] = useState(false);
+  const [emptyDataResult, setEmptyDataResult] = useState<any>(null);
 
   async function refresh(){
     setMessage('');
@@ -101,6 +110,69 @@ export default function PlatformControlView({token,mode}:Props){
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Gagal memuat detail automation job.'); }
   }
 
+  async function runMigrationDryRun(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const rows = JSON.parse(migrationRows);
+      const result = await call(token, '/migration/dry-run', { method: 'POST', body: JSON.stringify({ entityType: migrationEntity, rows, dryRun: true }) });
+      setMigrationResult(result);
+      setMessage(`Dry-run ${migrationEntity}: ${(result as any).valid}/${(result as any).total} valid.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal menjalankan dry-run migrasi');
+    }
+  }
+  async function runMigrationPreview() {
+    try {
+      const rows = JSON.parse(migrationRows);
+      const result = await call(token, '/migration/preview', { method: 'POST', body: JSON.stringify({ entityType: migrationEntity, rows, dryRun: true }) });
+      setMigrationPreview(result);
+      setMessage(`Preview ${migrationEntity}: ${(result as any).conflicts?.length ?? 0} konflik.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal preview migrasi');
+    }
+  }
+  async function runMigrationCutoverCheck() {
+    try {
+      const rows = JSON.parse(migrationRows);
+      const result = await call(token, '/migration/cutover-check', { method: 'POST', body: JSON.stringify({ entityType: migrationEntity, rows, dryRun: true }) });
+      setMigrationCutover(result);
+      setMessage((result as any).ready ? 'Cutover siap.' : `Cutover belum siap: ${(result as any).reasons.join(', ')}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal cek cutover');
+    }
+  }
+  async function runMigrationCutover() {
+    try {
+      const rows = JSON.parse(migrationRows);
+      const result = await call(token, '/migration/cutover', { method: 'POST', body: JSON.stringify({ entityType: migrationEntity, rows, dryRun: false }) });
+      setMigrationCutover(result);
+      setMessage((result as any).cutover ? `Cutover selesai: ${(result as any).created} dibuat, ${(result as any).updated} diperbarui.` : `Cutover belum siap: ${((result as any).reasons ?? []).join(', ')}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal cutover migrasi');
+    }
+  }
+  async function runMigrationRollbackCheck() {
+    try {
+      const rows = JSON.parse(migrationRows);
+      const result = await call(token, '/migration/rollback-check', { method: 'POST', body: JSON.stringify({ entityType: migrationEntity, rows, dryRun: true }) });
+      setMigrationRollback(result);
+      setMessage((result as any).ready ? 'Rollback siap.' : `Rollback belum siap: ${(result as any).reasons.join(', ')}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal cek rollback');
+    }
+  }
+  async function emptyNonProductionData(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const result = await call(token, '/platform/empty-data', { method: 'POST', body: JSON.stringify({ confirmation: emptyDataConfirmation, confirm: emptyDataConfirm }) });
+      setEmptyDataResult(result);
+      setMessage('Data non-produksi berhasil dikosongkan.');
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Gagal mengosongkan data non-produksi');
+    }
+  }
+
   async function saveSetting(event:FormEvent){event.preventDefault();try{await call(token,'/platform/settings',{method:'POST',body:JSON.stringify({namespace:settingForm.namespace,key:settingForm.key,value:parseJson(settingForm.value),isSecret:settingForm.isSecret})});setSettingForm({...settingForm,key:'',value:'{}'});await refresh();setMessage('System setting disimpan.');}catch(error){setMessage(error instanceof Error?error.message:'Gagal menyimpan setting');}}
   async function createField(event:FormEvent){event.preventDefault();try{await call(token,'/platform/custom-fields',{method:'POST',body:JSON.stringify(fieldForm)});setFieldForm({...fieldForm,key:'',label:''});await refresh();setMessage('Custom field dibuat.');}catch(error){setMessage(error instanceof Error?error.message:'Gagal membuat custom field');}}
   async function setFieldValue(event:FormEvent){event.preventDefault();try{const definition=fields.find((row)=>row.id===fieldValueForm.definitionId);if(!definition)throw new Error('Pilih definisi custom field.');if(!fieldValueForm.entityId.trim())throw new Error('Entity ID wajib diisi.');await call(token,'/platform/custom-field-values',{method:'POST',body:JSON.stringify({definitionId:definition.id,entityType:definition.entityType,entityId:fieldValueForm.entityId.trim(),value:parseJson(fieldValueForm.value,'')})});setFieldValueForm((current)=>({...current,entityId:'',value:'""'}));setMessage('Nilai custom field tersimpan untuk entitas target.');}catch(error){setMessage(error instanceof Error?error.message:'Gagal menyimpan nilai custom field');}}
@@ -135,6 +207,31 @@ export default function PlatformControlView({token,mode}:Props){
         </form>
       </Panel>
       <Panel eyebrow="SETTINGS" title="Setting Aktif"><Table head={['Namespace','Key','Value','Scope']} rows={settings.map((row)=>[row.namespace,<strong>{row.key}</strong>,<code>{typeof row.value==='string'?row.value:pretty(row.value)}</code>,row.branchId?'BRANCH':'COMPANY'])} empty="Belum ada system setting."/></Panel>
+      <Panel eyebrow="MIGRATION DRY-RUN" title="Validasi Import IPOS" badge="tanpa mutasi DB">
+        <form className="formStack" onSubmit={runMigrationDryRun}>
+          <label>Entity type<select value={migrationEntity} onChange={(e) => setMigrationEntity(e.target.value)}>
+            <option value="products">products</option>
+            <option value="customers">customers</option>
+            <option value="suppliers">suppliers</option>
+            <option value="categories">categories</option>
+          </select></label>
+          <label>Rows JSON<textarea required rows={8} value={migrationRows} onChange={(e) => setMigrationRows(e.target.value)} /></label>
+          <div className="actionRow"><button disabled={!canAll('platform.configure')}>Jalankan dry-run</button><button className="secondary" disabled={!canAll('platform.configure')} type="button" onClick={() => void runMigrationPreview()}>Cek konflik DB</button><button className="secondary" disabled={!canAll('platform.configure')} type="button" onClick={() => void runMigrationCutoverCheck()}>Cek kesiapan cutover</button><button className="secondary" disabled={!canAll('platform.configure')} type="button" onClick={() => void runMigrationCutover()}>Jalankan cutover</button><button className="secondary" disabled={!canAll('platform.configure')} type="button" onClick={() => void runMigrationRollbackCheck()}>Cek kesiapan rollback</button></div>
+        </form>
+        {migrationResult && <div className="notice">Total {migrationResult.total}, valid {migrationResult.valid}, invalid {migrationResult.invalid}. {migrationResult.errors?.length ? migrationResult.errors.map((e: any) => `${e.index}:${e.field} ${e.message}`).join(' | ') : 'Tidak ada error.'}</div>}
+        {migrationPreview?.conflicts?.length ? <div className="notice">Konflik DB: {migrationPreview.conflicts.map((e: any) => `${e.index}:${e.field} ${e.message}`).join(' | ')}</div> : null}
+        {migrationCutover && <div className="notice">Cutover: {migrationCutover.cutover ? `checkpoint ${migrationCutover.checkpointId}; created ${migrationCutover.created}, updated ${migrationCutover.updated}` : (migrationCutover.reasons ?? []).join(' | ')}</div>}
+        {migrationRollback && <div className="notice">Rollback: {migrationRollback.ready ? 'siap' : (migrationRollback.reasons ?? []).join(' | ')}</div>}
+      </Panel>
+      <Panel eyebrow="KOSONGKAN DATA (NON-PRODUKSI)" title="Reset Data Demo" badge="environment guard aktif">
+        <p className="sectionHelp">Hanya tersedia pada environment non-production. Semua data bisnis akan dihapus; tenant inti, user, role, permission, dan konfigurasi dipertahankan. Ketik persis <strong>KOSONGKAN DATA NON-PRODUKSI</strong> dan centang konfirmasi.</p>
+        <form className="formStack" onSubmit={emptyNonProductionData}>
+          <label>Konfirmasi<input required value={emptyDataConfirmation} onChange={(e) => setEmptyDataConfirmation(e.target.value)} placeholder="KOSONGKAN DATA NON-PRODUKSI" /></label>
+          <label className="checkRow"><input type="checkbox" checked={emptyDataConfirm} onChange={(e) => setEmptyDataConfirm(e.target.checked)} /><span>Saya memahami data non-produksi akan dihapus.</span></label>
+          <button disabled={!canAll('platform.configure') || emptyDataConfirmation !== 'KOSONGKAN DATA NON-PRODUKSI' || !emptyDataConfirm}>Kosongkan data non-produksi</button>
+        </form>
+        {emptyDataResult && <div className="notice">Tabel dikosongkan: {Array.isArray(emptyDataResult.tablesCleared) ? emptyDataResult.tablesCleared.length : 0}. {emptyDataResult.message}</div>}
+      </Panel>
     </>}
 
     {mode==='custom-fields'&&<>

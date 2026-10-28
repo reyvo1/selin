@@ -109,6 +109,8 @@ POST   /api/v1/hr/employees
 PATCH  /api/v1/hr/employees/{id}
 GET    /api/v1/hr/departments?companyId=
 POST   /api/v1/hr/departments
+PATCH  /api/v1/hr/departments/{id}
+DELETE /api/v1/hr/departments/{id}
 GET    /api/v1/hr/positions?companyId=
 POST   /api/v1/hr/positions
 ```

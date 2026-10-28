@@ -8,12 +8,16 @@ Kerjakan work item Toko360 berikut pada repository ini. Jangan membangun ulang m
 - Modul: accounting-core
 - Wave: W3
 - Risk: CRITICAL
+- Phase saat ini: `IMPLEMENTATION` (sejak 2026-10-22)
 - Work item file: work-items/active/T360-20261021-134133-saldo-awal-dan-tutup-tahun.json
 
 ## Design (ACCEPTED)
 
-- ADR: `docs/adr/ADR-T360-20261021-134133-OPENING-BALANCE-CUTOVER.md` (status ACCEPTED 2026-10-21; implementasi menunggu fondasi costing).
+- ADR: `docs/adr/ADR-T360-20261021-134133-OPENING-BALANCE-CUTOVER.md` (status ACCEPTED 2026-10-21; fondasi costing sudah diverifikasi).
 - Baca ADR sebelum mengubah schema atau service; keputusan varian, idempotency, dan cutover ada di sana.
+- Fondasi 2026-10-22 sudah ada di `accounting-core.service.ts`: `postSystemJournal` dan `postReversal`; jangan membuat jalur jurnal sistem kedua.
+- Schema/migration enam model opening sudah ada dan lulus SQLite rehearsal, parity, serta baseline PostgreSQL.
+- Service staging/approval dan posting GL sudah ada di `apps/api/src/opening-balance/` (CSV dry-run, validasi STOCK/AR/AP/GL, approval maker-checker, permission, feature flag, pagination, audit, idempotency, `postSystemJournal` untuk GL) dan runtime test 13/13 PASS. Belum ada posting AR/AP/STOCK, reversal batch posted, settlement, cutover gate, atau year-end close. Lanjutkan dari reversal GL lalu posting AR/AP.
 
 ## Instruksi wajib
 1. Baca docs/DEVELOPMENT-KIT.md, docs/DEVELOPMENT-WORKFLOW.md, work item, dan dokumen sumbernya.

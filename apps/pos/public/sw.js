@@ -25,7 +25,7 @@ self.addEventListener('fetch', (event) => {
   // HTML, and the offline fallback below then served the kiosk as the till. Only the shell itself is
   // cached, and only under its own path; the device screens have their own caching rules and are left
   // alone here.
-  const isDeviceScreen = url.pathname.startsWith('/kiosk') || url.pathname.startsWith('/stock-count');
+  const isDeviceScreen = url.pathname.startsWith('/kiosk') || url.pathname.startsWith('/stock-count') || url.pathname.startsWith('/customer-display');
   if (isDeviceScreen) return;
 
   if (request.mode === 'navigate') {

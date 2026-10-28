@@ -402,6 +402,69 @@ export class ReportsService {
     };
   }
 
+  async worksheet(
+    user: AuthUser,
+    fromValue?: string,
+    toValue?: string,
+    requestedCompanyId?: string,
+    requestedBranchId?: string,
+  ) {
+    const scope = this.requireTenantScope(user);
+    await this.assertRequestedScope(this.prisma, user, scope, requestedCompanyId, requestedBranchId, 'WorksheetReport');
+    const { from, to } = await this.reportRange(scope, fromValue, toValue);
+    const rows = await this.accountActivity(scope, from, to);
+    const mapped = rows.map((row) => {
+      const trialDebit = Number(row.debit);
+      const trialCredit = Number(row.credit);
+      // Foundation: adjustment columns are reserved for explicit adjusting
+      // entries; until a dedicated adjustment ledger exists they remain zero so
+      // the adjusted trial balance equals the posted trial balance.
+      const adjustmentDebit = 0;
+      const adjustmentCredit = 0;
+      const adjustedDebit = trialDebit + adjustmentDebit;
+      const adjustedCredit = trialCredit + adjustmentCredit;
+      return {
+        accountId: row.id,
+        code: row.code,
+        name: row.name,
+        type: row.type,
+        trialDebit,
+        trialCredit,
+        adjustmentDebit,
+        adjustmentCredit,
+        adjustedDebit,
+        adjustedCredit,
+        normalBalance: Number(row.balance),
+      };
+    });
+    const totalTrialDebit = rows.reduce((sum, row) => sum.add(row.debit), new Prisma.Decimal(0));
+    const totalTrialCredit = rows.reduce((sum, row) => sum.add(row.credit), new Prisma.Decimal(0));
+    const totalAdjustmentDebit = new Prisma.Decimal(0);
+    const totalAdjustmentCredit = new Prisma.Decimal(0);
+    const totalAdjustedDebit = totalTrialDebit.add(totalAdjustmentDebit);
+    const totalAdjustedCredit = totalTrialCredit.add(totalAdjustmentCredit);
+    return {
+      from,
+      to,
+      companyId: scope.companyId,
+      branchId: scope.branchId,
+      rows: mapped,
+      totals: {
+        trialDebit: Number(totalTrialDebit),
+        trialCredit: Number(totalTrialCredit),
+        adjustmentDebit: Number(totalAdjustmentDebit),
+        adjustmentCredit: Number(totalAdjustmentCredit),
+        adjustedDebit: Number(totalAdjustedDebit),
+        adjustedCredit: Number(totalAdjustedCredit),
+      },
+      totalDebit: Number(totalAdjustedDebit),
+      totalCredit: Number(totalAdjustedCredit),
+      difference: Number(totalAdjustedDebit.sub(totalAdjustedCredit)),
+      balanced: totalAdjustedDebit.equals(totalAdjustedCredit),
+      source: 'POSTED_JOURNAL',
+    };
+  }
+
   async balanceSheet(
     user: AuthUser,
     asOfValue?: string,
@@ -1192,6 +1255,93 @@ export class ReportsService {
       .sort((a, b) => b.monetary - a.monetary)
       .slice(0, limit);
     return { companyId: scope.companyId, branchId: scope.branchId, days, items };
+  }
+
+  async depositReport(user: AuthUser, fromValue?: string, toValue?: string) {
+    const scope = this.requireTenantScope(user);
+    const { from, to } = await this.reportRange(scope, fromValue, toValue);
+
+    const [customerDeposits, supplierDeposits] = await Promise.all([
+      this.prisma.customerDeposit.findMany({
+        where: {
+          companyId: scope.companyId,
+          branchId: scope.branchId,
+          createdAt: { gte: from, lte: to },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 500,
+      }),
+      this.prisma.supplierDeposit.findMany({
+        where: {
+          companyId: scope.companyId,
+          branchId: scope.branchId,
+          createdAt: { gte: from, lte: to },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 500,
+      }),
+    ]);
+
+    const customerIds = [...new Set(customerDeposits.map((deposit) => deposit.customerId))];
+    const supplierIds = [...new Set(supplierDeposits.map((deposit) => deposit.supplierId))];
+    const [customersMaster, suppliersMaster] = await Promise.all([
+      customerIds.length ? this.prisma.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, name: true } }) : Promise.resolve([] as any),
+      supplierIds.length ? this.prisma.supplier.findMany({ where: { id: { in: supplierIds } }, select: { id: true, code: true, name: true } }) : Promise.resolve([] as any),
+    ]);
+    const customerNameById = new Map(customersMaster.map((customer: { id: string; name: string }) => [customer.id, customer.name]));
+    const supplierNameById = new Map(suppliersMaster.map((supplier: { id: string; code: string; name: string }) => [supplier.id, `${supplier.code} · ${supplier.name}`]));
+
+    const customers = customerDeposits.map((deposit) => ({
+      id: deposit.id,
+      partyType: 'CUSTOMER' as const,
+      partyId: deposit.customerId,
+      partyName: customerNameById.get(deposit.customerId) ?? deposit.customerId,
+      amount: Number(deposit.amount),
+      balance: Number(deposit.balance),
+      status: deposit.status,
+      appliedAmount: Number(new Prisma.Decimal(deposit.amount).sub(deposit.balance)),
+      createdAt: deposit.createdAt,
+      updatedAt: deposit.updatedAt,
+      movementType: deposit.status === 'APPLIED' ? 'APPLIED' : 'OPEN',
+    }));
+
+    const suppliers = supplierDeposits.map((deposit) => ({
+      id: deposit.id,
+      partyType: 'SUPPLIER' as const,
+      partyId: deposit.supplierId,
+      partyName: supplierNameById.get(deposit.supplierId) ?? deposit.supplierId,
+      amount: Number(deposit.amount),
+      balance: Number(deposit.balance),
+      status: deposit.status,
+      appliedAmount: Number(new Prisma.Decimal(deposit.amount).sub(deposit.balance)),
+      createdAt: deposit.createdAt,
+      updatedAt: deposit.updatedAt,
+      movementType: deposit.status === 'APPLIED' ? 'APPLIED' : 'OPEN',
+    }));
+
+    const summarize = (rows: Array<{ amount: number; balance: number; status: string }>) => ({
+      count: rows.length,
+      totalAmount: rows.reduce((sum, row) => sum + row.amount, 0),
+      totalBalance: rows.reduce((sum, row) => sum + row.balance, 0),
+      openCount: rows.filter((row) => row.status === 'OPEN').length,
+      appliedCount: rows.filter((row) => row.status === 'APPLIED').length,
+    });
+
+    return {
+      companyId: scope.companyId,
+      branchId: scope.branchId,
+      from,
+      to,
+      customers,
+      suppliers,
+      movements: [...customers, ...suppliers].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+      summary: {
+        customers: summarize(customers),
+        suppliers: summarize(suppliers),
+        totalBalance: customers.reduce((sum, row) => sum + row.balance, 0) + suppliers.reduce((sum, row) => sum + row.balance, 0),
+      },
+      source: 'CUSTOMER_SUPPLIER_DEPOSITS',
+    };
   }
 
   // T360-20260829 value pack 2 — unduh hasil export CSV milik company/branch sendiri.

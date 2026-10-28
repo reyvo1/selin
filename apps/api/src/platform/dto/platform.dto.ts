@@ -3,6 +3,15 @@ import { Allow, IsArray, IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString,
 
 export class UpdateTenantProfileDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MinLength(2) name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() legalName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() taxIdNumber?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() address?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUrl({ require_tld: false }) website?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUrl({ require_tld: false }) logoUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() brandColor?: string;
+  @ApiPropertyOptional() @IsOptional() @Allow() branding?: unknown;
   @ApiPropertyOptional({ example: 'Asia/Makassar' }) @IsOptional() @IsString() @MinLength(3) timezone?: string;
   @ApiPropertyOptional({ example: 'IDR' }) @IsOptional() @IsString() @Matches(/^[A-Za-z]{3}$/) currency?: string;
 }
@@ -122,6 +131,28 @@ export class DelegateApprovalDto {
 export class DecideApprovalDto {
   @ApiProperty({ enum: ['APPROVED','REJECTED'] }) @IsIn(['APPROVED','REJECTED']) status!: 'APPROVED' | 'REJECTED';
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+}
+
+export class EmptyNonProductionDataDto {
+  @ApiProperty({ description: 'Frase konfirmasi eksplisit. Harus persis: KOSONGKAN DATA NON-PRODUKSI' })
+  @IsString()
+  @Matches(/^KOSONGKAN DATA NON-PRODUKSI$/)
+  confirmation!: string;
+
+  @ApiPropertyOptional({ description: 'Konfirmasi boolean tambahan dari UI.' })
+  @IsOptional()
+  @IsBoolean()
+  confirm?: boolean;
+
+  @ApiPropertyOptional({ description: 'Kompatibilitas lama; company tetap berasal dari token.' })
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
+  @ApiPropertyOptional({ description: 'Opsional branch token; branch lain ditolak.' })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
 }
 
 export class CreateUiSchemaDto {

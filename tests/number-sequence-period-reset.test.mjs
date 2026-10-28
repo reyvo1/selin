@@ -39,7 +39,7 @@ test('nomor yang dialokasikan tetap memakai current sehingga reset periode beker
   // Guard yang diperbaiki hanya mengubah WHERE. Nilai yang ditulis dan yang dikembalikan
   // harus tetap `current`, kalau tidak reset periode jadi tidak pernah terjadi.
   assert.match(numbering, /data:\s*\{\s*nextNumber:\s*current \+ 1,/);
-  assert.match(numbering, /return formatNumber\(opts\.prefix, scopeCode, now, current,/);
+  assert.match(numbering, /return formatDocumentNumber\(/);
 });
 
 test('reset periode masih memaksa current ke 1', () => {

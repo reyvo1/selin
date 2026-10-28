@@ -35,7 +35,7 @@ type Employee = {
   isActive: boolean;
 };
 
-type Department = { id: string; code: string; name: string; parentId?: string | null; isActive?: boolean };
+type Department = { id: string; code: string; name: string; parentId?: string | null; costCenterId?: string | null; isActive?: boolean };
 type EmployeeAssignment = { id:string; employeeId:string; departmentId?:string|null; positionId?:string|null; managerEmployeeId?:string|null; effectiveFrom:string; effectiveTo?:string|null; isPrimary:boolean };
 type Position = { id: string; departmentId?: string | null; code: string; name: string; grade?: string | null; isActive?: boolean };
 type CursorResponse<T> = { items?: T[]; nextCursor?: string | null };
@@ -89,7 +89,9 @@ export default function EmployeeMasterView({ token }: { token: string }) {
   // both read them from GET /hr/departments and GET /hr/positions. Both creates are gated
   // employee.manage, exactly like the employee form, and both were previously reachable only by
   // inserting a row by hand.
-  const [departmentForm, setDepartmentForm] = useState({ code: '', name: '', parentId: '' });
+  const [departmentForm, setDepartmentForm] = useState({ code: '', name: '', parentId: '', costCenterId: '' });
+  const [editingDepartmentId, setEditingDepartmentId] = useState<string | null>(null);
+  const [departmentEditForm, setDepartmentEditForm] = useState({ code: '', name: '', parentId: '', costCenterId: '', isActive: true });
   const [positionForm, setPositionForm] = useState({ code: '', name: '', grade: '', departmentId: '' });
   const [masterMessage, setMasterMessage] = useState('');
   const [assignmentEmployeeId, setAssignmentEmployeeId] = useState('');
@@ -164,12 +166,67 @@ export default function EmployeeMasterView({ token }: { token: string }) {
         code: departmentForm.code.trim(),
         name: departmentForm.name.trim(),
         parentId: departmentForm.parentId || undefined,
+        costCenterId: departmentForm.costCenterId.trim() || undefined,
       }) });
-      setDepartmentForm({ code: '', name: '', parentId: '' });
+      setDepartmentForm({ code: '', name: '', parentId: '', costCenterId: '' });
       await refresh();
       setMasterMessage('Departemen berhasil dibuat.');
     } catch (error) { setMasterMessage(error instanceof Error ? error.message : 'Departemen gagal dibuat.'); }
     finally { setBusy(false); }
+  }
+
+  async function startEditDepartment(department: Department) {
+    setEditingDepartmentId(department.id);
+    setDepartmentEditForm({
+      code: department.code,
+      name: department.name,
+      parentId: department.parentId ?? '',
+      costCenterId: department.costCenterId ?? '',
+      isActive: department.isActive !== false,
+    });
+    setMasterMessage('');
+  }
+
+  async function saveDepartment(event: FormEvent) {
+    event.preventDefault();
+    if (!editingDepartmentId || busy) return;
+    setBusy(true);
+    setMasterMessage('');
+    try {
+      await api(`/hr/departments/${editingDepartmentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          code: departmentEditForm.code.trim(),
+          name: departmentEditForm.name.trim(),
+          parentId: departmentEditForm.parentId || null,
+          costCenterId: departmentEditForm.costCenterId.trim() || null,
+          isActive: departmentEditForm.isActive,
+        }),
+      });
+      setEditingDepartmentId(null);
+      await refresh();
+      setMasterMessage('Departemen berhasil diperbarui.');
+    } catch (error) {
+      setMasterMessage(error instanceof Error ? error.message : 'Departemen gagal diperbarui.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deactivateDepartment(department: Department) {
+    if (busy) return;
+    setBusy(true);
+    setMasterMessage('');
+    try {
+      await api(`/hr/departments/${department.id}`, { method: 'DELETE' });
+      if (editingDepartmentId === department.id) setEditingDepartmentId(null);
+      await refresh();
+      setMasterMessage('Departemen dinonaktifkan.');
+    } catch (error) {
+      setMasterMessage(error instanceof Error ? error.message : 'Departemen gagal dinonaktifkan.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function createPosition(event: FormEvent) {
@@ -439,12 +496,30 @@ export default function EmployeeMasterView({ token }: { token: string }) {
         {/* POST /hr/departments dan POST /hr/positions keduanya di gate employee.manage, sama
             seperti form karyawan, jadi form disembunyikan utuh bila token tidak memegangnya. */}
         {canManageEmployees && <div className="grid2">
-          <form onSubmit={createDepartment}><h4>Tambah departemen</h4><label>Kode<input required value={departmentForm.code} onChange={(event) => setDepartmentForm({ ...departmentForm, code: event.target.value })} /></label><label>Nama<input required value={departmentForm.name} onChange={(event) => setDepartmentForm({ ...departmentForm, name: event.target.value })} /></label><label>Induk (opsional)<select value={departmentForm.parentId} onChange={(event) => setDepartmentForm({ ...departmentForm, parentId: event.target.value })}><option value="">-</option>{departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><button disabled={busy}>Simpan departemen</button></form>
+          <form onSubmit={createDepartment}><h4>Tambah departemen</h4><label>Kode<input required value={departmentForm.code} onChange={(event) => setDepartmentForm({ ...departmentForm, code: event.target.value })} /></label><label>Nama<input required value={departmentForm.name} onChange={(event) => setDepartmentForm({ ...departmentForm, name: event.target.value })} /></label><label>Induk (opsional)<select value={departmentForm.parentId} onChange={(event) => setDepartmentForm({ ...departmentForm, parentId: event.target.value })}><option value="">-</option>{departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label>Cost Center (opsional)<input value={departmentForm.costCenterId} onChange={(event) => setDepartmentForm({ ...departmentForm, costCenterId: event.target.value })} placeholder="dimensions.costCenterId" /></label><button disabled={busy}>Simpan departemen</button></form>
           <form onSubmit={createPosition}><h4>Tambah jabatan</h4><label>Kode<input required value={positionForm.code} onChange={(event) => setPositionForm({ ...positionForm, code: event.target.value })} /></label><label>Nama<input required value={positionForm.name} onChange={(event) => setPositionForm({ ...positionForm, name: event.target.value })} /></label><label>Grade (opsional)<input value={positionForm.grade} onChange={(event) => setPositionForm({ ...positionForm, grade: event.target.value })} /></label><label>Departemen (opsional)<select value={positionForm.departmentId} onChange={(event) => setPositionForm({ ...positionForm, departmentId: event.target.value })}><option value="">-</option>{departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><button disabled={busy}>Simpan jabatan</button></form>
         </div>}
         {masterMessage && <div className="notice sectionBlock">{masterMessage}</div>}
+        {editingDepartmentId && canManageEmployees && (
+          <form className="formStack sectionBlock" onSubmit={saveDepartment}>
+            <h4>Edit departemen</h4>
+            <div className="grid2">
+              <label>Kode<input required value={departmentEditForm.code} onChange={(event) => setDepartmentEditForm({ ...departmentEditForm, code: event.target.value })} /></label>
+              <label>Nama<input required value={departmentEditForm.name} onChange={(event) => setDepartmentEditForm({ ...departmentEditForm, name: event.target.value })} /></label>
+            </div>
+            <div className="grid2">
+              <label>Induk (opsional)<select value={departmentEditForm.parentId} onChange={(event) => setDepartmentEditForm({ ...departmentEditForm, parentId: event.target.value })}><option value="">-</option>{departments.filter((row) => row.id !== editingDepartmentId).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+              <label>Cost Center (opsional)<input value={departmentEditForm.costCenterId} onChange={(event) => setDepartmentEditForm({ ...departmentEditForm, costCenterId: event.target.value })} placeholder="dimensions.costCenterId" /></label>
+            </div>
+            <label className="checkRow"><input type="checkbox" checked={departmentEditForm.isActive} onChange={(event) => setDepartmentEditForm({ ...departmentEditForm, isActive: event.target.checked })} /> Aktif</label>
+            <div className="inlineActions">
+              <button disabled={busy}>Simpan perubahan</button>
+              <button type="button" className="secondary" disabled={busy} onClick={() => setEditingDepartmentId(null)}>Batal</button>
+            </div>
+          </form>
+        )}
         <div className="grid2">
-          <Table head={['Kode', 'Departemen', 'Induk']} rows={departments.map((row) => [row.code, row.name, row.parentId ? (departments.find((item) => item.id === row.parentId)?.name ?? row.parentId) : '-'])} empty="Belum ada departemen." />
+          <Table head={['Kode', 'Departemen', 'Induk', 'Cost Center', 'Aksi']} rows={departments.map((row) => [row.code, row.name, row.parentId ? (departments.find((item) => item.id === row.parentId)?.name ?? row.parentId) : '-', row.costCenterId ?? '-', canManageEmployees ? <span className="inlineActions"><button type="button" className="secondary" disabled={busy} onClick={() => void startEditDepartment(row)}>Edit</button><button type="button" className="secondary" disabled={busy} onClick={() => void deactivateDepartment(row)}>Nonaktifkan</button></span> : null])} empty="Belum ada departemen." />
           <Table head={['Kode', 'Jabatan', 'Grade', 'Departemen']} rows={positions.map((row) => [row.code, row.name, row.grade ?? '-', row.departmentId ? (departments.find((item) => item.id === row.departmentId)?.name ?? row.departmentId) : '-'])} empty="Belum ada jabatan." />
         </div>
       </Panel>

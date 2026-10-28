@@ -112,6 +112,7 @@ export class GoodsReceiptsService {
       let taxTotal = new Prisma.Decimal(0), grossTotal = new Prisma.Decimal(0);
       const requestedByPoItem = new Map<string, number>();
       const prepared: Array<{ poItemId: string; productId: string; productName: string; variantId: string | null; productUnitId: string | null; unitCode: string; unitQuantity: number; damagedUnitQuantity: number; quantityFactor: number; quantityReceived: number; damaged: number; accepted: number; unitCost: Prisma.Decimal; net: Prisma.Decimal; tax: Prisma.Decimal; gross: Prisma.Decimal; taxCodeId?: string; batchNumber?: string; expiryDate?: Date; serialNumbers: string[] }> = [];
+      const warehouseTaxCodeId = await this.accounting.resolveWarehouseTaxCode(tx, scope.companyId, po.warehouseId, 'PURCHASE', new Date());
       for (const input of dto.items) {
         const poItem = po.items.find((item) => item.id === input.purchaseOrderItemId);
         if (!poItem) throw new BadRequestException(`Item PO ${input.purchaseOrderItemId} tidak ditemukan.`);
@@ -153,11 +154,12 @@ export class GoodsReceiptsService {
         const base = new Prisma.Decimal(poItem.unitCost).mul(accepted);
         const tax = await this.accounting.calculateTax(
           tx,
-          input.taxCodeId ?? poItem.product.purchaseTaxCodeId ?? undefined,
+          input.taxCodeId ?? poItem.product.purchaseTaxCodeId ?? warehouseTaxCodeId ?? undefined,
           base,
           scope.companyId,
           new Date(),
           ['PURCHASE', 'OTHER'],
+          input.taxIncluded,
         );
         taxTotal = taxTotal.add(tax.tax); grossTotal = grossTotal.add(tax.gross);
         prepared.push({
@@ -312,19 +314,21 @@ export class GoodsReceiptsService {
         net = net.add(item.subtotal); tax = tax.add(item.taxAmount); gross = gross.add(item.grossSubtotal);
         await tx.purchaseOrderItem.update({ where: { id: item.purchaseOrderItemId }, data: { receivedQty: { increment: item.acceptedQty } } });
         if (item.acceptedQty > 0) {
-          const locationStock = await depositLocationStock(tx, { warehouseId: receipt.warehouseId, productId: item.productId, quantity: item.acceptedQty });
-          const inventory = await tx.inventory.upsert({
-            where: { warehouseId_productId: { warehouseId: receipt.warehouseId, productId: item.productId } },
-            create: { warehouseId: receipt.warehouseId, productId: item.productId, quantity: item.acceptedQty, available: item.acceptedQty },
-            update: { quantity: { increment: item.acceptedQty }, available: { increment: item.acceptedQty } },
-          });
-          const movement = await tx.inventoryMovement.create({ data: {
-            warehouseId: receipt.warehouseId, productId: item.productId, locationId: locationStock.locationId, type: 'PURCHASE_RECEIPT', quantity: item.acceptedQty,
-            balanceAfter: inventory.quantity, referenceType: 'GoodsReceipt', referenceId: receipt.id,
-            occurredAt: receipt.receivedAt,
-            notes: item.quantityDamaged ? `${item.quantityDamaged} unit rusak/ditolak dan tidak masuk stok.` : dto.notes,
-          } });
-          if (costingEnabled) {
+          const isStockTracked = !['SERVICE', 'NON_INVENTORY', 'EXPENSE'].includes(item.product.productType);
+          if (isStockTracked) {
+            const locationStock = await depositLocationStock(tx, { warehouseId: receipt.warehouseId, productId: item.productId, quantity: item.acceptedQty });
+            const inventory = await tx.inventory.upsert({
+              where: { warehouseId_productId: { warehouseId: receipt.warehouseId, productId: item.productId } },
+              create: { warehouseId: receipt.warehouseId, productId: item.productId, quantity: item.acceptedQty, available: item.acceptedQty },
+              update: { quantity: { increment: item.acceptedQty }, available: { increment: item.acceptedQty } },
+            });
+            const movement = await tx.inventoryMovement.create({ data: {
+              warehouseId: receipt.warehouseId, productId: item.productId, locationId: locationStock.locationId, type: 'PURCHASE_RECEIPT', quantity: item.acceptedQty,
+              balanceAfter: inventory.quantity, referenceType: 'GoodsReceipt', referenceId: receipt.id,
+              occurredAt: receipt.receivedAt,
+              notes: item.quantityDamaged ? `${item.quantityDamaged} unit rusak/ditolak dan tidak masuk stok.` : dto.notes,
+            } });
+            if (costingEnabled) {
             await this.costing.recordReceipt(tx, {
               companyId: scope.companyId,
               branchId: receipt.warehouse.branchId,
@@ -376,6 +380,7 @@ export class GoodsReceiptsService {
               } });
             }
           }
+        }
         }
         if (item.taxCodeId && new Prisma.Decimal(item.taxAmount).greaterThan(0)) {
           const current = taxGroups.get(item.taxCodeId) ?? { base: new Prisma.Decimal(0), tax: new Prisma.Decimal(0) };

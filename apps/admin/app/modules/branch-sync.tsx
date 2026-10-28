@@ -30,6 +30,9 @@ type TransferSyncState = { transferId: string; departureRecordedAt?: string | nu
 type PendingTransfer = { transferId: string; state: 'AWAITING_DESTINATION' | 'CONVERGED' | 'DISCREPANT' | 'ABANDONED'; sourceQuantity: number; destinationQuantity?: number | null; destinationNodeId?: string | null; destinationState?: string; discrepancyReason?: string | null; updatedAt: string };
 type ContinuityBranch = { nodeId: string; code: string; name: string; role: string; state: 'UNKNOWN' | 'ONLINE' | 'DEGRADED' | 'OFFLINE' | 'SUSPENDED'; lastSeenAt?: string | null; lastSyncAt?: string | null; pending: number; deadLettered: number; unresolvedConflicts: number; reason?: string | null };
 type Consolidated = { branches: ContinuityBranch[]; totalPending: number; totalDeadLettered: number; generatedAt: string };
+type BackupRow = { id: string; nodeId: string; completedAt: string; checksum: string; sizeBytes: number; kind?: 'LOCAL' | 'CENTRAL' };
+type RestoreDrillRow = { id?: string; entityId: string; createdAt: string; payload: any };
+type AutobackupScheduleRow = { id?: string; entityId: string; createdAt: string; payload: any };
 type CapabilityRow = { flowCode: string; label: string; offlineCapable: boolean; degradedImpact?: string | null; localAuthoritative: boolean };
 type ConflictRow = { id: string; eventId: string; aggregateType: string; aggregateId: string; baseVersion: number; remoteVersion?: number | null; strategy: 'PENDING' | 'KEEP_LOCAL' | 'KEEP_REMOTE' | 'MANUAL_REVIEW'; resolvedBy?: string | null; resolvedAt?: string | null };
 
@@ -66,6 +69,14 @@ export default function BranchSyncView({ token }: { token: string }) {
   // through querySelector couples the handler to markup and silently posts 0 if the selector misses.
   const [received, setReceived] = useState<Record<string, number>>({});
   const [peers, setPeers] = useState<PeerRow[]>([]);
+  const [backups, setBackups] = useState<BackupRow[]>([]);
+  const [restoreDrills, setRestoreDrills] = useState<RestoreDrillRow[]>([]);
+  const [autobackupSchedules, setAutobackupSchedules] = useState<AutobackupScheduleRow[]>([]);
+  const [backupForm, setBackupForm] = useState({ nodeId: '', completedAt: '', checksum: '', sizeBytes: 0, kind: 'LOCAL' as 'LOCAL' | 'CENTRAL' });
+  const [restoreDrillForm, setRestoreDrillForm] = useState({ nodeId: '', completedAt: '', checksum: '', sizeBytes: 0, success: true, notes: '', durationMs: 0 });
+  const [autobackupForm, setAutobackupForm] = useState({ nodeId: '', frequency: 'DAILY' as 'DAILY' | 'WEEKLY' | 'MONTHLY', localTime: '02:00', dayOfWeek: 0, dayOfMonth: 1, enabled: true, retentionCount: 7, kind: 'LOCAL' as 'LOCAL' | 'CENTRAL', name: '' });
+  const [verifyChecksum, setVerifyChecksum] = useState('');
+  const [verifyNodeId, setVerifyNodeId] = useState('');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<'CENTRAL' | 'BRANCH'>('BRANCH');
@@ -158,6 +169,151 @@ export default function BranchSyncView({ token }: { token: string }) {
   }
   useEffect(() => { void load().catch((e) => setMsg(e instanceof Error ? e.message : 'Gagal memuat status sinkronisasi')); }, [token]);
   useEffect(() => { void loadContinuity().catch((e) => setMsg(e instanceof Error ? e.message : 'Gagal memuat status kontinuitas')); }, [token]);
+  useEffect(() => { if (canManage) void loadBackups().catch((e) => setMsg(e instanceof Error ? e.message : 'Gagal memuat backup')); }, [token, canManage]);
+
+  async function loadBackups() {
+    setBackups(await req<BackupRow[]>(token, '/branch-continuity/backups'));
+    try { setRestoreDrills(await req<RestoreDrillRow[]>(token, '/branch-continuity/backups/restore-drills')); } catch {}
+    try { setAutobackupSchedules(await req<AutobackupScheduleRow[]>(token, '/branch-continuity/backups/autobackup-schedules')); } catch {}
+  }
+
+  async function recordBackup(e: FormEvent) {
+    e.preventDefault();
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      await req(token, '/branch-continuity/backups', {
+        method: 'POST',
+        body: JSON.stringify({
+          nodeId: backupForm.nodeId,
+          completedAt: backupForm.completedAt,
+          checksum: backupForm.checksum,
+          sizeBytes: Number(backupForm.sizeBytes) || 0,
+          kind: backupForm.kind,
+        }),
+      });
+      setBackupForm({ nodeId: '', completedAt: '', checksum: '', sizeBytes: 0, kind: 'LOCAL' });
+      await loadBackups();
+      setMsg('Metadata backup tercatat.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal mencatat backup');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyRestore(e: FormEvent) {
+    e.preventDefault();
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      await req(token, '/branch-continuity/backups/verify-restore', {
+        method: 'POST',
+        body: JSON.stringify({ nodeId: verifyNodeId, checksum: verifyChecksum }),
+      });
+      setMsg('Checksum restore terverifikasi.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal verifikasi restore');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function recordRestoreDrill(e: FormEvent) {
+    e.preventDefault();
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      await req(token, '/branch-continuity/backups/restore-drills', {
+        method: 'POST',
+        body: JSON.stringify({
+          nodeId: restoreDrillForm.nodeId,
+          completedAt: restoreDrillForm.completedAt,
+          checksum: restoreDrillForm.checksum,
+          sizeBytes: Number(restoreDrillForm.sizeBytes) || 0,
+          success: restoreDrillForm.success,
+          notes: restoreDrillForm.notes,
+          durationMs: Number(restoreDrillForm.durationMs) || 0,
+        }),
+      });
+      setRestoreDrillForm({ nodeId: '', completedAt: '', checksum: '', sizeBytes: 0, success: true, notes: '', durationMs: 0 });
+      await loadBackups();
+      setMsg('Restore drill tercatat.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal mencatat restore drill');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleAutobackupSchedule(row: AutobackupScheduleRow) {
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const id = row.entityId;
+      await req(token, `/branch-continuity/backups/autobackup-schedules/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ enabled: !(row.payload?.enabled ?? true) }),
+      });
+      await loadBackups();
+      setMsg('Jadwal autobackup diperbarui.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal memperbarui jadwal');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runAutobackupSchedule(row: AutobackupScheduleRow) {
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const id = row.entityId;
+      await req(token, `/branch-continuity/backups/autobackup-schedules/${id}/run-now`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setMsg('Autobackup dijalankan.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal menjalankan autobackup');
+    } finally {
+      setBusy(false);
+    }
+  }
+    async function scheduleAutobackup(e: FormEvent) {
+    e.preventDefault();
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      await req(token, '/branch-continuity/backups/autobackup-schedules', {
+        method: 'POST',
+        body: JSON.stringify({
+          nodeId: autobackupForm.nodeId,
+          frequency: autobackupForm.frequency,
+          localTime: autobackupForm.localTime,
+          dayOfWeek: Number(autobackupForm.dayOfWeek) || 0,
+          dayOfMonth: Number(autobackupForm.dayOfMonth) || 1,
+          enabled: autobackupForm.enabled,
+          retentionCount: Number(autobackupForm.retentionCount) || 7,
+          kind: autobackupForm.kind,
+          name: autobackupForm.name,
+        }),
+      });
+      setAutobackupForm({ nodeId: '', frequency: 'DAILY', localTime: '02:00', dayOfWeek: 0, dayOfMonth: 1, enabled: true, retentionCount: 7, kind: 'LOCAL', name: '' });
+      await loadBackups();
+      setMsg('Autobackup terjadwal.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal menjadwalkan autobackup');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function openDeadLetters(nodeId: string) {
     setPeersOf(null);
@@ -408,6 +564,101 @@ export default function BranchSyncView({ token }: { token: string }) {
           {canAll('integration.manage') && <button disabled={busy || !abandonReason.trim()}>Batalkan transfer</button>}
         </div>
       </form>
+    </Panel>}
+
+    {canManage && <Panel eyebrow="BACKUP METADATA" title="Backup & Restore Checksum" badge={`${backups.length} backup`}>
+      <form className="formStack" onSubmit={recordBackup}>
+        <div className="formGrid">
+          <label>Node ID<input required value={backupForm.nodeId} onChange={(e) => setBackupForm({ ...backupForm, nodeId: e.target.value })} /></label>
+          <label>Selesai pada (ISO)<input required value={backupForm.completedAt} onChange={(e) => setBackupForm({ ...backupForm, completedAt: e.target.value })} placeholder="2026-10-28T00:00:00Z" /></label>
+        </div>
+        <label>Checksum SHA-256<input required value={backupForm.checksum} onChange={(e) => setBackupForm({ ...backupForm, checksum: e.target.value })} /></label>
+        <div className="formGrid">
+          <label>Ukuran (bytes)<input type="number" min="0" value={backupForm.sizeBytes} onChange={(e) => setBackupForm({ ...backupForm, sizeBytes: Number(e.target.value) || 0 })} /></label>
+          <label>Jenis<select value={backupForm.kind} onChange={(e) => setBackupForm({ ...backupForm, kind: e.target.value as 'LOCAL' | 'CENTRAL' })}>
+            <option value="LOCAL">LOCAL</option>
+            <option value="CENTRAL">CENTRAL</option>
+          </select></label>
+        </div>
+        <div className="actionRow"><button disabled={busy}>Catat metadata backup</button></div>
+      </form>
+      <Table head={['Node', 'Selesai', 'Checksum', 'Ukuran', 'Jenis']} rows={backups.map((row) => [
+        row.nodeId,
+        new Date(row.completedAt).toLocaleString('id-ID'),
+        row.checksum.slice(0, 12),
+        `${row.sizeBytes}`,
+        row.kind ?? 'LOCAL',
+      ])} empty="Belum ada metadata backup" />
+      <form className="formStack" onSubmit={verifyRestore}>
+        <div className="formGrid">
+          <label>Node ID<input required value={verifyNodeId} onChange={(e) => setVerifyNodeId(e.target.value)} /></label>
+          <label>Checksum<input required value={verifyChecksum} onChange={(e) => setVerifyChecksum(e.target.value)} /></label>
+        </div>
+        <div className="actionRow"><button className="secondary" disabled={busy}>Verifikasi checksum restore</button></div>
+      </form>
+    </Panel>}
+
+    {canManage && <Panel eyebrow="RESTORE DRILL" title="Restore Drill" badge={`${restoreDrills.length} drill`}>
+      <form className="formStack" onSubmit={recordRestoreDrill}>
+        <div className="formGrid">
+          <label>Node ID<input required value={restoreDrillForm.nodeId} onChange={(e) => setRestoreDrillForm({ ...restoreDrillForm, nodeId: e.target.value })} /></label>
+          <label>Selesai pada (ISO)<input required value={restoreDrillForm.completedAt} onChange={(e) => setRestoreDrillForm({ ...restoreDrillForm, completedAt: e.target.value })} placeholder="2026-10-28T00:00:00Z" /></label>
+        </div>
+        <label>Checksum SHA-256<input required value={restoreDrillForm.checksum} onChange={(e) => setRestoreDrillForm({ ...restoreDrillForm, checksum: e.target.value })} /></label>
+        <div className="formGrid">
+          <label>Ukuran (bytes)<input type="number" min="0" value={restoreDrillForm.sizeBytes} onChange={(e) => setRestoreDrillForm({ ...restoreDrillForm, sizeBytes: Number(e.target.value) || 0 })} /></label>
+          <label>Durasi (ms)<input type="number" min="0" value={restoreDrillForm.durationMs} onChange={(e) => setRestoreDrillForm({ ...restoreDrillForm, durationMs: Number(e.target.value) || 0 })} /></label>
+        </div>
+        <label>Catatan<input value={restoreDrillForm.notes} onChange={(e) => setRestoreDrillForm({ ...restoreDrillForm, notes: e.target.value })} /></label>
+        <label className="checkRow"><input type="checkbox" checked={restoreDrillForm.success} onChange={(e) => setRestoreDrillForm({ ...restoreDrillForm, success: e.target.checked })} /><span>Restore drill berhasil</span></label>
+        <div className="actionRow"><button disabled={busy}>Catat restore drill</button></div>
+      </form>
+      <Table head={['Node', 'Waktu', 'Checksum', 'Sukses']} rows={restoreDrills.map((row) => [
+        row.entityId,
+        new Date(row.createdAt).toLocaleString('id-ID'),
+        (row.payload?.checksum ?? '').slice(0, 12),
+        String(row.payload?.success ?? true),
+      ])} empty="Belum ada restore drill" />
+    </Panel>}
+
+    {canManage && <Panel eyebrow="AUTOBACKUP" title="Autobackup Scheduling" badge={`${autobackupSchedules.length} jadwal`}>
+      <form className="formStack" onSubmit={scheduleAutobackup}>
+        <div className="formGrid">
+          <label>Node ID<input required value={autobackupForm.nodeId} onChange={(e) => setAutobackupForm({ ...autobackupForm, nodeId: e.target.value })} /></label>
+          <label>Nama<input value={autobackupForm.name} onChange={(e) => setAutobackupForm({ ...autobackupForm, name: e.target.value })} /></label>
+        </div>
+        <div className="formGrid">
+          <label>Frekuensi<select value={autobackupForm.frequency} onChange={(e) => setAutobackupForm({ ...autobackupForm, frequency: e.target.value as 'DAILY' | 'WEEKLY' | 'MONTHLY' })}>
+            <option value="DAILY">DAILY</option>
+            <option value="WEEKLY">WEEKLY</option>
+            <option value="MONTHLY">MONTHLY</option>
+          </select></label>
+          <label>Jam lokal<input required value={autobackupForm.localTime} onChange={(e) => setAutobackupForm({ ...autobackupForm, localTime: e.target.value })} placeholder="02:00" /></label>
+        </div>
+        <div className="formGrid">
+          <label>Hari (weekly 0-6)<input type="number" min="0" max="6" value={autobackupForm.dayOfWeek} onChange={(e) => setAutobackupForm({ ...autobackupForm, dayOfWeek: Number(e.target.value) || 0 })} /></label>
+          <label>Tanggal (monthly)<input type="number" min="1" max="31" value={autobackupForm.dayOfMonth} onChange={(e) => setAutobackupForm({ ...autobackupForm, dayOfMonth: Number(e.target.value) || 1 })} /></label>
+        </div>
+        <div className="formGrid">
+          <label>Retensi (hari)<input type="number" min="1" value={autobackupForm.retentionCount} onChange={(e) => setAutobackupForm({ ...autobackupForm, retentionCount: Number(e.target.value) || 7 })} /></label>
+          <label>Jenis<select value={autobackupForm.kind} onChange={(e) => setAutobackupForm({ ...autobackupForm, kind: e.target.value as 'LOCAL' | 'CENTRAL' })}>
+            <option value="LOCAL">LOCAL</option>
+            <option value="CENTRAL">CENTRAL</option>
+          </select></label>
+        </div>
+        <label className="checkRow"><input type="checkbox" checked={autobackupForm.enabled} onChange={(e) => setAutobackupForm({ ...autobackupForm, enabled: e.target.checked })} /><span>Aktif</span></label>
+        <div className="actionRow"><button disabled={busy}>Jadwalkan autobackup</button></div>
+      </form>
+      <Table head={['Node', 'Frekuensi', 'Jam', 'Aktif', 'Aksi']} rows={autobackupSchedules.map((row) => [
+        row.entityId,
+        row.payload?.frequency ?? '',
+        row.payload?.localTime ?? '',
+        String(row.payload?.enabled ?? true),
+        <div className="actionRow" key={row.entityId}>
+          <button className="secondary" disabled={busy} onClick={() => void toggleAutobackupSchedule(row)}>Toggle</button>
+          <button className="secondary" disabled={busy} onClick={() => void runAutobackupSchedule(row)}>Jalankan</button>
+        </div>,
+      ])} empty="Belum ada jadwal autobackup" />
     </Panel>}
 
     {msg && <div className="notice">{msg}</div>}

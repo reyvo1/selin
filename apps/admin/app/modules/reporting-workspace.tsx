@@ -11,6 +11,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 type AccountRow = { accountId?: string; code: string; name: string; type?: string; debit?: number; credit?: number; normalBalance?: number; amount?: number };
 type ProfitLoss = { from: string; to: string; revenue: number; expenses: number; netProfit: number; revenueAccounts: AccountRow[]; expenseAccounts: AccountRow[] };
 type TrialBalance = { rows: AccountRow[]; totalDebit: number; totalCredit: number; difference: number; balanced: boolean };
+type Worksheet = { rows: Array<{ code: string; name: string; type?: string; trialDebit?: number; trialCredit?: number; adjustmentDebit?: number; adjustmentCredit?: number; adjustedDebit?: number; adjustedCredit?: number; normalBalance?: number }>; totalDebit: number; totalCredit: number; difference: number; balanced: boolean; totals?: { trialDebit: number; trialCredit: number; adjustmentDebit: number; adjustmentCredit: number; adjustedDebit: number; adjustedCredit: number } };
 type BalanceSheet = { totalAssets: number; totalLiabilities: number; totalEquity: number; totalLiabilitiesAndEquity: number; difference: number; balanced: boolean; assets: AccountRow[]; liabilities: AccountRow[]; equity: AccountRow[]; currentEarnings: number };
 type CashFlow = { cashIn: number; cashOut: number; netCashFlow: number; rows: Array<{ journalNumber: string; date: string; description: string; accountCode: string; cashIn: number; cashOut: number; net: number }> };
 type Margin = { revenueExTax: number; cost: number; grossMargin: number; rows: Array<{ id: string; number: string; date: string; channel: string; revenueExTax: number; cost: number; margin: number; marginPercent: number }> };
@@ -25,6 +26,7 @@ type ReportJob = { id: string; reportType: string; format: string; status: strin
 type PeakHours = { days: number; peakHour: number; buckets: Array<{ hour: number; transactions: number; revenue: number }> };
 type DeadStock = { days: number; items: Array<{ productId: string; sku: string; name: string; warehouse: string; quantity: number; tiedUpValue: string | number }> };
 type CustomerRfm = { days: number; items: Array<{ customerId: string; name: string; phone?: string | null; recencyDays: number; frequency: number; monetary: number; segment: string }> };
+type DepositReport = { customers: Array<{ id: string; partyName: string; amount: number; balance: number; status: string; appliedAmount: number; createdAt: string }>; suppliers: Array<{ id: string; partyName: string; amount: number; balance: number; status: string; appliedAmount: number; createdAt: string }>; summary: { customers: { count: number; totalAmount: number; totalBalance: number }; suppliers: { count: number; totalAmount: number; totalBalance: number }; totalBalance: number } };
 type CursorResponse<T> = T[] | { items?: T[] };
 
 function pct(value: number | null) {
@@ -44,6 +46,7 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
   const [to, setTo] = useState(today);
   const [profitLoss, setProfitLoss] = useState<ProfitLoss | null>(null);
   const [trialBalance, setTrialBalance] = useState<TrialBalance | null>(null);
+  const [worksheet, setWorksheet] = useState<Worksheet | null>(null);
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheet | null>(null);
   const [cashFlow, setCashFlow] = useState<CashFlow | null>(null);
   const [margin, setMargin] = useState<Margin | null>(null);
@@ -59,6 +62,7 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
   const [peakHours, setPeakHours] = useState<PeakHours | null>(null);
   const [deadStock, setDeadStock] = useState<DeadStock | null>(null);
   const [customerRfm, setCustomerRfm] = useState<CustomerRfm | null>(null);
+  const [depositReport, setDepositReport] = useState<DepositReport | null>(null);
   const [reportType, setReportType] = useState<string>('PROFIT_LOSS');
   const [format, setFormat] = useState('XLSX');
   const [loading, setLoading] = useState(false);
@@ -107,11 +111,13 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
           setTrialBalance(tb);
           setAccountCode((current) => current || tb.rows[0]?.code || '');
         }),
+        loadSection('worksheet', () => api<Worksheet>(`/reports/worksheet?${range}${scope}`), setWorksheet),
         loadSection('balance-sheet', () => api<BalanceSheet>(`/reports/balance-sheet?asOf=${encodeURIComponent(to)}${scope}`), setBalanceSheet),
         loadSection('cash-flow', () => api<CashFlow>(`/reports/cash-flow?${range}${scope}`), setCashFlow),
         loadSection('tax-summary', () => api<TaxSummary>(`/reports/tax-summary?${range}${scope}`), setTaxSummary),
         loadSection('period-comparison', () => api<Comparison>(`/reports/period-comparison?${range}${scope}`), setComparison),
         loadSection('financial-integrity', () => api<Integrity>(`/reports/financial-integrity?asOf=${encodeURIComponent(to)}${scope}`), setIntegrity),
+        loadSection('deposit-report', () => api<DepositReport>(`/reports/deposits?${range}${scope}`), setDepositReport),
       );
     }
 
@@ -209,6 +215,9 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
       <Panel eyebrow="TRIAL BALANCE" title="Neraca Saldo" badge={trialBalance?.balanced ? 'BALANCED' : 'REVIEW'}>
         <Table head={['Akun','Debit','Credit','Saldo']} rows={(trialBalance?.rows ?? []).map((row) => [<button type="button" className="secondary" onClick={() => void loadDrillDown(row.code)}>{row.code} · {row.name}</button>, rupiah(row.debit ?? 0), rupiah(row.credit ?? 0), rupiah(row.normalBalance ?? 0)])} empty="Belum ada aktivitas jurnal." />
       </Panel>
+      <Panel eyebrow="WORKSHEET" title="Neraca Lajur / Worksheet" badge={worksheet?.balanced ? 'BALANCED' : 'REVIEW'}>
+        <Table head={['Akun','NS Debit','NS Kredit','Penyesuaian Debit','Penyesuaian Kredit','Disesuaikan Debit','Disesuaikan Kredit']} rows={(worksheet?.rows ?? []).map((row) => [`${row.code} · ${row.name}`, rupiah(row.trialDebit ?? 0), rupiah(row.trialCredit ?? 0), rupiah(row.adjustmentDebit ?? 0), rupiah(row.adjustmentCredit ?? 0), rupiah(row.adjustedDebit ?? 0), rupiah(row.adjustedCredit ?? 0)])} empty="Belum ada aktivitas jurnal." />
+      </Panel>
       <Panel eyebrow="BALANCE SHEET" title="Posisi Keuangan" badge={balanceSheet?.balanced ? 'BALANCED' : 'REVIEW'}>
         <Table head={['Kelompok','Nilai']} rows={[
           ['Aset', rupiah(balanceSheet?.totalAssets ?? 0)],
@@ -275,6 +284,11 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
 
     <Panel eyebrow="TAX REPORT" title="Tax Summary" badge={rupiah(taxSummary?.netIndirectTaxPayable ?? 0)}>
       <Table head={['Kode','Direction','Taxable Base','Tax']} rows={(taxSummary?.rows ?? []).map((row) => [`${row.code} · ${row.name}`, row.direction, rupiah(row.taxableBase), rupiah(row.taxAmount)])} empty="Belum ada tax transaction POSTED." />
+    </Panel>
+
+    <Panel eyebrow="DEPOSIT REPORT" title="Saldo & Mutasi Deposit" badge={rupiah(depositReport?.summary.totalBalance ?? 0)}>
+      <p className="sectionHelp">Customer deposit {depositReport?.summary.customers.count ?? 0} · saldo {rupiah(depositReport?.summary.customers.totalBalance ?? 0)}; supplier deposit {depositReport?.summary.suppliers.count ?? 0} · saldo {rupiah(depositReport?.summary.suppliers.totalBalance ?? 0)}.</p>
+      <Table head={['Pihak','Nama','Jumlah','Saldo','Terpakai','Status']} rows={[...(depositReport?.customers ?? []).map((row) => ['Customer', row.partyName, rupiah(row.amount), rupiah(row.balance), rupiah(row.appliedAmount), row.status]), ...(depositReport?.suppliers ?? []).map((row) => ['Supplier', row.partyName, rupiah(row.amount), rupiah(row.balance), rupiah(row.appliedAmount), row.status])]} empty="Belum ada deposit pada periode." />
     </Panel>
     </>}
 

@@ -6,22 +6,22 @@
     "apiRoutes": 532,
     "prismaModels": 202,
     "adminPrimaryWorkspaces": 15,
-    "adminContextualViews": 70,
+    "adminContextualViews": 90,
     "posViews": 4,
     "storefrontViews": 5,
     "employeeViews": 7,
-    "interactiveControls": 527
+    "interactiveControls": 625
   },
   "presentation": {
     "admin": {
-      "fileCount": 50,
-      "lineCount": 10557,
+      "fileCount": 73,
+      "lineCount": 15133,
       "requiredSemanticClassCount": 34,
       "missingSemanticClasses": []
     },
     "pos": {
       "fileCount": 11,
-      "lineCount": 2185,
+      "lineCount": 2232,
       "requiredSemanticClassCount": 5,
       "missingSemanticClasses": []
     },
@@ -40,14 +40,14 @@
   },
   "controls": {
     "admin": {
-      "buttons": 399,
-      "links": 2,
+      "buttons": 494,
+      "links": 4,
       "inertButtons": 0,
       "implicitSubmitButtons": 32,
       "inertLinks": 0
     },
     "pos": {
-      "buttons": 58,
+      "buttons": 59,
       "links": 1,
       "inertButtons": 0,
       "implicitSubmitButtons": 1,
@@ -147,8 +147,8 @@
         "label": "Pengaturan & Akses"
       }
     ],
-    "contextualViewCount": 70,
-    "expectedContextualViewCount": 70,
+    "contextualViewCount": 90,
+    "expectedContextualViewCount": 90,
     "contextualViews": {
       "master-data": [
         "catalog",
@@ -156,7 +156,10 @@
         "products",
         "pricing",
         "references",
-        "bulk-labels"
+        "bulk-labels",
+        "customer-groups",
+        "customer-regions",
+        "customer-deposits"
       ],
       "organization": [
         "organization",
@@ -167,20 +170,25 @@
         "requests",
         "orders",
         "receipts",
-        "supplier"
+        "supplier",
+        "supplier-deposits"
       ],
       "commerce": [
         "orders",
         "fulfillment",
         "returns",
-        "channels"
+        "channels",
+        "sales-orders",
+        "consignments",
+        "trade-ins"
       ],
       "inventory-control": [
         "overview",
         "traceability",
         "transfers",
         "stocktake",
-        "returns"
+        "returns",
+        "costing"
       ],
       "operations-control": [
         "inspections",
@@ -194,7 +202,10 @@
         "fiscal",
         "payables",
         "receivables",
-        "banking"
+        "banking",
+        "cheques",
+        "cash-flow-categories",
+        "opening-balance"
       ],
       "reports": [
         "financial",
@@ -242,11 +253,20 @@
         "data-governance",
         "branch-sync",
         "mobile-ops",
-        "setup"
+        "setup",
+        "printers",
+        "info-program",
+        "panduan",
+        "help",
+        "guide",
+        "bantuan",
+        "numbering"
       ],
       "manufacturing": [
         "recipes",
-        "orders"
+        "orders",
+        "commissions",
+        "transfer-files"
       ]
     }
   },

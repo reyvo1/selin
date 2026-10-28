@@ -8,8 +8,8 @@ class SaleItemDto {
   @ApiPropertyOptional({ description: 'ProductUnit authoritative untuk pemilihan UOM langsung dari POS/UI.' }) @IsOptional() @IsString() productUnitId?: string;
   @ApiPropertyOptional({ description: 'Barcode unit/kemasan yang discan. Barcode hanya shortcut ke ProductUnit/unit snapshot authoritative.' }) @IsOptional() @IsString() @MaxLength(160) barcodeCode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() taxCodeId?: string;
+  @ApiPropertyOptional({ default: false, description: 'Mode pajak per baris: true = harga sudah termasuk pajak (inclusive).' }) @IsOptional() @IsBoolean() taxIncluded?: boolean;
 }
-
 export class SalePaymentDto {
   @ApiProperty({ description: 'Kode PAYMENT_METHOD aktif dari master data.' }) @IsString() @MaxLength(60) method!: string;
   @ApiProperty({ example: 50000 }) @IsNumber() @Min(0.01) amount!: number;
@@ -20,6 +20,7 @@ export class CreateSaleDto {
   @ApiPropertyOptional({ description: 'Kunci idempotensi untuk retry aman.' }) @IsOptional() @IsString() idempotencyKey?: string;
   @ApiProperty() @IsString() warehouseId!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() customerId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(160) salespersonId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() cashierShiftId?: string;
   @ApiPropertyOptional({ default: 'CASH', description: 'Kompatibilitas transaksi satu metode. Nilai adalah kode PAYMENT_METHOD aktif; jangan kirim bersamaan dengan payments.' }) @IsOptional() @IsString() @MaxLength(60) paymentMethod?: string;
   @ApiPropertyOptional({ type: [SalePaymentDto], description: 'Split/partial tender. Pembayaran + onAccountAmount wajib sama persis dengan total transaksi.' }) @IsOptional() @IsArray() @ArrayMaxSize(8) @ValidateNested({ each: true }) @Type(() => SalePaymentDto) payments?: SalePaymentDto[];

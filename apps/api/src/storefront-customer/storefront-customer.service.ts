@@ -12,7 +12,7 @@ export type StorefrontCustomerIdentity = {
   companyId: string;
   branchId: string;
   customerId: string;
-  customer: { id: string; name: string; email: string | null; phone: string | null; emailVerifiedAt: Date | null; phoneVerifiedAt: Date | null; address: string | null; points: number; customerType: string };
+  customer: { id: string; name: string; email: string | null; phone: string | null; emailVerifiedAt: Date | null; phoneVerifiedAt: Date | null; address: string | null; points: number; customerType: string; customerRegionId: string | null; };
 };
 
 @Injectable()
@@ -44,8 +44,8 @@ export class StorefrontCustomerService {
     return branch;
   }
 
-  private safeCustomer(customer: { id: string; name: string; email: string | null; phone: string | null; emailVerifiedAt: Date | null; phoneVerifiedAt: Date | null; address: string | null; points: number; customerType: string }) {
-    return { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone, emailVerifiedAt: customer.emailVerifiedAt, phoneVerifiedAt: customer.phoneVerifiedAt, address: customer.address, points: customer.points, customerType: customer.customerType };
+  private safeCustomer(customer: { id: string; name: string; email: string | null; phone: string | null; emailVerifiedAt: Date | null; phoneVerifiedAt: Date | null; address: string | null; points: number; customerType: string; customerRegionId: string | null }) {
+    return { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone, emailVerifiedAt: customer.emailVerifiedAt, phoneVerifiedAt: customer.phoneVerifiedAt, address: customer.address, points: customer.points, customerType: customer.customerType, customerRegionId: customer.customerRegionId };
   }
 
   private contactTarget(type: 'EMAIL' | 'PHONE', customer: { email: string | null; phone: string | null }) {

@@ -8,16 +8,20 @@
     "NODE_PROTOCOL": "Node-to-node or edge protocol. The counterparty lives outside this repository.",
     "DEVICE_INGEST": "Posted by a device adapter, not by a person at a screen.",
     "PROVIDER_CALLBACK": "Public webhook called by an external provider; a browser cannot originate it.",
-    "SUPERSEDED": "No caller in the repository and its data is already delivered through another reachable endpoint."
+    "SUPERSEDED": "No caller in the repository and its data is already delivered through another reachable endpoint.",
+    "API_ONLY_BY_DESIGN": "Read-only audit/history surface consumed by reports or comparison flows; no operator mutation form is required, and the history is intentionally exposed as an API for programmatic consumers."
   },
   "summary": {
-    "total": 25,
+    "total": 28,
     "byClass": {
       "DEVICE_INGEST": 1,
-      "NODE_PROTOCOL": 22,
+      "NODE_PROTOCOL": 19,
       "PROVIDER_CALLBACK": 1,
-      "SUPERSEDED": 1
-    }
+      "SUPERSEDED": 1,
+      "UI_GAP": 5,
+      "API_ONLY_BY_DESIGN": 1
+    },
+    "entries": 28
   },
   "entries": [
     {
@@ -25,24 +29,6 @@
       "controller": "apps/api/src/attendance/attendance.controller.ts",
       "class": "DEVICE_INGEST",
       "reason": "Guarded by Permissions attendance.device_ingest and posted by the fingerprint device adapter rather than by a person. Admin already manages attendance devices through the reachable siblings GET /attendance/devices, PATCH /attendance/devices/:id and POST /attendance/devices, so this ingest endpoint has no UI counterpart to be missing from."
-    },
-    {
-      "id": "POST /branch-continuity/backups",
-      "controller": "apps/api/src/branch-continuity/branch-continuity.controller.ts",
-      "class": "NODE_PROTOCOL",
-      "reason": "Node-to-node surface guarded by Permissions 'integration.manage'. apps/worker reaches the Telegram and Digiflazz providers only and holds no client for this route, and the reachable siblings on this controller are the observational admin reads (GET /branch-continuity/capabilities, PUT /branch-continuity/capabilities, GET /branch-continuity/consolidated); the counterparty for this write is the edge node, which is not in this repository."
-    },
-    {
-      "id": "GET /branch-continuity/backups",
-      "controller": "apps/api/src/branch-continuity/branch-continuity.controller.ts",
-      "class": "NODE_PROTOCOL",
-      "reason": "Node-to-node surface guarded by Permissions 'integration.manage'. apps/worker reaches the Telegram and Digiflazz providers only and holds no client for this route, and the reachable siblings on this controller are the observational admin reads (GET /branch-continuity/capabilities, PUT /branch-continuity/capabilities, GET /branch-continuity/consolidated); the counterparty for this write is the edge node, which is not in this repository."
-    },
-    {
-      "id": "POST /branch-continuity/backups/verify-restore",
-      "controller": "apps/api/src/branch-continuity/branch-continuity.controller.ts",
-      "class": "NODE_PROTOCOL",
-      "reason": "Node-to-node surface guarded by Permissions 'integration.manage'. apps/worker reaches the Telegram and Digiflazz providers only and holds no client for this route, and the reachable siblings on this controller are the observational admin reads (GET /branch-continuity/capabilities, PUT /branch-continuity/capabilities, GET /branch-continuity/consolidated); the counterparty for this write is the edge node, which is not in this repository."
     },
     {
       "id": "PUT /branch-continuity/connectivity",
@@ -169,6 +155,42 @@
       "controller": "apps/api/src/platform/platform.controller.ts",
       "class": "SUPERSEDED",
       "reason": "No caller anywhere in the repository, and the Admin runtime does not need it: apps/admin/app/domain-workspaces.ts derives the module set from GET /platform/manifest through enabledModuleCodes(manifest) instead. Recorded as superseded rather than as a missing screen, because the data it would return is already on screen."
+    },
+    {
+      "id": "GET /printers/default",
+      "controller": "apps/api/src/printers/printers.controller.ts",
+      "class": "UI_GAP",
+      "reason": "Guarded by @Roles/@Permissions platform.configure and human-facing, but the printer management UI is not implemented yet (I06 SEBAGIAN); backend default-printer/print-job status endpoints exist without an admin screen, so this remains an open UI gap."
+    },
+    {
+      "id": "POST /print-jobs/:id/status",
+      "controller": "apps/api/src/printers/print-jobs.controller.ts",
+      "class": "UI_GAP",
+      "reason": "Guarded by @Roles/@Permissions platform.configure and human-facing, but the printer management UI is not implemented yet (I06 SEBAGIAN); backend default-printer/print-job status endpoints exist without an admin screen, so this remains an open UI gap."
+    },
+    {
+      "id": "GET /supplier-prices/history",
+      "controller": "apps/api/src/supplier-prices/supplier-prices.controller.ts",
+      "class": "API_ONLY_BY_DESIGN",
+      "reason": "Supplier price history is a read-only audit trail consumed by procurement reporting and supplier price comparison flows; no operator mutation form is required for history reads, and the reachable list/create/update siblings cover the operator surface."
+    },
+    {
+      "id": "GET /inventory/costing/preview-issue",
+      "controller": "apps/api/src/inventory/costing.controller.ts",
+      "class": "UI_GAP",
+      "reason": "Costing UI foundation ships policy, activation, valuation, layer explorer, reconciliation and rebuild surfaces; these read-only preview/valuation/parallel-run diagnostics remain unmounted and are tracked as open UI work."
+    },
+    {
+      "id": "GET /inventory/costing/valuation-layers",
+      "controller": "apps/api/src/inventory/costing.controller.ts",
+      "class": "UI_GAP",
+      "reason": "Costing UI foundation ships policy, activation, valuation, layer explorer, reconciliation and rebuild surfaces; these read-only preview/valuation/parallel-run diagnostics remain unmounted and are tracked as open UI work."
+    },
+    {
+      "id": "GET /inventory/costing/parallel-run",
+      "controller": "apps/api/src/inventory/costing.controller.ts",
+      "class": "UI_GAP",
+      "reason": "Costing UI foundation ships policy, activation, valuation, layer explorer, reconciliation and rebuild surfaces; these read-only preview/valuation/parallel-run diagnostics remain unmounted and are tracked as open UI work."
     }
   ]
 }

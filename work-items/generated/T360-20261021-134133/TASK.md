@@ -6,7 +6,7 @@
 - Modul: `accounting-core`
 - Wave: `W3 — Accounting and tax core`
 - Risiko: `CRITICAL`
-- Fase awal: `DESIGN`
+- Fase awal: `DESIGN`; fase saat ini: `IMPLEMENTATION` (2026-10-22).
 - Branch yang disarankan: `feature/t360-20261021-134133-saldo-awal-dan-tutup-tahun`
 - Feature flag: `accounting.opening_and_year_end`
 
@@ -16,7 +16,7 @@ Saldo awal dan tutup tahun. Pekerjaan harus mengikuti Development Kit, workflow,
 
 ## Design output (ACCEPTED)
 
-- ADR: `docs/adr/ADR-T360-20261021-134133-OPENING-BALANCE-CUTOVER.md` (status ACCEPTED 2026-10-21; implementasi menunggu fondasi costing).
+- ADR: `docs/adr/ADR-T360-20261021-134133-OPENING-BALANCE-CUTOVER.md` (status ACCEPTED 2026-10-21; fondasi costing sudah diverifikasi dan fondasi `postSystemJournal`/`postReversal` sudah diimplementasikan 2026-10-22).
 - Model minimum: `OpeningBalanceBatch`, `OpeningBalanceRow`, `OpeningLedgerDocument`, `OpeningLedgerSettlement`, `YearEndCloseRun`, `YearEndCloseLine`.
 - Accounting core mendapat `postSystemJournal` (multi-line, `ruleId = null`) dan `postReversal` (`reversalOfId`, `reversedAt`), tetap menghormati period lock dan idempotency.
 - Opening GL wajib debit=kredit dan hanya balance-sheet; opening stock tie-out ke costing; opening AR/AP tie-out ke control account dan aging per invoice.
@@ -35,11 +35,38 @@ Saldo awal dan tutup tahun. Pekerjaan harus mengikuti Development Kit, workflow,
 6. Year-end preview/approval/posting/period lock/reversal + filter report.
 7. Reconciliation report, performance, migration rehearsal, staging/UAT.
 
-### Belum boleh mulai implementasi sampai
+### Gate sebelum implementasi
 
-- [ ] User/owner menyetujui ADR opening/closing.
-- [ ] ADR costing disetujui karena opening stock bergantung padanya.
-- [ ] Payroll adjustment bypass diselesaikan atau dinyatakan di luar cutover.
+- [x] User/owner menyetujui ADR opening/closing.
+- [x] ADR costing disetujui karena opening stock bergantung padanya.
+- [x] Payroll adjustment bypass dinyatakan di luar cutover opening; bypass tetap menjadi blocker klaim production-ready sampai diperbaiki.
+
+### Status implementasi (2026-10-22)
+
+- Fondasi accounting core selesai: `postSystemJournal` multi-line dengan `ruleId = null`,
+  `postReversal` dengan `reversalOfId`/`reversedAt`, validasi tenant/branch/akun,
+  period lock, close control, idempotency hash, dan audit.
+- Test `tests/w3-opening-year-end-foundation-runtime.test.mjs` 5/5 PASS.
+- Schema/migration enam model opening selesai di tiga Prisma schema dengan
+  parity field-for-field; migration expand-only terdaftar dan baseline
+  PostgreSQL sudah diregenerasi, termasuk partial unique index `POSTED`.
+- `tests/w3-opening-year-end-foundation.test.mjs` 5/5 PASS, schema parity 4/4
+  PASS, baseline PostgreSQL 6/6 PASS, SQLite migration rehearsal PASS,
+  `db:local:prepare` PASS, dan `prisma validate` SQLite/PostgreSQL PASS.
+- `npm run quality:recorded:fast` PASS 2061/2061, lint, `db:local:prepare`, dan
+  worker build (`logs/quality-fast-2026-10-22T09-00-52.236Z.log`);
+  `npm run validate:repo` PASS 1325 files / 214 model Prisma.
+- Service staging/approval selesai di `apps/api/src/opening-balance/`:
+  endpoint list/detail/rows/preview/create/revalidate/submit/approve/cancel,
+  CSV parser, validasi STOCK/AR/AP/GL, permission seed, feature flag branch >
+  company > global, pagination, audit, dan idempotency replay.
+- Posting GL selesai: `POST batches/:id/post`, permission
+  `accounting.opening.post`, `postSystemJournal` dengan key
+  `opening-gl:<batchId>`, transisi `APPROVED → POSTING → POSTED` atomik,
+  hanya akun neraca, konflik control account ditolak, dan replay idempotent.
+- Runtime test `tests/w3-opening-balance-staging-runtime.test.mjs` 13/13 PASS.
+- Belum ada posting AR/AP/STOCK, reversal batch posted, settlement, cutover
+  gate, atau year-end close. Ini slice berikutnya.
 
 ## Aturan bisnis
 

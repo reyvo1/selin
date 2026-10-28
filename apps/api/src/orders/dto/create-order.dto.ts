@@ -9,6 +9,7 @@ class OrderItemDto {
   @ApiPropertyOptional({ description: 'Variant produk bila unit/kemasan terikat variant.' }) @IsOptional() @IsString() variantId?: string;
   @ApiPropertyOptional({ description: 'Barcode hanya shortcut ke ProductUnit/variant yang sama; snapshot transaksi tetap disimpan.' }) @IsOptional() @IsString() barcodeCode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() taxCodeId?: string;
+  @ApiPropertyOptional({ default: false, description: 'Mode pajak per baris: true = harga sudah termasuk pajak (inclusive).' }) @IsOptional() @IsBoolean() taxIncluded?: boolean;
 }
 
 export class CreateOrderDto {

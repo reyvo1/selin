@@ -29,6 +29,7 @@ const { ManufacturingService } = await load('apps/api/src/manufacturing/manufact
 const { AssetsService } = await load('apps/api/src/assets/assets.service.ts', opts);
 const { InventoryCostingPolicyService } = await load('apps/api/src/inventory/costing-policy.service.ts', opts);
 const { InventoryCostingReportService } = await load('apps/api/src/inventory/costing-report.service.ts', opts);
+const { InventoryCostingRebuildService } = await load('apps/api/src/inventory/costing-rebuild.service.ts', opts);
 
 const accounting = new AccountingCoreService(prisma);
 const sales = new SalesService(prisma, accounting, new StockAlertService(prisma),
@@ -40,6 +41,7 @@ const manufacturing = new ManufacturingService(prisma, accounting, new Inventory
 const assets = new AssetsService(prisma, accounting, new InventoryCostingService());
 const costingPolicies = new InventoryCostingPolicyService(prisma);
 const costingReports = new InventoryCostingReportService(prisma);
+const costingRebuilds = new InventoryCostingRebuildService(prisma);
 
 const COMPANY = 'acme';
 const USER = 'u-1';
@@ -727,6 +729,10 @@ test('costing layers and reconciliation are tenant-scoped and expose quantity/va
   assert.equal(layers.items[0].remainingValue, '400.00');
 
   const matched = await costingReports.reconciliation(user, { productId: PRODUCT });
+  assert.equal(matched.gl.comparable, false);
+  assert.equal(matched.gl.reason, 'PRODUCT_FILTER');
+  assert.equal(matched.valueDifferenceVsGl, null);
+  assert.equal(matched.gl.matched, null);
   assert.equal(matched.totals.stateQuantity, 4);
   assert.equal(matched.totals.inventoryQuantity, 4);
   assert.equal(matched.totals.quantityDifference, 0);
@@ -741,4 +747,133 @@ test('costing layers and reconciliation are tenant-scoped and expose quantity/va
   const otherBranch = await costingReports.reconciliation({ ...user, branchId: 'br-other' }, {});
   assert.equal(otherBranch.byWarehouse.length, 0);
   assert.equal(otherBranch.totals.stateQuantity, 0);
+
+  const branchGl = await costingReports.reconciliation(user, {});
+  assert.equal(branchGl.gl.accountCode, '1301');
+  assert.equal(branchGl.gl.scope, 'BRANCH');
+  assert.equal(branchGl.gl.comparable, true);
+  assert.equal(typeof branchGl.gl.balance, 'string');
+});
+
+
+test('costing backfill creates an approved opening snapshot with maker-checker and replay safety', async () => {
+  const REBUILD_BRANCH = 'br-backfill';
+  const REBUILD_WAREHOUSE = 'wh-backfill';
+  const REBUILD_PRODUCT = 'p-backfill';
+  const REBUILD_BATCH = 'p-backfill-batch';
+  await prisma.branch.create({ data: { id: REBUILD_BRANCH, companyId: COMPANY, code: 'BRB', name: 'Cabang Backfill', isActive: true } });
+  await prisma.warehouse.create({ data: { id: REBUILD_WAREHOUSE, code: 'WB', name: 'Gudang Backfill', branchId: REBUILD_BRANCH, isActive: true } });
+  await prisma.product.createMany({ data: [
+    { id: REBUILD_PRODUCT, companyId: COMPANY, sku: 'BF-1', name: 'Backfill', costPrice: 250, salePrice: 300, unit: 'PCS' },
+    { id: REBUILD_BATCH, companyId: COMPANY, sku: 'BF-2', name: 'Backfill Batch', costPrice: 100, salePrice: 150, unit: 'PCS', trackBatch: true },
+  ] });
+  await prisma.inventory.createMany({ data: [
+    { warehouseId: REBUILD_WAREHOUSE, productId: REBUILD_PRODUCT, quantity: 6, available: 6 },
+    { warehouseId: REBUILD_WAREHOUSE, productId: REBUILD_BATCH, quantity: 5, available: 5 },
+  ] });
+  await prisma.inventoryBatch.createMany({ data: [
+    { warehouseId: REBUILD_WAREHOUSE, productId: REBUILD_BATCH, batchNumber: 'BF-A', quantity: 2 },
+    { warehouseId: REBUILD_WAREHOUSE, productId: REBUILD_BATCH, batchNumber: 'BF-B', quantity: 3 },
+  ] });
+
+  const cutoverAt = day(0).toISOString();
+  const backfillUser = { ...user, branchId: REBUILD_BRANCH };
+  const backfillApprover = { ...approver, branchId: REBUILD_BRANCH };
+  const run = await costingRebuilds.request(backfillUser, { warehouseId: REBUILD_WAREHOUSE, cutoverAt, operationKey: 'backfill-test-0001' });
+  assert.equal(run.status, 'PENDING');
+  assert.equal(run.method, 'MOVING_AVERAGE');
+  assert.ok(await prisma.auditLog.findFirst({ where: { action: 'COSTING_REBUILD_REQUESTED', entityType: 'CostingRebuildRun', entityId: run.id } }));
+  await assert.rejects(() => costingRebuilds.request(backfillUser, { warehouseId: WAREHOUSE, cutoverAt, operationKey: 'cross-branch-test-0001' }), /Gudang tidak ditemukan/);
+  await assert.rejects(() => costingRebuilds.approve(backfillUser, run.id), /berbeda/);
+
+  const completed = await costingRebuilds.approve(backfillApprover, run.id);
+  assert.equal(completed.status, 'COMPLETED');
+  assert.equal(completed.approvedBy, backfillApprover.sub);
+  const completedAudit = await prisma.auditLog.findFirst({ where: { action: 'COSTING_REBUILD_COMPLETED', entityType: 'CostingRebuildRun', entityId: run.id } });
+  assert.ok(completedAudit);
+  assert.equal(completedAudit.userId, backfillApprover.sub);
+  assert.equal(Number(completed.statistics.statesCreated), 3);
+  assert.equal(Number(completed.statistics.batchStates), 2);
+  assert.equal(Number(completed.statistics.totalValue), 2000);
+
+  const state = await prisma.inventoryCostState.findUniqueOrThrow({ where: { companyId_branchId_warehouseId_productId_batchKey_method: {
+    companyId: COMPANY, branchId: REBUILD_BRANCH, warehouseId: REBUILD_WAREHOUSE, productId: REBUILD_PRODUCT, batchKey: '', method: 'MOVING_AVERAGE',
+  } } });
+  assert.equal(state.quantity, 6);
+  assert.equal(Number(state.value), 1500);
+  assert.equal(Number(state.averageCost), 250);
+  const batchState = await prisma.inventoryCostState.findUniqueOrThrow({ where: { companyId_branchId_warehouseId_productId_batchKey_method: {
+    companyId: COMPANY, branchId: REBUILD_BRANCH, warehouseId: REBUILD_WAREHOUSE, productId: REBUILD_BATCH, batchKey: 'BF-B', method: 'MOVING_AVERAGE',
+  } } });
+  assert.equal(batchState.quantity, 3);
+  assert.equal(Number(batchState.value), 300);
+
+  const replay = await costingRebuilds.request(backfillUser, { warehouseId: REBUILD_WAREHOUSE, cutoverAt, operationKey: 'backfill-test-0001' });
+  assert.equal(replay.id, run.id);
+  await assert.rejects(() => costingRebuilds.approve(backfillApprover, run.id), /PENDING/);
+  await assert.rejects(() => costingRebuilds.request(backfillUser, { warehouseId: REBUILD_WAREHOUSE, cutoverAt, operationKey: 'backfill-test-0002' }), /Cost state sudah ada/);
+  await assert.rejects(() => costingRebuilds.get({ ...backfillUser, branchId: 'br-other' }, run.id), /tidak ditemukan/);
+
+  const listed = await costingRebuilds.list(backfillUser, { limit: '10' });
+  assert.ok(listed.items.some((row) => row.id === run.id));
+
+  const scopedRecon = await costingReports.reconciliation(backfillUser, { warehouseId: REBUILD_WAREHOUSE });
+  assert.equal(scopedRecon.gl.comparable, false);
+  assert.equal(scopedRecon.gl.reason, 'WAREHOUSE_FILTER');
+  assert.equal(scopedRecon.valueDifferenceVsGl, null);
+  assert.equal(scopedRecon.gl.matched, null);
+
+  const backfillRecon = await costingReports.reconciliation(backfillUser, {});
+  assert.equal(backfillRecon.totals.stateQuantity, 11);
+  assert.equal(backfillRecon.totals.stateValue, '2000.00');
+  assert.equal(backfillRecon.gl.balance, '0.00');
+  assert.equal(backfillRecon.valueDifferenceVsGl, '2000.00');
+  assert.equal(backfillRecon.gl.matched, false);
+
+  await assert.rejects(
+    () => costingRebuilds.request(user, { warehouseId: WAREHOUSE, cutoverAt, operationKey: 'backfill-main-0001' }),
+    /feature flag/,
+  );
+});
+
+test('a closed fiscal period blocks sale before stock, journal, and costing mutate', async () => {
+  const inventoryBefore = await prisma.inventory.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: WAREHOUSE, productId: BATCHED } } });
+  const costEventsBefore = await prisma.inventoryCostEvent.count({ where: { companyId: COMPANY, productId: BATCHED } });
+  const salesBefore = await prisma.sale.count();
+  const journalsBefore = await prisma.journalEntry.count();
+  const period = await prisma.fiscalPeriod.create({ data: {
+    companyId: COMPANY, branchId: BRANCH, name: 'Fiscal lock test',
+    startDate: day(-30), endDate: day(30), status: 'CLOSED',
+  } });
+  try {
+    await assert.rejects(() => sell(BATCHED, 1), /Periode fiskal berstatus CLOSED/);
+  } finally {
+    await prisma.fiscalPeriod.delete({ where: { id: period.id } });
+  }
+  const inventoryAfter = await prisma.inventory.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: WAREHOUSE, productId: BATCHED } } });
+  assert.equal(inventoryAfter.quantity, inventoryBefore.quantity);
+  assert.equal(await prisma.inventoryCostEvent.count({ where: { companyId: COMPANY, productId: BATCHED } }), costEventsBefore);
+  assert.equal(await prisma.sale.count(), salesBefore);
+  assert.equal(await prisma.journalEntry.count(), journalsBefore);
+});
+
+test('an accounting close control blocks sale before stock, journal, and costing mutate', async () => {
+  const inventoryBefore = await prisma.inventory.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: WAREHOUSE, productId: BATCHED } } });
+  const costEventsBefore = await prisma.inventoryCostEvent.count({ where: { companyId: COMPANY, productId: BATCHED } });
+  const salesBefore = await prisma.sale.count();
+  const journalsBefore = await prisma.journalEntry.count();
+  const control = await prisma.accountingCloseControl.create({ data: {
+    companyId: COMPANY, branchId: BRANCH, module: 'ACCOUNTING',
+    periodStart: day(-30), periodEnd: day(30), status: 'CLOSED', closedById: USER, closedAt: day(0),
+  } });
+  try {
+    await assert.rejects(() => sell(BATCHED, 1), /Accounting close control ACCOUNTING/);
+  } finally {
+    await prisma.accountingCloseControl.delete({ where: { id: control.id } });
+  }
+  const inventoryAfter = await prisma.inventory.findUniqueOrThrow({ where: { warehouseId_productId: { warehouseId: WAREHOUSE, productId: BATCHED } } });
+  assert.equal(inventoryAfter.quantity, inventoryBefore.quantity);
+  assert.equal(await prisma.inventoryCostEvent.count({ where: { companyId: COMPANY, productId: BATCHED } }), costEventsBefore);
+  assert.equal(await prisma.sale.count(), salesBefore);
+  assert.equal(await prisma.journalEntry.count(), journalsBefore);
 });

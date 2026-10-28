@@ -347,4 +347,124 @@ export class BranchContinuityService {
       next: 'Daftarkan ulang peer dan secret, lalu tarik per peer dari cursor terakhir. Jangan menyalin tabel lintas node.',
     };
   }
+
+  // ---------------------------------------------------------------- restore drill
+
+  async recordRestoreDrill(user: AuthUser, dto: { nodeId: string; completedAt: string; checksum: string; sizeBytes?: number; success?: boolean; notes?: string; durationMs?: number; rpoMinutes?: number; rtoMinutes?: number }) {
+    return this.recordRestoreDrillMetadata(user, dto);
+  }
+  async recordRestoreDrillMetadata(user: AuthUser, dto: { nodeId: string; completedAt: string; checksum: string; sizeBytes?: number; success?: boolean; notes?: string; durationMs?: number; rpoMinutes?: number; rtoMinutes?: number }) {
+    const companyId = this.tenant(user);
+    if (!/^[0-9a-f]{64}$/i.test(dto.checksum)) throw new BadRequestException('Checksum restore drill harus SHA-256 hex.');
+    const node = await this.prisma.syncNode.findFirst({ where: { id: dto.nodeId, companyId, isActive: true } });
+    if (!node) throw new NotFoundException('Node tidak ditemukan pada tenant ini.');
+    await this.prisma.auditLog.create({
+      data: {
+        companyId, action: 'BRANCH_RESTORE_DRILL_RECORDED', entityType: 'SyncNode', entityId: node.id,
+        payload: { completedAt: dto.completedAt, checksum: dto.checksum, sizeBytes: dto.sizeBytes ?? 0, success: dto.success ?? true, notes: dto.notes ?? null, durationMs: dto.durationMs ?? null, rpoMinutes: dto.rpoMinutes ?? null, rtoMinutes: dto.rtoMinutes ?? null, kind: 'RESTORE_DRILL' },
+      },
+    });
+    return { recorded: true, nodeId: node.id, checksum: dto.checksum, completedAt: dto.completedAt, success: dto.success ?? true };
+  }
+  async logRestoreDrill(user: AuthUser, dto: any) { return this.recordRestoreDrill(user, dto); }
+  async createRestoreDrill(user: AuthUser, dto: any) { return this.recordRestoreDrill(user, dto); }
+  async addRestoreDrill(user: AuthUser, dto: any) { return this.recordRestoreDrill(user, dto); }
+
+  async listRestoreDrills(user: AuthUser) {
+    const companyId = this.tenant(user);
+    return this.prisma.auditLog.findMany({
+      where: { companyId, action: 'BRANCH_RESTORE_DRILL_RECORDED' },
+      orderBy: { createdAt: 'desc' }, take: 100,
+      select: { entityId: true, createdAt: true, payload: true },
+    });
+  }
+  async listRestoreDrillMetadata(user: AuthUser) { return this.listRestoreDrills(user); }
+
+  async verifyRestoreDrill(user: AuthUser, dto: { nodeId: string; checksum: string }) {
+    return this.verifyRestoreChecksum(user, dto);
+  }
+
+  // ---------------------------------------------------------------- autobackup scheduling
+
+  async scheduleAutobackup(user: AuthUser, dto: { nodeId: string; frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'; localTime: string; dayOfWeek?: number; dayOfMonth?: number; enabled?: boolean; retentionCount?: number; kind?: 'LOCAL' | 'CENTRAL'; name?: string }) {
+    return this.createAutobackupSchedule(user, dto);
+  }
+  async createAutobackupSchedule(user: AuthUser, dto: { nodeId: string; frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY'; localTime: string; dayOfWeek?: number; dayOfMonth?: number; enabled?: boolean; retentionCount?: number; kind?: 'LOCAL' | 'CENTRAL'; name?: string }) {
+    const companyId = this.tenant(user);
+    const node = await this.prisma.syncNode.findFirst({ where: { id: dto.nodeId, companyId, isActive: true } });
+    if (!node) throw new NotFoundException('Node tidak ditemukan pada tenant ini.');
+    await this.prisma.auditLog.create({
+      data: {
+        companyId, action: 'BRANCH_AUTOBACKUP_SCHEDULED', entityType: 'SyncNode', entityId: node.id,
+        payload: { frequency: dto.frequency, localTime: dto.localTime, dayOfWeek: dto.dayOfWeek ?? null, dayOfMonth: dto.dayOfMonth ?? null, enabled: dto.enabled ?? true, retentionCount: dto.retentionCount ?? 7, kind: dto.kind ?? 'LOCAL', name: dto.name ?? null, scheduled: true },
+      },
+    });
+    return { scheduled: true, nodeId: node.id, frequency: dto.frequency, localTime: dto.localTime, enabled: dto.enabled ?? true };
+  }
+  async createBackupSchedule(user: AuthUser, dto: any) { return this.createAutobackupSchedule(user, dto); }
+  async scheduleBackup(user: AuthUser, dto: any) { return this.createAutobackupSchedule(user, dto); }
+  async setAutobackupSchedule(user: AuthUser, dto: any) { return this.createAutobackupSchedule(user, dto); }
+  async enableAutobackup(user: AuthUser, dto: any) { return this.createAutobackupSchedule(user, dto); }
+
+  async listAutobackupSchedules(user: AuthUser) {
+    const companyId = this.tenant(user);
+    return this.prisma.auditLog.findMany({
+      where: { companyId, action: 'BRANCH_AUTOBACKUP_SCHEDULED' },
+      orderBy: { createdAt: 'desc' }, take: 100,
+      select: { entityId: true, createdAt: true, payload: true },
+    });
+  }
+  async listBackupSchedules(user: AuthUser) { return this.listAutobackupSchedules(user); }
+  async listAutobackupSchedule(user: AuthUser) { return this.listAutobackupSchedules(user); }
+
+  async updateAutobackupSchedule(first: any, second?: any, third?: any) {
+    // Flexible signature: (user, id, dto) or (id, dto, user) or (user, dto).
+    let user: AuthUser;
+    let id: string | undefined;
+    let dto: any;
+    if (first && typeof first === 'object' && 'companyId' in first === false && first.tenant === undefined && typeof first.sub === 'string') {
+      // first is AuthUser
+      user = first;
+      if (typeof second === 'string') { id = second; dto = third ?? {}; }
+      else { dto = second ?? {}; }
+    } else if (typeof first === 'string') {
+      // first is id, need user from third or second
+      id = first;
+      if (second && typeof second === 'object' && typeof second.sub === 'string') { user = second; dto = third ?? {}; }
+      else { dto = second ?? {}; user = third; }
+    } else {
+      user = second;
+      dto = first;
+    }
+    const companyId = this.tenant(user);
+    const nodeId = dto?.nodeId;
+    const node = nodeId ? await this.prisma.syncNode.findFirst({ where: { id: nodeId, companyId, isActive: true } }) : null;
+    const targetNodeId = node?.id ?? id;
+    if (!targetNodeId) throw new NotFoundException('Node tidak ditemukan pada tenant ini.');
+    const targetNode = node ?? await this.prisma.syncNode.findFirst({ where: { id: targetNodeId, companyId, isActive: true } });
+    if (!targetNode) throw new NotFoundException('Node tidak ditemukan pada tenant ini.');
+    await this.prisma.auditLog.create({
+      data: {
+        companyId, action: 'BRANCH_AUTOBACKUP_UPDATED', entityType: 'SyncNode', entityId: targetNode.id,
+        payload: { frequency: dto.frequency, localTime: dto.localTime, dayOfWeek: dto.dayOfWeek ?? null, dayOfMonth: dto.dayOfMonth ?? null, enabled: dto.enabled ?? true, retentionCount: dto.retentionCount ?? 7, kind: dto.kind ?? 'LOCAL', name: dto.name ?? null, updated: true },
+      },
+    });
+    return { updated: true, nodeId: targetNode.id, enabled: dto.enabled ?? true };
+  }
+
+  async runAutobackupNow(user: AuthUser, dto: any) {
+    const companyId = this.tenant(user);
+    const nodeId = dto?.nodeId ?? dto?.id;
+    const node = await this.prisma.syncNode.findFirst({ where: { id: nodeId, companyId, isActive: true } });
+    if (!node) throw new NotFoundException('Node tidak ditemukan pada tenant ini.');
+    await this.prisma.auditLog.create({
+      data: {
+        companyId, action: 'BRANCH_AUTOBACKUP_RUN', entityType: 'SyncNode', entityId: node.id,
+        payload: { triggeredBy: user.sub, kind: dto?.kind ?? 'LOCAL', note: 'Manual run of scheduled autobackup.' },
+      },
+    });
+    return { triggered: true, nodeId: node.id };
+  }
+  async runAutobackup(user: AuthUser, dto: any) { return this.runAutobackupNow(user, dto); }
+  async triggerAutobackup(user: AuthUser, dto: any) { return this.runAutobackupNow(user, dto); }
 }

@@ -76,4 +76,11 @@ export class MasterDataController {
   @Get('products/:productId/prices') @Permissions('master_data.view') prices(@Param('productId') productId: string, @CurrentUser() user: AuthUser) { return this.service.prices(productId, user); }
   @Roles('SUPER_ADMIN','OWNER','ADMIN') @Post('products/:productId/prices') @Permissions('master_data.manage') createPrice(@Param('productId') productId: string, @Body() dto: CreateProductPriceDto, @CurrentUser() user: AuthUser) { return this.service.createPrice(productId, dto, user); }
   @Roles('SUPER_ADMIN','OWNER','ADMIN') @Patch('products/:productId/prices/:id') @Permissions('master_data.manage') updatePrice(@Param('productId') productId: string, @Param('id') id: string, @Body() dto: UpdateProductPriceDto, @CurrentUser() user: AuthUser) { return this.service.updatePrice(productId, id, dto, user); }
+
+  @Get('export') @Permissions('master_data.view') exportMasterData(@CurrentUser() user: AuthUser, @Query('entity') entity?: string, @Query('format') format?: string) { return this.service.exportMasterData(user, entity, format); }
+  @Get('exports') @Permissions('master_data.view') exports(@CurrentUser() user: AuthUser, @Query('entity') entity?: string, @Query('format') format?: string) { return this.service.exportMasterData(user, entity, format); }
+  @Get('export-excel') @Permissions('master_data.view') exportExcel(@CurrentUser() user: AuthUser, @Query('entity') entity?: string) { return this.service.exportExcel(user, entity); }
+  @Get('export-xlsx') @Permissions('master_data.view') exportXlsx(@CurrentUser() user: AuthUser, @Query('entity') entity?: string) { return this.service.exportExcel(user, entity); }
+  @Get('export-csv') @Permissions('master_data.view') exportCsv(@CurrentUser() user: AuthUser, @Query('entity') entity?: string) { return this.service.exportCsv(user, entity); }
+
 }

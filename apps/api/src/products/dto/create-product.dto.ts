@@ -9,10 +9,26 @@ export class CreateProductDto {
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional({ description: 'URL foto produk (http/https, tanpa basic-auth, tanpa query token). Presentasi saja: tidak memengaruhi harga, pajak, stok, atau jurnal.' })
   @IsOptional() @IsHttpImageUrl() imageUrl?: string;
+  @ApiPropertyOptional({ description: 'URL datasheet/dokumen teknis produk (http/https). Presentasi saja: tidak memengaruhi harga, pajak, stok, atau jurnal.' })
+  @IsOptional() @IsString() @MaxLength(2048) datasheetUrl?: string;
+  @ApiPropertyOptional({ description: 'Datasheet terstruktur produk (atribut + lampiran). Presentasi saja.' })
+  @IsOptional() datasheet?: any;
+  @ApiPropertyOptional({ description: 'Atribut datasheet produk (key/value). Presentasi saja.' })
+  @IsOptional() datasheetAttributes?: any;
+  @ApiPropertyOptional({ description: 'Lampiran datasheet produk (array). Presentasi saja.' })
+  @IsOptional() datasheetAttachments?: any;
+  @ApiPropertyOptional({ description: 'Spesifikasi datasheet produk. Presentasi saja.' })
+  @IsOptional() datasheetSpecs?: any;
+  @ApiPropertyOptional({ description: 'File/lampiran datasheet produk. Presentasi saja.' })
+  @IsOptional() datasheetFiles?: any;
+  @ApiPropertyOptional({ description: 'Atribut teknis produk. Presentasi saja.' })
+  @IsOptional() attributes?: any;
+  @ApiPropertyOptional({ description: 'Lampiran produk. Presentasi saja.' })
+  @IsOptional() attachments?: any;
   @ApiPropertyOptional() @IsOptional() @IsString() categoryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() brandCode?: string;
   @ApiProperty({ example: 'BATANG', description: 'Base unit aktif dari master UNIT perusahaan. Gunakan unit fisik terkecil yang benar-benar distok.' }) @IsString() @MaxLength(60) unit!: string;
-  @ApiPropertyOptional({ enum: ['PHYSICAL', 'SERVICE'], default: 'PHYSICAL' }) @IsOptional() @IsIn(['PHYSICAL', 'SERVICE']) productType?: string;
+  @ApiPropertyOptional({ enum: ['PHYSICAL', 'SERVICE', 'NON_INVENTORY', 'ASSEMBLY', 'EXPENSE'], default: 'PHYSICAL' }) @IsOptional() @IsIn(['PHYSICAL', 'SERVICE', 'NON_INVENTORY', 'ASSEMBLY', 'EXPENSE']) productType?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) taxCategoryCode?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() salesTaxCodeId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() purchaseTaxCodeId?: string;

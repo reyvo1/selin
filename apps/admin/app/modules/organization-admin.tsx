@@ -7,7 +7,7 @@ import { Panel, StatusChip, Table } from '../ui';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
-type Company = { id:string; name:string; slug?:string|null; timezone:string; currency:string; createdAt?:string; updatedAt?:string };
+type Company = { id:string; name:string; legalName?:string|null; slug?:string|null; taxIdNumber?:string|null; address?:string|null; phone?:string|null; email?:string|null; website?:string|null; logoUrl?:string|null; brandColor?:string|null; branding?:any; timezone:string; currency:string; createdAt?:string; updatedAt?:string };
 type Branch = { id:string; code:string; name:string; address?:string|null; isActive:boolean };
 type TenantProfile = {
   company: Company;
@@ -33,14 +33,14 @@ export default function OrganizationAdminView({token}:{token:string}){
   const canManageBranches=canAll('master_data.manage');
   const [profile,setProfile]=useState<TenantProfile|null>(null);
   const [message,setMessage]=useState('');
-  const [tenantForm,setTenantForm]=useState({name:'',timezone:'Asia/Makassar',currency:'IDR'});
+  const [tenantForm,setTenantForm]=useState({name:'',legalName:'',taxIdNumber:'',address:'',phone:'',email:'',website:'',logoUrl:'',brandColor:'',branding:'',timezone:'Asia/Makassar',currency:'IDR'});
   const [branchForm,setBranchForm]=useState({code:'',name:'',address:''});
   const [editingBranchId,setEditingBranchId]=useState<string|null>(null);
 
   async function refresh(){
     const tenant=await call<TenantProfile>(token,'/platform/tenant');
     setProfile(tenant);
-    setTenantForm({name:tenant.company.name,timezone:tenant.company.timezone,currency:tenant.company.currency});
+    setTenantForm({name:tenant.company.name,legalName:tenant.company.legalName??'',taxIdNumber:tenant.company.taxIdNumber??'',address:tenant.company.address??'',phone:tenant.company.phone??'',email:tenant.company.email??'',website:tenant.company.website??'',logoUrl:tenant.company.logoUrl??'',brandColor:tenant.company.brandColor??'',branding:tenant.company.branding?JSON.stringify(tenant.company.branding):'',timezone:tenant.company.timezone,currency:tenant.company.currency});
   }
   useEffect(()=>{void refresh().catch((error)=>setMessage(error instanceof Error?error.message:'Gagal memuat tenant'));},[token]);
 
@@ -49,7 +49,7 @@ export default function OrganizationAdminView({token}:{token:string}){
     setMessage('');
     try{
       await call(token,'/platform/tenant',{method:'PATCH',body:JSON.stringify({
-        name:tenantForm.name.trim(),timezone:tenantForm.timezone.trim(),currency:tenantForm.currency.trim().toUpperCase(),
+        name:tenantForm.name.trim(),legalName:tenantForm.legalName.trim()||null,taxIdNumber:tenantForm.taxIdNumber.trim()||null,address:tenantForm.address.trim()||null,phone:tenantForm.phone.trim()||null,email:tenantForm.email.trim()||null,website:tenantForm.website.trim()||null,logoUrl:tenantForm.logoUrl.trim()||null,brandColor:tenantForm.brandColor.trim()||null,branding:tenantForm.branding.trim()?JSON.parse(tenantForm.branding):null,timezone:tenantForm.timezone.trim(),currency:tenantForm.currency.trim().toUpperCase(),
       })});
       await refresh();
       setMessage('Profil company aktif diperbarui.');
@@ -89,6 +89,15 @@ export default function OrganizationAdminView({token}:{token:string}){
       <Panel eyebrow="TENANT" title="Company Aktif" badge={profile?.company.slug??'tenant'}>
         <form className="formStack" onSubmit={saveTenant}>
           <label>Nama company<input required minLength={2} value={tenantForm.name} onChange={(event)=>setTenantForm({...tenantForm,name:event.target.value})}/></label>
+          <label>Nama legal<input value={tenantForm.legalName} onChange={(event)=>setTenantForm({...tenantForm,legalName:event.target.value})}/></label>
+          <label>NPWP<input value={tenantForm.taxIdNumber} onChange={(event)=>setTenantForm({...tenantForm,taxIdNumber:event.target.value})}/></label>
+          <label>Alamat<textarea value={tenantForm.address} onChange={(event)=>setTenantForm({...tenantForm,address:event.target.value})}/></label>
+          <label>Telepon<input value={tenantForm.phone} onChange={(event)=>setTenantForm({...tenantForm,phone:event.target.value})}/></label>
+          <label>Email<input value={tenantForm.email} onChange={(event)=>setTenantForm({...tenantForm,email:event.target.value})}/></label>
+          <label>Website<input value={tenantForm.website} onChange={(event)=>setTenantForm({...tenantForm,website:event.target.value})}/></label>
+          <label>URL logo<input value={tenantForm.logoUrl} onChange={(event)=>setTenantForm({...tenantForm,logoUrl:event.target.value})}/></label>
+          <label>Warna brand<input value={tenantForm.brandColor} onChange={(event)=>setTenantForm({...tenantForm,brandColor:event.target.value})}/></label>
+          <label>Branding JSON<textarea value={tenantForm.branding} onChange={(event)=>setTenantForm({...tenantForm,branding:event.target.value})}/></label>
           <label>Timezone IANA<input required value={tenantForm.timezone} onChange={(event)=>setTenantForm({...tenantForm,timezone:event.target.value})} placeholder="Asia/Makassar"/></label>
           <label>Mata uang<input required maxLength={3} value={tenantForm.currency} onChange={(event)=>setTenantForm({...tenantForm,currency:event.target.value.toUpperCase()})} placeholder="IDR"/></label>
           {canConfigurePlatform&&<button>Simpan company</button>}

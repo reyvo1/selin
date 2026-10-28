@@ -39,6 +39,15 @@ export class CreateDepartmentDto {
   @ApiProperty() @IsString() code!: string;
   @ApiProperty() @IsString() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() parentId?: string;
+  @ApiPropertyOptional({ description: 'Dimensi cost center untuk laporan accounting event.' }) @IsOptional() @IsString() costCenterId?: string;
+}
+
+export class UpdateDepartmentDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() code?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsUUID() parentId?: string | null;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @IsString() costCenterId?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 export class CreatePositionDto {

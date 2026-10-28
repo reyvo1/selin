@@ -292,7 +292,16 @@ export class PlatformService {
         select: {
           id: true,
           name: true,
+          legalName: true,
           slug: true,
+          taxIdNumber: true,
+          address: true,
+          phone: true,
+          email: true,
+          website: true,
+          logoUrl: true,
+          brandColor: true,
+          branding: true,
           timezone: true,
           currency: true,
           createdAt: true,
@@ -317,10 +326,24 @@ export class PlatformService {
 
   async updateTenantProfile(dto: UpdateTenantProfileDto, user: AuthUser) {
     const scope = this.requireTenantScope(user);
-    if (dto.name === undefined && dto.timezone === undefined && dto.currency === undefined) {
+    if (
+      dto.name === undefined && dto.legalName === undefined && dto.taxIdNumber === undefined &&
+      dto.address === undefined && dto.phone === undefined && dto.email === undefined &&
+      dto.website === undefined && dto.logoUrl === undefined && dto.brandColor === undefined &&
+      dto.branding === undefined && dto.timezone === undefined && dto.currency === undefined
+    ) {
       throw new BadRequestException('Minimal satu field tenant harus diubah.');
     }
     const name = dto.name?.trim();
+    const legalName = dto.legalName?.trim();
+    const taxIdNumber = dto.taxIdNumber?.trim();
+    const address = dto.address?.trim();
+    const phone = dto.phone?.trim();
+    const email = dto.email?.trim().toLowerCase();
+    const website = dto.website?.trim();
+    const logoUrl = dto.logoUrl?.trim();
+    const brandColor = dto.brandColor?.trim();
+    const branding = dto.branding;
     const timezone = dto.timezone?.trim();
     const currency = dto.currency?.trim().toUpperCase();
     if (timezone) {
@@ -337,15 +360,33 @@ export class PlatformService {
         where: { id: scope.companyId },
         data: {
           ...(name !== undefined ? { name } : {}),
+          ...(legalName !== undefined ? { legalName: legalName || null } : {}),
+          ...(taxIdNumber !== undefined ? { taxIdNumber: taxIdNumber || null } : {}),
+          ...(address !== undefined ? { address: address || null } : {}),
+          ...(phone !== undefined ? { phone: phone || null } : {}),
+          ...(email !== undefined ? { email: email || null } : {}),
+          ...(website !== undefined ? { website: website || null } : {}),
+          ...(logoUrl !== undefined ? { logoUrl: logoUrl || null } : {}),
+          ...(brandColor !== undefined ? { brandColor: brandColor || null } : {}),
+...(branding !== undefined ? { branding: branding === null ? Prisma.JsonNull : json(branding) } : {}),
           ...(timezone !== undefined ? { timezone } : {}),
           ...(currency !== undefined ? { currency } : {}),
         },
-        select: { id: true, name: true, slug: true, timezone: true, currency: true, createdAt: true, updatedAt: true },
+        select: { id: true, name: true, legalName: true, slug: true, taxIdNumber: true, address: true, phone: true, email: true, website: true, logoUrl: true, brandColor: true, branding: true, timezone: true, currency: true, createdAt: true, updatedAt: true },
       });
       await this.auditMutation(tx, user, scope, 'UPDATE_TENANT_PROFILE', 'Company', row.id, {
         branchId: scope.branchId,
         changedFields: [
           ...(dto.name !== undefined ? ['name'] : []),
+          ...(dto.legalName !== undefined ? ['legalName'] : []),
+          ...(dto.taxIdNumber !== undefined ? ['taxIdNumber'] : []),
+          ...(dto.address !== undefined ? ['address'] : []),
+          ...(dto.phone !== undefined ? ['phone'] : []),
+          ...(dto.email !== undefined ? ['email'] : []),
+          ...(dto.website !== undefined ? ['website'] : []),
+          ...(dto.logoUrl !== undefined ? ['logoUrl'] : []),
+          ...(dto.brandColor !== undefined ? ['brandColor'] : []),
+          ...(dto.branding !== undefined ? ['branding'] : []),
           ...(dto.timezone !== undefined ? ['timezone'] : []),
           ...(dto.currency !== undefined ? ['currency'] : []),
         ],
@@ -951,4 +992,131 @@ export class PlatformService {
       checkedAt: new Date().toISOString(),
     };
   }
+
+  async emptyNonProductionData(user: AuthUser, dto: { confirmation: string; confirm?: boolean; companyId?: string; branchId?: string }) {
+    const scope = this.requireTenantScope(user);
+    await this.assertRequestedScope(this.prisma, user, scope, dto.companyId, dto.branchId, 'NonProductionDataReset');
+
+    const environment = (process.env.NODE_ENV ?? 'development').trim().toLowerCase();
+    const protectedEnvironment = environment === 'production' || environment === 'staging';
+    const seedMode = (process.env.SEED_MODE ?? '').trim().toLowerCase();
+    if (protectedEnvironment) {
+      throw new ForbiddenException({
+        code: 'PRODUCTION_DATA_RESET_FORBIDDEN',
+        message: 'Pengosongan data dinonaktifkan pada environment production atau staging.',
+      });
+    }
+    if (dto.confirmation !== 'KOSONGKAN DATA NON-PRODUKSI' || dto.confirm !== true) {
+      throw new BadRequestException({
+        code: 'EXPLICIT_CONFIRMATION_REQUIRED',
+        message: 'Konfirmasi eksplisit tidak valid. Ketik persis: KOSONGKAN DATA NON-PRODUKSI.',
+      });
+    }
+    const allowDestructive = process.env.ALLOW_DESTRUCTIVE_RESET === 'true';
+    if (!['demo', 'uat', ''].includes(seedMode) && !allowDestructive) {
+      throw new ForbiddenException({
+        code: 'SEED_MODE_NOT_RESETTABLE',
+        message: 'Pengosongan data hanya diizinkan pada SEED_MODE demo/uat atau ALLOW_DESTRUCTIVE_RESET=true.',
+      });
+    }
+    if (!allowDestructive && seedMode === 'bootstrap' && !process.env.DATABASE_URL?.startsWith('file:')) {
+      throw new ForbiddenException({
+        code: 'NON_LOCAL_DATABASE_RESET_FORBIDDEN',
+        message: 'Reset data non-lokal membutuhkan ALLOW_DESTRUCTIVE_RESET=true.',
+      });
+    }
+
+    const protectedTables = new Set([
+      'company', 'branch', 'warehouse', 'warehouselocation', 'user', 'role', 'permission',
+      'userrole', 'rolepermission', 'systemsetting', 'featureflag', 'moduledefinition',
+      'uischemadefinition', 'customfielddefinition', 'account', 'fiscalperiod',
+      'cashflowcategory', 'customergroup', 'customerregion', 'commissionrule', 'datarotationpolicy',
+      '_prisma_migrations',
+    ]);
+    const isProtected = (table: string) => protectedTables.has(table.toLowerCase());
+
+    const isPostgres = /^postgres(?:ql)?:/i.test(process.env.DATABASE_URL ?? '');
+    let tableNames: string[] = [];
+    if (isPostgres) {
+      const rows = await this.prisma.$queryRawUnsafe<Array<{ tablename: string }>>(
+        "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
+      );
+      tableNames = rows.map((row) => row.tablename).filter((name) => !isProtected(name) && !name.startsWith('_') && !name.startsWith('sqlite_'));
+    } else {
+      const rows = await this.prisma.$queryRawUnsafe<Array<{ name: string }>>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+      );
+      tableNames = rows.map((row) => row.name).filter((name) => !isProtected(name) && !name.startsWith('_'));
+    }
+
+    const quote = (name: string) => `"${name.replace(/"/g, '""')}"`;
+
+    if (isPostgres) {
+      if (tableNames.length > 0) {
+        const sql = `TRUNCATE TABLE ${tableNames.map(quote).join(', ')} RESTART IDENTITY CASCADE`;
+        await this.prisma.$executeRawUnsafe(sql);
+      }
+    } else {
+      await this.prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF');
+      try {
+        for (const table of tableNames) {
+          await this.prisma.$executeRawUnsafe(`DELETE FROM ${quote(table)}`);
+        }
+      } finally {
+        await this.prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
+      }
+    }
+
+    await this.auditMutation(this.prisma, user, scope, 'EMPTY_NON_PRODUCTION_DATA', 'Database', scope.companyId, {
+      environment,
+      seedMode: seedMode || 'unset',
+      tablesCleared: tableNames,
+      preservedTables: [...protectedTables],
+      confirmation: 'KOSONGKAN DATA NON-PRODUKSI',
+    } as Prisma.InputJsonValue);
+
+    return {
+      reset: true,
+      environment,
+      seedMode: seedMode || 'unset',
+      tablesCleared: tableNames,
+      preserved: [...protectedTables],
+      message: 'Data non-produksi berhasil dikosongkan. Data tenant inti, user, role, permission, dan konfigurasi dipertahankan.',
+    };
+  }
+
+  async dbMaintenanceVacuum(user: AuthUser) {
+    const scope = this.requireTenantScope(user);
+    const isPostgres = /^postgres(?:ql)?:/i.test(process.env.DATABASE_URL ?? '');
+    const startedAt = Date.now();
+    await this.prisma.$executeRawUnsafe('VACUUM');
+    await this.auditMutation(this.prisma, user, scope, 'DB_MAINTENANCE_VACUUM', 'Database', scope.companyId, {
+      provider: isPostgres ? 'postgresql' : 'sqlite',
+      durationMs: Date.now() - startedAt,
+    } as Prisma.InputJsonValue);
+    return {
+      operation: 'VACUUM',
+      provider: isPostgres ? 'postgresql' : 'sqlite',
+      durationMs: Date.now() - startedAt,
+      message: 'VACUUM selesai. Ruang kosong direklaim dan statistik dasar diperbarui.',
+    };
+  }
+
+  async dbMaintenanceAnalyze(user: AuthUser) {
+    const scope = this.requireTenantScope(user);
+    const isPostgres = /^postgres(?:ql)?:/i.test(process.env.DATABASE_URL ?? '');
+    const startedAt = Date.now();
+    await this.prisma.$executeRawUnsafe('ANALYZE');
+    await this.auditMutation(this.prisma, user, scope, 'DB_MAINTENANCE_ANALYZE', 'Database', scope.companyId, {
+      provider: isPostgres ? 'postgresql' : 'sqlite',
+      durationMs: Date.now() - startedAt,
+    } as Prisma.InputJsonValue);
+    return {
+      operation: 'ANALYZE',
+      provider: isPostgres ? 'postgresql' : 'sqlite',
+      durationMs: Date.now() - startedAt,
+      message: 'ANALYZE selesai. Statistik planner diperbarui untuk query yang lebih efisien.',
+    };
+  }
+
 }

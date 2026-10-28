@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "TOKO360 Admin Contextual Workflow Map",
-  "expectedContextualViews": 70,
+  "expectedContextualViews": 90,
   "rows": [
     {
       "workspace": "master-data",
@@ -490,6 +490,146 @@
       "workspace": "settings",
       "view": "setup",
       "renderer": "SetupReadinessView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "master-data",
+      "view": "customer-groups",
+      "renderer": "CustomerGroupsView:customer-groups",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "master-data",
+      "view": "customer-regions",
+      "renderer": "CustomerRegionsView:customer-regions",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "master-data",
+      "view": "customer-deposits",
+      "renderer": "CustomerDepositsView:customer-deposits",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "procurement",
+      "view": "supplier-deposits",
+      "renderer": "SupplierDepositsView:supplier-deposits",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "commerce",
+      "view": "sales-orders",
+      "renderer": "SalesOrdersView:sales-orders",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "commerce",
+      "view": "consignments",
+      "renderer": "ConsignmentsView:consignments",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "commerce",
+      "view": "trade-ins",
+      "renderer": "TradeInsView:trade-ins",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "manufacturing",
+      "view": "commissions",
+      "renderer": "CommissionsView:commissions",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "manufacturing",
+      "view": "transfer-files",
+      "renderer": "TransferFilesView:transfer-files",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "finance",
+      "view": "cheques",
+      "renderer": "ChequesView:cheques",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "finance",
+      "view": "cash-flow-categories",
+      "renderer": "CashFlowCategoriesView:cash-flow-categories",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "settings",
+      "view": "printers",
+      "renderer": "PrintersView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "settings",
+      "view": "info-program",
+      "renderer": "InfoProgramView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "settings",
+      "view": "panduan",
+      "renderer": "PanduanView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "settings",
+      "view": "help",
+      "renderer": "PanduanView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "settings",
+      "view": "guide",
+      "renderer": "PanduanView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "settings",
+      "view": "bantuan",
+      "renderer": "PanduanView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "settings",
+      "view": "numbering",
+      "renderer": "NumberSequencesView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "inventory-control",
+      "view": "costing",
+      "renderer": "InventoryCostingView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "finance",
+      "view": "opening-balance",
+      "renderer": "OpeningBalanceView",
       "status": "SOURCE_IMPLEMENTED",
       "sourceFile": "apps/admin/app/page.tsx"
     }

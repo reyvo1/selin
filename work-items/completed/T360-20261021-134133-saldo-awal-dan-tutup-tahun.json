@@ -4,7 +4,7 @@
   "type": "feature",
   "module": "accounting-core",
   "wave": "W3",
-  "phase": "DESIGN",
+  "phase": "CLOSED",
   "risk": "CRITICAL",
   "owner": "architecture",
   "featureFlag": "accounting.opening_and_year_end",
@@ -65,7 +65,7 @@
     "Settlement opening AR/AP via customer receipt/supplier payment: outstanding berkurang, jurnal seimbang, dan tidak membuat pajak baru.",
     "Cutover gate: batch gagal/POSTING memblokir operasi; GL residual tidak menggandakan inventory/AR/AP control."
   ],
-  "migrationPlan": "Tambah tabel staging/import, status batch, dan referensi dokumen sumber secara expand-only. Tidak ada backfill otomatis ke saldo final; import berjalan dry-run, validasi, approval, lalu posting batch. Cutover memakai freeze dan snapshot; regenerate baseline PostgreSQL; uji restore dan rerun. Data historis yang tidak lengkap masuk suspense, bukan direkayasa.",
+  "migrationPlan": "Migration expand-only `database/migrations/T360-20261021-134133-opening-balance-year-end/` membuat enam model staging/opening dan index/unique key terkait; terdaftar di `config/expand-migration-order.json`, tanpa backfill otomatis ke saldo final. Partial unique index `YearEndCloseRun_posted_scope_key` ditambahkan ke baseline PostgreSQL lewat `database/postgresql/post-migration/002-opening-year-end-posted-scope.sql`. Import berjalan dry-run, validasi, approval, lalu posting batch. Cutover memakai freeze dan snapshot; uji restore/rerun. Data historis yang tidak lengkap masuk suspense, bukan direkayasa.",
   "rollbackPlan": "Matikan feature flag accounting.opening_and_year_end, hentikan import/closing, simpan checkpoint, dan restore snapshot bila perlu. Posting yang sudah ada dibalik dengan reversal/compensating; tidak ada edit atau hapus jurnal langsung. Rekonsiliasi ulang trial balance, subledger, dan stok sebelum aktivasi kembali; catat rollback di work item.",
   "monitoringPlan": "Pantau status batch import, jumlah baris valid/ditolak, saldo suspense, selisih trial balance, selisih subledger vs control account, status closing, dan antrean job. Alert bila saldo tidak seimbang, batch gagal berulang, atau closing tertahan; observasi sampai satu siklus tutup buku.",
   "securityNotes": "Import, closing, dan reversal memakai permission finance sempit, tenant/branch/warehouse scope dari AuthUser, maker-checker, audit event, dan rate limit. File import tidak boleh memuat credential atau data kartu; data pribadi disensor di log. Operation key dan bukti approval disimpan tanpa secret.",
@@ -79,5 +79,11 @@
     "handoff/CURRENT-WORK.md"
   ],
   "createdAt": "2026-10-21T05:41:33.399Z",
-  "updatedAt": "2026-10-21T07:35:00.000Z"
+  "updatedAt": "2026-10-24T00:00:00.000Z",
+  "releaseEvidence": {
+    "qualityFast": "PASS (workflow:validate, validate:repo, lint, db:local:prepare, worker build, node tests)",
+    "migrationPostgres": "PASS",
+    "uat": "ACCEPTED (opening-balance, costing runtime tests)",
+    "notes": "Gate produk (Human Stage-20/P5/R7/R8) tetap terbuka; status produk tetap ~40%."
+  }
 }

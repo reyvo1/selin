@@ -234,7 +234,7 @@ export class PurchaseOrdersService {
         data: {
           number: await nextDocumentNumber(tx, { companyId: user.companyId!, branchId: user.branchId!, documentType: 'PURCHASE_ORDER', prefix: 'PO' }), supplierId: dto.supplierId, warehouseId: warehouse.id,
           status: 'APPROVED', expectedDate: dto.expectedDate ? new Date(dto.expectedDate) : undefined,
-          subtotal, total: subtotal, notes: dto.notes,
+          subtotal, total: subtotal, notes: dto.notes, taxIncluded: dto.taxIncluded ?? false,
           items: { create: preparedItems.map((item) => ({
             productId: item.productId, variantId: item.variantId, productUnitId: item.productUnitId,
             unitCode: item.unitCode, unitQuantity: item.unitQuantity, quantityFactor: item.quantityFactor,
@@ -252,6 +252,18 @@ export class PurchaseOrdersService {
           entityId: order.id,
           payload: dto as unknown as Prisma.InputJsonValue,
         },
+      });
+      await tx.supplierPriceHistory.createMany({
+        data: preparedItems.map((item) => ({
+          companyId: scope.companyId,
+          branchId: scope.branchId,
+          supplierId: dto.supplierId,
+          productId: item.productId,
+          field: 'purchaseUnitCost',
+          oldValue: null,
+          newValue: item.purchaseUnitCost,
+          changedById: user.sub,
+        })),
       });
       if (scopeKey) await completeIdempotent(tx, { companyId: scope.companyId, scope: scopeKey, key: dto.idempotencyKey!, resourceType: 'PurchaseOrder', resourceId: order.id, response: order });
       return order;

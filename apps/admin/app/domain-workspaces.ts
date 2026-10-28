@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import {
   Activity, Archive, BadgeDollarSign, Banknote, BellRing, Boxes, BrainCircuit, Building2, ClipboardCheck, ClipboardList,
-  CreditCard, FileBarChart, FileCheck2, Gauge, KeyRound, Landmark, MessageCircleMore, PackageCheck, PackageSearch,
+  CreditCard, FileBarChart, FileCheck2, FileText, Gauge, KeyRound, Landmark, MessageCircleMore, PackageCheck, PackageSearch,
   ReceiptText, RefreshCcw, Route, ScanLine, Settings2, ShieldCheck, ShoppingBag, Sparkles, Truck, UserCog,
   Users, Warehouse, Wrench, Network, Smartphone } from 'lucide-react';
 import type { AdminIdentity, AdminRuntimeManifest, AdminWorkspace } from './navigation';
@@ -17,6 +17,9 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
   { workspaceKey: 'master-data', views: [
     { key: 'catalog', label: 'Kategori & Subkategori', title: 'Struktur kategori produk', description: 'Kategori utama, subkategori, hierarchy, urutan, lifecycle, dan jumlah produk.', Icon:ShoppingBag },
     { key: 'customers', label: 'Customer', title: 'Customer master', description: 'Data pelanggan, kontak, dan segmentasi tanpa mencampur workflow kategori.', Icon:Users },
+    { key: 'customer-groups', permissionPrefixes: ['customer'], label: 'Customer Group', title: 'Customer group & diskon', description: 'Grup pelanggan dan diskon persentase yang dipakai lintas customer.', Icon:Users },
+    { key: 'customer-regions', permissionPrefixes: ['customer'], label: 'Customer Region', title: 'Wilayah pelanggan & diskon', description: 'Wilayah/area pelanggan dan diskon persentase yang dipakai lintas customer.', Icon:Users },
+    { key: 'customer-deposits', permissionPrefixes: ['customer'], label: 'Customer Deposit', title: 'Deposit pelanggan', description: 'Deposit pelanggan, saldo, dan penerapan deposit.', Icon:Users },
     { key: 'products', label: 'Produk & Multi-UOM', title: 'Produk, variant, barcode & multi-UOM', description: 'Produk, variant, base unit, kemasan, barcode alternatif, batch/expiry/serial.', Icon:Boxes },
     { key: 'pricing', label: 'Pricing', title: 'Harga retail, grosir & unit', description: 'Harga per cabang, segmen, kemasan, dan minimum quantity.', Icon:BadgeDollarSign },
     { key: 'references', label: 'Reference Master', title: 'Brand, unit, bank, courier & payment', description: 'Reference master yang dipakai lintas modul.', Icon:Settings2 },
@@ -32,16 +35,22 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'orders', moduleCodes: ['suppliers'], permissionPrefixes: ['purchase'], label: 'Purchase Order', title: 'Purchase orders', description: 'Supplier, gudang, produk, UOM, quantity, dan authoritative unit cost.', Icon:PackageSearch },
     { key: 'receipts', moduleCodes: ['goods-receipts'], permissionPrefixes: ['goods_receipt','inventory'], label: 'Penerimaan', title: 'Goods receipt', description: 'Inbound receiving, inspection, batch/serial, confirmation, stock, dan journal posting.', Icon:PackageCheck },
     { key: 'supplier', moduleCodes: ['suppliers'], permissionPrefixes: ['supplier','purchase'], label: 'Supplier', title: 'Supplier master & settlement context', description: 'Supplier operasional yang menjadi sumber purchase dan payable.', Icon:Users },
+    { key: 'supplier-deposits', moduleCodes: ['suppliers'], permissionPrefixes: ['supplier'], label: 'Supplier Deposit', title: 'Deposit supplier', description: 'Deposit supplier, saldo, dan penerapan deposit.', Icon:Users },
   ]},
   { workspaceKey: 'commerce', views:[
     { key: 'orders', label: 'Order', title: 'Sales & storefront orders', description: 'Order website, status transaksi, dan pembayaran.', Icon:ShoppingBag },
     { key: 'fulfillment', label: 'Fulfillment', title: 'Packing, shipment & delivery', description: 'Packing, outbound inspection, shipment, delivery, dan status lifecycle.', Icon:Truck },
     { key: 'returns', label: 'Retur Customer', title: 'Customer returns', description: 'Return request, inspection, refund, inventory reversal, dan audit.', Icon:RefreshCcw },
     { key: 'channels', label: 'Channel', title: 'Sales channels', description: 'Storefront, marketplace, integration mapping, dan payment provider flow.', Icon:Activity },
+    { key: 'sales-orders', permissionPrefixes: ['sales'], label: 'Sales Order / DP', title: 'Sales order dan DP', description: 'Sales order, down payment, dan settlement.', Icon:ReceiptText },
+    { key: 'consignments', permissionPrefixes: ['sales'], label: 'Konsinyasi', title: 'Consignment order', description: 'Consignment order, supplier/customer, item, dan settlement.', Icon:ReceiptText },
+    { key: 'trade-ins', permissionPrefixes: ['sales'], label: 'Trade-In', title: 'Tukar tambah', description: 'Trade-in, nilai tukar, produk asli, dan produk baru.', Icon:RefreshCcw },
   ]},
   { workspaceKey: 'manufacturing', views:[
     { key: 'recipes', moduleCodes: ['manufacturing'], permissionPrefixes: ['manufacturing'], label: 'Resep / BOM', title: 'Versioned production recipes', description: 'Produk hasil, bahan baku, waste allowance, dan versioned BOM.', Icon:ClipboardList },
     { key: 'orders', moduleCodes: ['manufacturing'], permissionPrefixes: ['manufacturing'], label: 'Production Order', title: 'Production lifecycle', description: 'Draft, release, start, consume components, output stock, WIP/HPP, dan completion.', Icon:Wrench },
+    { key: 'commissions', permissionPrefixes: ['manufacturing'], label: 'Commission Rules & Payouts', title: 'Commission rules & payouts', description: 'Aturan komisi dan daftar payout tenant.', Icon:BadgeDollarSign },
+    { key: 'transfer-files', moduleCodes: ['manufacturing'], permissionPrefixes: ['manufacturing'], label: 'Transfer File', title: 'Transfer file', description: 'Transfer file, daftar dan pembuatan file transfer.', Icon:FileText },
   ]},
   { workspaceKey: 'inventory-control', views:[
     { key: 'overview', label: 'Saldo Stok', title: 'Inventory overview', description: 'Saldo gudang, available stock, minimum stock, dan exception utama.', Icon:Boxes },
@@ -49,6 +58,7 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'transfers', label: 'Transfer', title: 'Stock transfers', description: 'Transfer antar gudang, relokasi, dan in-transit visibility.', Icon:Route },
     { key: 'stocktake', label: 'Stock Opname', title: 'Physical inventory', description: 'Sesi hitung fisik, variance, approval, dan posting.', Icon:ClipboardCheck },
     { key: 'returns', label: 'Retur Supplier/Sales', title: 'Inventory returns', description: 'Retur supplier/penjualan dengan inspection dan reversal authoritative.', Icon:RefreshCcw },
+    { key: 'costing', permissionPrefixes: ['inventory'], label: 'Costing', title: 'Costing persediaan', description: 'Policy costing, valuasi, layer, rekonsiliasi, dan rebuild/backfill.', Icon:Boxes },
   ]},
   { workspaceKey: 'operations-control', views:[
     { key: 'inspections', label: 'Inspeksi', title: 'Quality inspections', description: 'Inbound/outbound inspection dan structured result.', Icon:ClipboardCheck },
@@ -57,12 +67,15 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'delivery', label: 'Delivery', title: 'Delivery lifecycle', description: 'Trip, manifest, loading, dispatch, POD/COD, return, dan close trip.', Icon:Truck },
   ]},
   { workspaceKey: 'finance', views:[
+    { key: 'cheques', moduleCodes: ['finance-operations','accounting'], permissionPrefixes: ['finance','accounting'], label: 'Cheque (AR/AP)', title: 'Cheque AR/AP', description: 'Cheque piutang dan hutang, status, dan transisi.', Icon:ReceiptText },
+    { key: 'cash-flow-categories', moduleCodes: ['accounting','accounting-core'], permissionPrefixes: ['finance','accounting'], label: 'Kategori Arus Kas', title: 'Kategori arus kas', description: 'Kategori arus kas tenant-scoped, jenis, dan status aktif/nonaktif.', Icon:Landmark },
     { key: 'ledger', moduleCodes: ['accounting','accounting-core'], permissionPrefixes: ['accounting','finance'], label: 'Ledger', title: 'Jurnal & accounting ledger', description: 'Accounting event, jurnal authoritative, chart of accounts, dan drill-down.', Icon:Landmark },
     { key: 'tax', moduleCodes: ['system-tax','accounting'], permissionPrefixes: ['tax','accounting','finance'], label: 'Pajak', title: 'Tax workspace', description: 'Tax code versioning, tax ledger, reconciliation, dan evidence.', Icon:FileCheck2 },
     { key: 'fiscal', moduleCodes: ['accounting','accounting-core'], permissionPrefixes: ['accounting','finance'], label: 'Periode Fiskal', title: 'Fiscal period & close', description: 'Open, soft close, reopen, final close, dan kontrol periode.', Icon:ClipboardCheck },
     { key: 'payables', moduleCodes: ['finance-operations','accounting'], permissionPrefixes: ['finance','accounting'], label: 'Hutang / AP', title: 'Accounts payable', description: 'Supplier payable, return offset, payment, dan settlement.', Icon:ReceiptText },
     { key: 'receivables', moduleCodes: ['finance-operations','accounting'], permissionPrefixes: ['finance','accounting'], label: 'Piutang / AR', title: 'Accounts receivable', description: 'COD/invoice receivable, refund receivable, dan collection.', Icon:BadgeDollarSign },
     { key: 'banking', moduleCodes: ['bank-reconciliation','finance-operations'], permissionPrefixes: ['finance','accounting'], label: 'Kas & Bank', title: 'Cash, bank & reconciliation', description: 'Kas/bank, statement import, matching, dan reconciliation.', Icon:Banknote },
+    { key: 'opening-balance', moduleCodes: ['accounting','accounting-core'], permissionPrefixes: ['accounting','finance'], label: 'Saldo Awal', title: 'Saldo awal & tutup tahun', description: 'Batch saldo awal, posting, reversal, settlement, cutover, dan year-end.', Icon:Landmark },
   ]},
   { workspaceKey: 'reports', views:[
     { key: 'financial', label: 'Keuangan', title: 'Financial reports', description: 'P&L, balance sheet, cash flow, trial balance, general ledger, dan tax summary.', Icon:FileBarChart },
@@ -101,6 +114,8 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'users', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['user','role'], label: 'User & Role', title: 'Users, roles & permissions', description: 'User lifecycle, role assignment, permission matrix, status akun, dan branch access.', Icon:UserCog },
     { key: 'setup', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['platform'], label: 'Setup Readiness', title: 'Business setup readiness', description: 'Checklist company, branch, warehouse, users, products, finance, payment reference, dan integration readiness.', Icon:ClipboardCheck },
     { key: 'platform', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['platform'], label: 'System Settings', title: 'System settings', description: 'Konfigurasi runtime company/branch yang diaudit dan tenant-safe.', Icon:Settings2 },
+    { key: 'numbering', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['platform'], label: 'Penomoran', title: 'Penomoran dokumen', description: 'Konfigurasi prefix, format, padding, dan reset periode per company/branch/document type.', Icon:Settings2 },
+    { key: 'printers', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['platform'], label: 'Printer', title: 'Konfigurasi printer & print job', description: 'Konfigurasi printer/station POS dan antrean print job dengan status dan retry.', Icon:Settings2 },
     { key: 'custom-fields', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['custom_field'], label: 'Custom Fields', title: 'Custom field definitions', description: 'Definisi field tambahan untuk entity bisnis tanpa perubahan schema ad-hoc.', Icon:FileCheck2 },
     { key: 'approvals', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['approval'], label: 'Approval Control', title: 'Approval policies & queue', description: 'Policy approval, queue keputusan, delegation context, dan separation of duties.', Icon:ClipboardCheck },
     { key: 'webhooks', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['webhook'], label: 'Webhooks', title: 'Webhook endpoints', description: 'Endpoint outbound, event subscriptions, health, retry, dan replay.', Icon:RefreshCcw },
@@ -114,6 +129,11 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     // the gate below must keep granting user.manage for these reads to succeed.
     { key: 'mobile-ops', roles: ['SUPER_ADMIN','OWNER','ADMIN'], permissionPrefixes: ['user'], label: 'Mobile Ops', title: 'Telegram identity & mobile stock count', description: 'Binding identitas Telegram ke employee aktif, dan draft hitung stok perangkat.', Icon:Smartphone },
     { key: 'data-governance', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR'], permissionPrefixes: ['report','audit'], label: 'Data Governance', title: 'Retention, archive & daily summaries', description: 'Retention policy, archive execution/history, checksum/artifact, dan explicit Admin-owned daily summary materialization.', Icon:Archive },
+    { key: 'info-program', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR'], permissionPrefixes: ['platform','audit'], label: 'Info Program', title: 'Informasi program', description: 'Versi aplikasi, build, identitas deployment, dan tautan changelog.', Icon:Settings2 },
+    { key: 'panduan', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Panduan', title: 'Panduan penggunaan', description: 'Panduan operasional in-app dan bantuan penggunaan Toko360.', Icon:Settings2 },
+    { key: 'help', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Bantuan', title: 'Bantuan dan panduan', description: 'Pusat bantuan in-app untuk operator Toko360.', Icon:Settings2 },
+    { key: 'guide', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Guide', title: 'In-app guide', description: 'In-app guide and help for Toko360 operators.', Icon:Settings2 },
+    { key: 'bantuan', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Bantuan', title: 'Pusat bantuan', description: 'Pusat bantuan dan panduan penggunaan aplikasi.', Icon:Settings2 },
   ]},
 ];
 

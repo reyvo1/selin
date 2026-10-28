@@ -5,6 +5,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import OwnerView from './owner';
 import AccountingView from './modules/accounting';
+import ChequesView from './modules/cheques';
+import CashFlowCategoriesView from './modules/cash-flow-categories';
 import HrPayrollView from './modules/hr-payroll';
 import EmployeeMasterView from './modules/employee-master';
 import OperationsView from './modules/operations';
@@ -13,9 +15,20 @@ import ExtensionsView from './modules/extensions';
 import R3OperationsView from './modules/r3-operations';
 import OperationsControlView from './modules/operations-control';
 import DeliveryLifecycle from './modules/delivery-lifecycle';
+import CustomerGroupsView from './modules/customer-groups';
+import CustomerRegionsView from './modules/customer-regions';
+import CustomerDepositsView from './modules/customer-deposits';
+import SupplierDepositsView from './modules/supplier-deposits';
+import ConsignmentsView from './modules/consignments';
+import TradeInsView from './modules/trade-ins';
+import InventoryCostingView from './modules/inventory-costing';
+import OpeningBalanceView from './modules/opening-balance';
+import SalesOrdersView from './modules/sales-orders';
 import MasterDataView from './modules/master-data';
 import ProductBulkLabelsView from './modules/product-bulk-labels';
 import ManufacturingView from './modules/manufacturing';
+import CommissionsView from './modules/commissions';
+import TransferFilesView from './modules/transfer-files';
 import DigitalServicesView from './modules/digital-services';
 import SetupReadinessView from './modules/setup-readiness';
 import ApiKeysView from './modules/api-keys';
@@ -23,12 +36,16 @@ import BranchSyncView from './modules/branch-sync';
 import MobileOpsView from './modules/mobile-ops';
 import SecurityView from './modules/security';
 import DataGovernanceView from './modules/data-governance';
+import InfoProgramView from './modules/info-program';
+import PanduanView from './modules/panduan';
 import AutomationWorkspace from './modules/automation-workspace';
 import AiWorkspace from './modules/ai-workspace';
 import ReportingWorkspace from './modules/reporting-workspace';
 import OrganizationAdminView from './modules/organization-admin';
 import AccessControlView from './modules/access-control';
 import PlatformControlView from './modules/platform-control';
+import NumberSequencesView from './modules/number-sequences';
+import PrintersView from './modules/printers';
 import DashboardOverview from './dashboard-overview';
 import AdminAppShell from './app-shell';
 import { canReadAdminFeed, settleAdminFeed } from './bootstrap-data';
@@ -515,6 +532,9 @@ export default function AdminPage() {
             {activeDomainView?.key === 'fulfillment' && <ExtensionsView token={token} mode="commerce" commerceSection="fulfillment" />}
             {activeDomainView?.key === 'returns' && <OperationsView token={token} mode="returns" />}
             {activeDomainView?.key === 'channels' && <><ExtensionsView token={token} mode="commerce" commerceSection="channels" /><R3OperationsView token={token} mode="connections" /></>}
+            {activeDomainView?.key === 'sales-orders' && <SalesOrdersView token={token} />}
+            {activeDomainView?.key === 'consignments' && <ConsignmentsView token={token} />}
+            {activeDomainView?.key === 'trade-ins' && <TradeInsView token={token} />}
           </>}
           {activeWorkspace.key === 'procurement' && <>
             {(!activeDomainView || activeDomainView.key === 'requests') && <section className="grid2">
@@ -577,14 +597,19 @@ export default function AdminPage() {
               <div className="panelTitle"><div><span className="eyebrow">INVENTORY LEDGER</span><h2>Canonical inventory movements</h2></div><span>{inventoryMovements.length} movement</span></div>
               <div className="table"><div className="tr th"><span>Waktu / Referensi</span><span>Produk / Gudang</span><span>Movement / Saldo</span></div>{inventoryMovements.slice(0,30).map((movement) => <div className="tr" key={movement.id}><span><strong>{new Date(movement.createdAt).toLocaleString('id-ID')}</strong><small>{movement.referenceType ?? '-'}:{movement.referenceId ?? '-'}</small></span><span><strong>{movement.product.name}</strong><small>{movement.warehouse.name}</small></span><span><strong>{movement.type} · {movement.quantity > 0 ? '+' : ''}{movement.quantity}</strong><small>balance {movement.balanceAfter}</small></span></div>)}</div>
             </section>}
+            {activeDomainView?.key === 'supplier-deposits' && <SupplierDepositsView token={token} />}
           </>}
 
           {activeWorkspace.key === 'inventory-control' && <><OperationsView token={token} mode={(activeDomainView?.key ?? 'overview') as 'overview'|'traceability'|'transfers'|'stocktake'|'returns'} />{(!activeDomainView || activeDomainView.key === 'overview') && <section className="panel"><div className="panelTitle"><div><span className="eyebrow">INVENTORY LEDGER</span><h2>Canonical inventory movements</h2></div><span>{inventoryMovements.length} movement</span></div><div className="table"><div className="tr th"><span>Waktu / Referensi</span><span>Produk / Gudang</span><span>Movement / Saldo</span></div>{inventoryMovements.slice(0,50).map((movement) => <div className="tr" key={movement.id}><span><strong>{new Date(movement.createdAt).toLocaleString('id-ID')}</strong><small>{movement.referenceType ?? '-'}:{movement.referenceId ?? '-'}</small></span><span><strong>{movement.product.name}</strong><small>{movement.warehouse.name}</small></span><span><strong>{movement.type} · {movement.quantity > 0 ? '+' : ''}{movement.quantity}</strong><small>balance {movement.balanceAfter}</small></span></div>)}</div></section>} </>}
           {activeWorkspace.key === 'operations-control' && (activeDomainView?.key === 'delivery' ? <DeliveryLifecycle token={token} /> : <OperationsControlView token={token} mode={(activeDomainView?.key ?? 'inspections') as 'inspections'|'evidence'|'gate-pass'} />)}
-          {activeWorkspace.key === 'master-data' && (activeDomainView?.key === 'bulk-labels' ? <ProductBulkLabelsView token={token} /> : <MasterDataView token={token} mode={activeDomainView?.key ?? 'products'} />)}
-          {activeWorkspace.key === 'manufacturing' && <ManufacturingView token={token} />}
+          {activeWorkspace.key === 'master-data' && (activeDomainView?.key === 'bulk-labels' ? <ProductBulkLabelsView token={token} /> : activeDomainView?.key === 'customer-groups' ? <CustomerGroupsView token={token} /> : activeDomainView?.key === 'customer-regions' ? <CustomerRegionsView token={token} /> : activeDomainView?.key === 'customer-deposits' ? <CustomerDepositsView token={token} /> : <MasterDataView token={token} mode={activeDomainView?.key ?? 'products'} />)}
+          {activeWorkspace.key === 'manufacturing' && (activeDomainView?.key === 'commissions' ? <CommissionsView token={token} /> : activeDomainView?.key === 'transfer-files' ? <TransferFilesView token={token} /> : <ManufacturingView token={token} />)}
           {activeWorkspace.key === 'organization' && (activeDomainView?.key === 'organization' || !activeDomainView ? <OrganizationAdminView token={token} /> : <MasterDataView token={token} mode={activeDomainView.key} />)}
-          {activeWorkspace.key === 'finance' && <AccountingView token={token} mode={activeDomainView?.key ?? 'ledger'} />}
+          {activeWorkspace.key === 'finance' && activeDomainView?.key === 'cheques' && <ChequesView token={token} />}
+{activeWorkspace.key === 'inventory-control' && activeDomainView?.key === 'costing' && <InventoryCostingView token={token} />}
+{activeWorkspace.key === 'finance' && activeDomainView?.key === 'opening-balance' && <OpeningBalanceView token={token} />}
+          {activeWorkspace.key === 'finance' && activeDomainView?.key === 'cash-flow-categories' && <CashFlowCategoriesView token={token} />}
+          {activeWorkspace.key === 'finance' && activeDomainView?.key !== 'cheques' && activeDomainView?.key !== 'cash-flow-categories' && <AccountingView token={token} mode={activeDomainView?.key ?? 'ledger'} />}
           {activeWorkspace.key === 'reports' && <>
             {activeDomainView?.key === 'owner' && <OwnerView token={token} />}
             {(!activeDomainView || activeDomainView.key === 'financial') && <ReportingWorkspace token={token} mode="financial" />}
@@ -610,7 +635,7 @@ export default function AdminPage() {
           {activeWorkspace.key === 'settings' && <>
 
             {(!activeDomainView || activeDomainView.key === 'features') && <section className="panel">
-              <div className="panelTitle"><div><span className="eyebrow">RUNTIME MODULES</span><h2>Feature flags</h2></div><span>{Object.values(manifest?.features ?? {}).filter((feature) => feature.enabled).length} aktif</span></div>
+              <div className="panelTitle"><div><span className="eyebrow">MODUL TERBUKA · RUNTIME CATALOG</span><h2>Runtime modules</h2></div><span>{Object.values(manifest?.features ?? {}).filter((feature) => feature.enabled).length} aktif</span></div>
               <p className="sectionHelp">Flag runtime bukan bukti product-completeness. Maturity dan ownership di bawah menjelaskan capability sebenarnya; FOUNDATION/ADAPTER_REQUIRED tidak boleh dibaca sebagai modul produksi selesai.</p>
               <div className="table">{manifest?.modules.map((module) => { const feature = module.featureKey ? manifest.features[module.featureKey] : undefined; const enabled = module.isCore || !module.featureKey || feature?.enabled; const maturity = feature?.config?.maturityClass ?? (module.isCore ? 'OPERATIONAL' : 'UNKNOWN'); const help = feature?.config?.helpText ?? module.description ?? 'Capability core runtime.'; const configurable = feature?.config?.configurable !== false; return <div className="receipt" key={module.code}><div><strong>{module.name}</strong><small>{module.category} · {module.code}</small><small>Maturity: {maturity} · Ownership: {feature?.config?.ownership ?? (module.isCore ? 'TOKO360_RUNTIME' : 'UNDECLARED')}</small><small>{help}</small></div>{module.featureKey ? <div className="actionRow"><span className={enabled?'okText':''}>{enabled?'ENABLED':'DISABLED'}</span><button type="button" className="secondary" disabled={!configurable || !canRootAction('platform.configure', ['SUPER_ADMIN', 'OWNER', 'ADMIN'])} onClick={() => setFeatureChange({ key: module.featureKey!, enabled: !enabled })}>{enabled ? 'Nonaktifkan' : 'Aktifkan'}</button></div> : <span className="okText">CORE</span>}</div>; })}</div>
             </section>}
@@ -622,6 +647,10 @@ export default function AdminPage() {
             {activeDomainView?.key === 'branch-sync' && <BranchSyncView token={token} />}
             {activeDomainView?.key === 'mobile-ops' && <MobileOpsView token={token} />}
             {activeDomainView?.key === 'data-governance' && <DataGovernanceView token={token} />}
+            {activeDomainView?.key === 'numbering' && <NumberSequencesView token={token} />}
+            {activeDomainView?.key === 'printers' && <PrintersView token={token} />}
+            {activeDomainView?.key === 'info-program' && <InfoProgramView token={token} />}
+            {(['panduan','help','guide','bantuan'] as const).includes(activeDomainView?.key as never) && <PanduanView token={token} />}
           </>}
 
         </>}
