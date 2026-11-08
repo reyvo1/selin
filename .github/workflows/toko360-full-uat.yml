@@ -88,7 +88,12 @@ jobs:
       - name: Install PostgreSQL client
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-client-16
+          psql --version
+          pg_dump --version
+          pg_restore --version
+          test "$(pg_dump --version | awk '{print $3}' | cut -d. -f1)" = "16"
+          test "$(pg_restore --version | awk '{print $3}' | cut -d. -f1)" = "16"
 
       - name: Resolve Chromium
         shell: bash
