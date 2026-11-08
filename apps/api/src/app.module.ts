@@ -50,6 +50,9 @@ import { StorefrontCustomerModule } from './storefront-customer/storefront-custo
 import { ManufacturingModule } from './manufacturing/manufacturing.module';
 import { CommissionsModule } from './commissions/commissions.module';
 import { CustomerDepositsModule } from './customer-deposits/customer-deposits.module';
+import { LoyaltyModule } from './loyalty/loyalty.module';
+import { WarehouseLocationModule } from './warehouse-locations/warehouse-locations.module';
+import { CustomerARSettlementModule } from './customer-ar-settlement/customer-ar-settlement.module';
 import { SupplierDepositsModule } from './supplier-deposits/supplier-deposits.module';
 import { SupplierPricesModule } from './supplier-prices/supplier-prices.module';
 import { CustomerGroupsModule } from './customer-groups/customer-groups.module';
@@ -93,6 +96,9 @@ import { ChequesModule } from './cheques/cheques.module';
     ManufacturingModule,
     CommissionsModule,
     CustomerDepositsModule,
+    LoyaltyModule,
+    WarehouseLocationModule,
+    CustomerARSettlementModule,
     SupplierDepositsModule,
     SupplierPricesModule,
     CustomerGroupsModule,

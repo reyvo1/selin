@@ -114,7 +114,7 @@ async function main() {
     'master_data.view','master_data.manage','customer.view','customer.manage',
     'supplier.view','supplier.create','supplier.update',
     'purchase.view','purchase.create','purchase.approve','purchase.receive','purchase.return','purchase.cancel',
-    'inventory.view','inventory.adjust','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
+    'inventory.view','inventory.adjust','inventory.manage','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
     'inventory.costing.view','inventory.costing.manage','inventory.costing.rebuild',
     'sale.view','sale.create','sale.cancel','sale.return','sale.refund',
     'sales.view','sales.manage',
@@ -122,6 +122,7 @@ async function main() {
     'payment.view','payment.manage','payment.refund','payment.reconcile',
     'finance.view','finance.create','finance.post','finance.journal','finance.expense','finance.approve','finance.close_period','finance.reconcile',
     'loyalty.view','loyalty.manage','promotion.view','promotion.manage','forecast.view','forecast.run','assistant.use','assistant.manage',
+    'commission.view',
     'integration.view','integration.manage','webhook.manage','notification.manage','api_key.view','api_key.manage',
     'platform.configure','branch.switch','approval.manage','custom_field.manage','ui_schema.manage',
     'user.manage','role.manage','report.view','report.export','audit.view',
@@ -641,6 +642,32 @@ async function main() {
       { accountCodeKey: 'salaryPayable', side: 'DEBIT', amountKey: 'gross' },
       { accountCodeKey: 'settlement', side: 'CREDIT', amountKey: 'gross' },
     ] },
+    // D07: cheques (giro/cek) — posting ke piutang/utang dan kas/bank.
+    { code: 'CHEQUE-DEPOSITED', eventType: 'CHEQUE_DEPOSITED', lines: [
+      // Cheque diterima lalu disetor ke bank: DEBIT kas/bank, KREDIT piutang.
+      { accountCodeKey: 'settlement', side: 'DEBIT', amountKey: 'gross' },
+      { accountCodeKey: 'receivable', side: 'CREDIT', amountKey: 'gross' },
+    ] },
+    { code: 'CHEQUE-CLEARED-AR', eventType: 'CHEQUE_CLEARED_AR', lines: [
+      // Cheque AR cair dari bank: DEBIT kas/bank (jika belum di-DEBIT saat deposited), KREDIT piutang.
+      { accountCodeKey: 'settlement', side: 'DEBIT', amountKey: 'gross' },
+      { accountCodeKey: 'receivable', side: 'CREDIT', amountKey: 'gross' },
+    ] },
+    { code: 'CHEQUE-CLEARED-AP', eventType: 'CHEQUE_CLEARED_AP', lines: [
+      // Cheque AP (keluar) cair: DEBIT utang usaha, KREDIT kas/bank.
+      { accountCodeKey: 'payable', side: 'DEBIT', amountKey: 'gross' },
+      { accountCodeKey: 'settlement', side: 'CREDIT', amountKey: 'gross' },
+    ] },
+    { code: 'CHEQUE-BOUNCED-AR', eventType: 'CHEQUE_BOUNCED_AR', lines: [
+      // Cheque AR ditolak bank: balik piutang (DEBIT piutang, KREDIT kas/bank).
+      { accountCodeKey: 'receivable', side: 'DEBIT', amountKey: 'gross' },
+      { accountCodeKey: 'settlement', side: 'CREDIT', amountKey: 'gross' },
+    ] },
+    { code: 'CHEQUE-BOUNCED-AP', eventType: 'CHEQUE_BOUNCED_AP', lines: [
+      // Cheque AP ditolak bank: balik utang (DEBIT kas/bank, KREDIT utang usaha).
+      { accountCodeKey: 'settlement', side: 'DEBIT', amountKey: 'gross' },
+      { accountCodeKey: 'payable', side: 'CREDIT', amountKey: 'gross' },
+    ] },
     { code: 'PAYROLL-EMPLOYEE-RECOVERY', eventType: 'PAYROLL_EMPLOYEE_RECOVERY', lines: [
       { accountCodeKey: 'settlement', side: 'DEBIT', amountKey: 'gross' },
       { accountCodeKey: 'payrollReceivable', side: 'CREDIT', amountKey: 'gross' },
@@ -861,7 +888,7 @@ async function main() {
       'master_data.view','master_data.manage','customer.view','customer.manage',
       'supplier.view','supplier.create','supplier.update',
       'purchase.view','purchase.create','purchase.approve','purchase.receive','purchase.return','purchase.cancel',
-      'inventory.view','inventory.adjust','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
+      'inventory.view','inventory.adjust','inventory.manage','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
       'inventory.costing.view','inventory.costing.manage','inventory.costing.rebuild',
       'sale.view','sale.create','sale.cancel','sale.return','sale.refund',
       'sales.view','sales.manage',
@@ -869,6 +896,7 @@ async function main() {
       'payment.view','payment.manage','payment.refund','payment.reconcile',
       'finance.view','finance.create','finance.post','finance.journal','finance.expense','finance.approve','finance.close_period','finance.reconcile',
       'loyalty.view','loyalty.manage','forecast.view','forecast.run','assistant.use','assistant.manage',
+      'commission.view',
       'promotion.view','promotion.manage',
       'integration.view','integration.manage','webhook.manage','notification.manage','api_key.view','api_key.manage',
       'platform.configure','branch.switch','approval.manage','custom_field.manage','ui_schema.manage',
@@ -888,7 +916,7 @@ async function main() {
     ['WAREHOUSE', [
       'master_data.view','master_data.manage',
       'product.view','supplier.view','purchase.view','purchase.receive','purchase.return',
-      'inventory.view','inventory.adjust','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
+      'inventory.view','inventory.adjust','inventory.manage','inventory.transfer','inventory.opname','inventory.batch','inventory.serial',
       'sale.view','sale.return','order.view','shipment.manage',
       'asset.view','asset.maintenance','fleet.view','fleet.expense',
       'delivery.trip.manage','delivery.loading.confirm','delivery.dispatch','delivery.proof',
@@ -904,16 +932,16 @@ async function main() {
       'tax.view','tax.manage','accounting.event.view','accounting.rule.manage',
       'accounting.opening.view','accounting.opening.import','accounting.opening.approve','accounting.opening.post','accounting.opening.reverse',
       'payroll.view','payroll.approve','payroll.post','payroll.publish',
-      'report.view','report.export','audit.view','inventory.view','inventory.costing.view','inventory.costing.manage','inventory.costing.rebuild','asset.view','asset.depreciate','fleet.view',
-      'inspection.view','operations.confirm','goods_receipt.confirm','goods_receipt.reject','digital_service.view','digital_service.manage','sale.return','purchase.return',
+      'report.view','report.export','audit.view','inventory.view','inventory.costing.view','inventory.costing.manage','inventory.costing.rebuild','asset.view','asset.depreciate','fleet.view','master_data.view','commission.view',
+      'inspection.view','operations.confirm','goods_receipt.confirm','goods_receipt.reject','digital_service.view','digital_service.manage','sale.return','purchase.return','commission.view',
     ]],
-    ['AUDITOR', ['product.view','supplier.view','purchase.view','sale.view','order.view','inventory.view','inventory.costing.view','finance.view','tax.view','accounting.event.view','accounting.opening.view','payroll.view','report.view','report.export','audit.view','inspection.view','asset.view','fleet.view','payment.view','manufacturing.view','digital_service.view']],
+    ['AUDITOR', ['product.view','supplier.view','purchase.view','sale.view','order.view','inventory.view','inventory.costing.view','finance.view','tax.view','accounting.event.view','accounting.opening.view','payroll.view','report.view','report.export','audit.view','inspection.view','asset.view','fleet.view','payment.view','manufacturing.view','digital_service.view','master_data.view','commission.view']],
     ['HR', ['employee.view','employee.manage','attendance.view','attendance.manage','attendance.approve','leave.view','leave.manage','leave.approve','overtime.view','overtime.manage','overtime.approve','payroll.view','report.view']],
     ['PAYROLL', ['employee.view','attendance.view','attendance.approve','payroll.view','payroll.manage','payroll.calculate','payroll.approve','payroll.post','payroll.publish','tax.view','tax.manage','accounting.event.view','report.view']],
     ['MANAGER', [
-      'product.view','supplier.view','purchase.view','purchase.approve','inventory.view','inventory.adjust',
-      'sale.view','order.view','payment.view','finance.view','finance.approve','report.view','report.export','audit.view',
-      'employee.view','attendance.view','attendance.approve','payroll.view','payroll.approve',
+      'product.view','supplier.view','purchase.view','purchase.approve','inventory.view','inventory.adjust','inventory.manage',
+      'sale.view','order.view','payment.view','finance.view','finance.approve','report.view','report.export','audit.view','master_data.view',
+      'employee.view','attendance.view','attendance.approve','payroll.view','payroll.approve','commission.view',
       'inspection.view','inspection.approve','gate_pass.approve','operations.policy.view','operations.confirm',
       'asset.view','fleet.view','delivery.trip.manage','delivery.dispatch','manufacturing.view','manufacturing.manage','digital_service.view',
     ]],

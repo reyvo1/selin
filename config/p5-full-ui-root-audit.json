@@ -2,20 +2,20 @@
   "version": 4,
   "phase": "P5-V4.9-FOUR-PRODUCT-ROOT-DESIGN-SYSTEM",
   "sourceScan": {
-    "apiControllers": 46,
-    "apiRoutes": 532,
-    "prismaModels": 202,
+    "apiControllers": 71,
+    "apiRoutes": 683,
+    "prismaModels": 234,
     "adminPrimaryWorkspaces": 15,
-    "adminContextualViews": 90,
+    "adminContextualViews": 94,
     "posViews": 4,
     "storefrontViews": 5,
     "employeeViews": 7,
-    "interactiveControls": 625
+    "interactiveControls": 642
   },
   "presentation": {
     "admin": {
-      "fileCount": 73,
-      "lineCount": 15133,
+      "fileCount": 77,
+      "lineCount": 16184,
       "requiredSemanticClassCount": 34,
       "missingSemanticClasses": []
     },
@@ -40,7 +40,7 @@
   },
   "controls": {
     "admin": {
-      "buttons": 494,
+      "buttons": 511,
       "links": 4,
       "inertButtons": 0,
       "implicitSubmitButtons": 32,
@@ -147,8 +147,8 @@
         "label": "Pengaturan & Akses"
       }
     ],
-    "contextualViewCount": 90,
-    "expectedContextualViewCount": 90,
+    "contextualViewCount": 94,
+    "expectedContextualViewCount": 94,
     "contextualViews": {
       "master-data": [
         "catalog",
@@ -171,7 +171,9 @@
         "orders",
         "receipts",
         "supplier",
-        "supplier-deposits"
+        "supplier-deposits",
+        "supplier-prices",
+        "warehouse-locations"
       ],
       "commerce": [
         "orders",
@@ -205,7 +207,8 @@
         "banking",
         "cheques",
         "cash-flow-categories",
-        "opening-balance"
+        "opening-balance",
+        "customer-ar-settlement"
       ],
       "reports": [
         "financial",
@@ -217,7 +220,8 @@
         "employees",
         "attendance",
         "payroll",
-        "compliance"
+        "compliance",
+        "commission-report"
       ],
       "assets-fleet": [
         "assets",
@@ -357,7 +361,10 @@
       "title": "Automation + scheduled reports",
       "status": "EXPOSED",
       "uiApps": [
-        "admin"
+        "admin",
+        "pos",
+        "storefront",
+        "employee-portal"
       ],
       "gap": "Automation worker tersedia, tetapi scheduler/report schedule first-class dan operator execution history/rule management belum lengkap."
     },

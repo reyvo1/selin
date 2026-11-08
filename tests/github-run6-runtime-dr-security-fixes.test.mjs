@@ -53,7 +53,7 @@ test('security proposal fixes production framework peers without forcing Nest 12
     assert.equal(candidate.direct.next, plan.candidates[0].direct.next);
     assert.ok(/^16\.[3-9]\.\d+$/.test(candidate.direct.next), `next candidate harus >= 16.3.6 (patch GHSA-vcvr-r3jv-pc5j): ${candidate.direct.next}`);
     assert.equal(candidate.direct['@nestjs/core'], '12.0.4');
-    assert.equal(candidate.direct['@nestjs/platform-express'], '12.0.4');
+    assert.equal(candidate.direct['@nestjs/platform-express'], '12.3.2');
     assert.equal(candidate.direct['@nestjs/config'], '12.0.0');
     assert.equal(candidate.direct['@nestjs/jwt'], '12.0.2');
     assert.equal(candidate.direct['@nestjs/swagger'], '12.0.1');

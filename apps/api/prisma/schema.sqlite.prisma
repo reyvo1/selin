@@ -556,6 +556,7 @@ model Product {
   productionOutputs  ProductionRecipe[] @relation("ProductionRecipeOutput")
   recipeComponents   ProductionRecipeItem[] @relation("ProductionRecipeComponent")
   productionOrderComponents ProductionOrderComponent[] @relation("ProductionOrderComponentProduct")
+  consignmentItems   ConsignmentItem[]
   @@index([companyId, isActive, name, id])
   @@index([companyId, sku])
   @@index([isActive, name, id])
@@ -1104,6 +1105,8 @@ model ConsignmentOrder {
   status      String   @default("DRAFT")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  items       ConsignmentItem[]
+  settlements ConsignmentSettlement[]
   @@index([companyId, branchId, status])
 }
 
@@ -1114,6 +1117,8 @@ model ConsignmentItem {
   quantity          Int
   ownership         String   @default("SUPPLIER")
   createdAt         DateTime @default(now())
+  consignmentOrder  ConsignmentOrder @relation(fields: [consignmentOrderId], references: [id])
+  product           Product        @relation(fields: [productId], references: [id])
   @@index([consignmentOrderId])
 }
 
@@ -1123,6 +1128,7 @@ model ConsignmentSettlement {
   amount            Decimal
   settledAt         DateTime @default(now())
   createdAt         DateTime @default(now())
+  consignmentOrder  ConsignmentOrder @relation(fields: [consignmentOrderId], references: [id])
   @@index([consignmentOrderId])
 }
 
@@ -1148,9 +1154,16 @@ model TransferFile {
   direction   String
   fileName    String
   status      String   @default("PENDING")
+  payload     Json?
+  checksum    String?
+  rowIngested Int      @default(0)
+  rowRejected Int      @default(0)
+  processedBy String?
+  processedAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@index([companyId, branchId, status])
+  @@index([companyId, direction, status])
 }
 
 model Customer {

@@ -24,7 +24,7 @@ test('security dependency proposal evaluates multiple isolated candidates withou
   assert.equal(currentPrisma.direct.next, auditCompat.direct.next);
   assert.ok(/^16\.[3-9]\.\d+$/.test(currentPrisma.direct.next), `next candidate harus >= 16.3.6: ${currentPrisma.direct.next}`);
   assert.equal(currentPrisma.direct['@nestjs/core'], '12.0.4');
-  assert.equal(currentPrisma.direct['@nestjs/platform-express'], '12.0.4');
+  assert.equal(currentPrisma.direct['@nestjs/platform-express'], '12.3.2');
   assert.equal(currentPrisma.direct['@nestjs/config'], '12.0.0');
   assert.equal(currentPrisma.direct['@nestjs/jwt'], '12.0.2');
   assert.equal(currentPrisma.direct['@nestjs/swagger'], '12.0.1');
@@ -51,8 +51,10 @@ test('empat aplikasi Next declaring versi patched, sama dengan plan security', (
     assert.equal(declared, patched, `${app} harus declaring next ${patched}, bukan ${declared}`);
   }
   const lock = JSON.parse(read('package-lock.json'));
-  const locked = lock.packages?.['node_modules/next']?.version;
-  assert.equal(locked, patched, `package-lock.json harus mengunci next ${patched}, bukan ${locked}`);
+  for (const app of ['admin', 'storefront', 'pos', 'employee-portal']) {
+    const locked = lock.packages?.[`apps/${app}/node_modules/next`]?.version;
+    assert.equal(locked, patched, `package-lock ${app} harus mengunci next ${patched}, bukan ${locked}`);
+  }
 });
 
 test('security proposal is isolated, records each candidate lock/audit, and never overwrites the checked-out package lock', () => {

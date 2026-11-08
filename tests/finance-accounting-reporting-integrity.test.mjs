@@ -82,11 +82,13 @@ test('financial integrity treats structural imbalance and failed accounting even
   assert.match(reports, /status: blockers > 0 \? 'FAIL' : warnings > 0 \? 'WARN' : 'PASS'/);
 });
 
-test('inventory valuation returns a whole-branch live summary independent of page size', () => {
+test('inventory valuation returns a whole-branch summary using cost layer when available, falling back to costPrice', () => {
   assert.match(reports, /const valuationRows = await this\.prisma\.inventory\.findMany/);
+  // F13: cost layer menjadi sumber utama; costPrice × qty sebagai fallback untuk SKU yang belum punya state.
+  assert.match(reports, /costStateByKey\.get\(\`\${row\.warehouseId}:\${row\.product\.id}\`\)/);
   assert.match(reports, /new Prisma\.Decimal\(row\.product\.costPrice\)\.mul\(row\.quantity\)/);
   assert.match(reports, /inventoryValue: Number\(inventoryValue\)/);
-  assert.match(reports, /source: 'LIVE_INVENTORY'/);
+  assert.match(reports, /source: usingCostLayer \? 'COST_LAYER' : 'LIVE_INVENTORY'/);
   assert.match(owner, /function inventoryValueOf\(value: Valuation\)/);
   assert.match(owner, /'summary' in value/);
   assert.match(owner, /'inventoryValue' in summary/);

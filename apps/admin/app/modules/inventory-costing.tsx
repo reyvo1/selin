@@ -111,6 +111,42 @@ type RebuildRun = {
 };
 type RebuildRunsResponse = { items?: RebuildRun[]; nextCursor?: string | null };
 
+type PreviewIssueResponse = {
+  asOf: string;
+  method: string;
+  cost: string;
+  unitCost: string;
+  uncostedQuantity: number;
+};
+
+type ValuationLayerRow = {
+  warehouseId: string;
+  warehouseCode?: string | null;
+  warehouseName?: string | null;
+  productId: string;
+  productSku?: string | null;
+  productName?: string | null;
+  quantity: number;
+  value: string;
+};
+type ValuationLayerResponse = {
+  asOf: string;
+  method: string;
+  totals: { quantity: number; value: string };
+  items: ValuationLayerRow[];
+};
+
+type ParallelRunResponse = {
+  asOf: string;
+  from: string;
+  to: string;
+  sales: number;
+  legacyCost: string;
+  costingCost: string;
+  difference: string;
+  matched: boolean;
+};
+
 async function req<T>(token: string, path: string, init?: RequestInit): Promise<T> {
   const r = await authFetch(`${API}${path}`, token, {
     ...init,
@@ -158,6 +194,22 @@ export default function InventoryCostingView({ token }: { token: string }) {
   const [rebuildRuns, setRebuildRuns] = useState<RebuildRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState('');
   const [selectedRun, setSelectedRun] = useState<RebuildRun | null>(null);
+
+  const [previewWarehouseId, setPreviewWarehouseId] = useState('');
+  const [previewProductId, setPreviewProductId] = useState('');
+  const [previewBatchKey, setPreviewBatchKey] = useState('');
+  const [previewQuantity, setPreviewQuantity] = useState('1');
+  const [previewOccurredAt, setPreviewOccurredAt] = useState('');
+  const [preview, setPreview] = useState<PreviewIssueResponse | null>(null);
+
+  const [layerValWarehouseId, setLayerValWarehouseId] = useState('');
+  const [layerValProductId, setLayerValProductId] = useState('');
+  const [valuationLayers, setValuationLayers] = useState<ValuationLayerResponse | null>(null);
+
+  const [parallelFrom, setParallelFrom] = useState('');
+  const [parallelTo, setParallelTo] = useState('');
+  const [parallelWarehouseId, setParallelWarehouseId] = useState('');
+  const [parallelRun, setParallelRun] = useState<ParallelRunResponse | null>(null);
 
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -221,6 +273,38 @@ export default function InventoryCostingView({ token }: { token: string }) {
     if (!id) return;
     const d = await req<RebuildRun>(token, `/inventory/costing/rebuild-runs/${id}`);
     setSelectedRun(d);
+  }
+
+  async function loadPreviewIssue() {
+    if (!previewWarehouseId || !previewProductId) {
+      setMsg('Gudang dan produk wajib dipilih untuk preview costing.');
+      return;
+    }
+    const q = new URLSearchParams();
+    q.set('warehouseId', previewWarehouseId);
+    q.set('productId', previewProductId);
+    if (previewBatchKey) q.set('batchKey', previewBatchKey);
+    if (previewQuantity) q.set('quantity', previewQuantity);
+    if (previewOccurredAt) q.set('occurredAt', new Date(previewOccurredAt).toISOString());
+    const d = await req<PreviewIssueResponse>(token, `/inventory/costing/preview-issue?${q.toString()}`);
+    setPreview(d);
+  }
+
+  async function loadValuationLayers() {
+    const q = new URLSearchParams();
+    if (layerValWarehouseId) q.set('warehouseId', layerValWarehouseId);
+    if (layerValProductId) q.set('productId', layerValProductId);
+    const d = await req<ValuationLayerResponse>(token, `/inventory/costing/valuation-layers?${q.toString()}`);
+    setValuationLayers(d);
+  }
+
+  async function loadParallelRun() {
+    const q = new URLSearchParams();
+    if (parallelFrom) q.set('from', new Date(parallelFrom).toISOString());
+    if (parallelTo) q.set('to', new Date(parallelTo).toISOString());
+    if (parallelWarehouseId) q.set('warehouseId', parallelWarehouseId);
+    const d = await req<ParallelRunResponse>(token, `/inventory/costing/parallel-run?${q.toString()}`);
+    setParallelRun(d);
   }
 
   useEffect(() => {
@@ -502,6 +586,78 @@ export default function InventoryCostingView({ token }: { token: string }) {
             <p className="sectionHelp">Cutover: {selectedRun.fromDate ? tanggal(selectedRun.fromDate) : '-'} · Selesai: {selectedRun.finishedAt ? tanggal(selectedRun.finishedAt) : '-'}</p>
             {selectedRun.statistics && <pre className="sectionHelp">{JSON.stringify(selectedRun.statistics, null, 2)}</pre>}
           </div>
+        )}
+      </Panel>
+
+      <Panel eyebrow="PREVIEW ISSUE" title="Preview biaya pengeluaran (tanpa tulis)">
+        <div className="formStack">
+          <div className="grid2">
+            <label>Gudang<select value={previewWarehouseId} onChange={(e) => setPreviewWarehouseId(e.target.value)}><option value="">Pilih gudang</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.code ? w.code + ' · ' : ''}{w.name}</option>)}</select></label>
+            <label>Produk<select value={previewProductId} onChange={(e) => setPreviewProductId(e.target.value)}><option value="">Pilih produk</option>{products.map((p) => <option key={p.id} value={p.id}>{p.sku ? p.sku + ' · ' : ''}{p.name}</option>)}</select></label>
+          </div>
+          <div className="grid2">
+            <label>Kuantitas<input type="number" min="1" value={previewQuantity} onChange={(e) => setPreviewQuantity(e.target.value)} /></label>
+            <label>Tanggal occurred<input type="datetime-local" value={previewOccurredAt} onChange={(e) => setPreviewOccurredAt(e.target.value)} /></label>
+          </div>
+          <label>Batch key (opsional)<input value={previewBatchKey} onChange={(e) => setPreviewBatchKey(e.target.value)} placeholder="kosongkan untuk semua batch" /></label>
+          <button type="button" disabled={busy} onClick={() => { setMsg(''); void loadPreviewIssue().catch((e) => setMsg(e instanceof Error ? e.message : 'Gagal preview costing')); }}>Preview costing</button>
+        </div>
+        {preview && (
+          <>
+            <p className="sectionHelp">Metode: {preview.method} · As of {tanggal(preview.asOf)}</p>
+            <div className="grid2">
+              <div><span className="label">Unit cost</span><span className="value">{preview.unitCost}</span></div>
+              <div><span className="label">Total cost</span><span className="value">{rupiah(preview.cost)}</span></div>
+              <div><span className="label">Uncosted qty</span><span className="value">{preview.uncostedQuantity}</span></div>
+            </div>
+          </>
+        )}
+      </Panel>
+
+      <Panel eyebrow="VALUATION BY LAYER" title="Valuasi per layer terbuka" badge={valuationLayers ? `${valuationLayers.items.length} baris` : undefined}>
+        <div className="formStack">
+          <div className="grid2">
+            <label>Gudang<select value={layerValWarehouseId} onChange={(e) => setLayerValWarehouseId(e.target.value)}><option value="">Semua gudang</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.code ? w.code + ' · ' : ''}{w.name}</option>)}</select></label>
+            <label>Produk<select value={layerValProductId} onChange={(e) => setLayerValProductId(e.target.value)}><option value="">Semua produk</option>{products.map((p) => <option key={p.id} value={p.id}>{p.sku ? p.sku + ' · ' : ''}{p.name}</option>)}</select></label>
+          </div>
+          <button type="button" disabled={busy} onClick={() => { setMsg(''); void loadValuationLayers().catch((e) => setMsg(e instanceof Error ? e.message : 'Gagal memuat valuation layer')); }}>Muat valuation layer</button>
+        </div>
+        {valuationLayers && (
+          <>
+            <p className="sectionHelp">Metode: {valuationLayers.method} · Total qty {valuationLayers.totals.quantity} · Nilai {rupiah(valuationLayers.totals.value)}</p>
+            <Table
+              head={['Gudang', 'Produk', 'Qty', 'Nilai']}
+              rows={valuationLayers.items.map((r) => [
+                `${r.warehouseCode ? r.warehouseCode + ' · ' : ''}${r.warehouseName ?? r.warehouseId}`,
+                `${r.productSku ? r.productSku + ' · ' : ''}${r.productName ?? r.productId}`,
+                r.quantity,
+                rupiah(r.value),
+              ])}
+              empty="Tidak ada layer terbuka."
+            />
+          </>
+        )}
+      </Panel>
+
+      <Panel eyebrow="PARALLEL RUN" title="Perbandingan legacy vs costing" badge={parallelRun ? (parallelRun.matched ? 'MATCHED' : 'DIFF') : undefined}>
+        <div className="formStack">
+          <div className="grid2">
+            <label>Dari<input type="date" value={parallelFrom} onChange={(e) => setParallelFrom(e.target.value)} /></label>
+            <label>Sampai<input type="date" value={parallelTo} onChange={(e) => setParallelTo(e.target.value)} /></label>
+          </div>
+          <label>Gudang<select value={parallelWarehouseId} onChange={(e) => setParallelWarehouseId(e.target.value)}><option value="">Semua gudang</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.code ? w.code + ' · ' : ''}{w.name}</option>)}</select></label>
+          <button type="button" disabled={busy} onClick={() => { setMsg(''); void loadParallelRun().catch((e) => setMsg(e instanceof Error ? e.message : 'Gagal memuat parallel run')); }}>Jalankan parallel run</button>
+        </div>
+        {parallelRun && (
+          <>
+            <p className="sectionHelp">Periode: {tanggal(parallelRun.from)} → {tanggal(parallelRun.to)} · {parallelRun.sales} penjualan</p>
+            <div className="grid2">
+              <div><span className="label">Legacy COGS</span><span className="value">{rupiah(parallelRun.legacyCost)}</span></div>
+              <div><span className="label">Costing COGS</span><span className="value">{rupiah(parallelRun.costingCost)}</span></div>
+              <div><span className="label">Selisih</span><span className="value">{rupiah(parallelRun.difference)}</span></div>
+            </div>
+            <p className="sectionHelp">{parallelRun.matched ? '✓ Legacy dan costing match.' : '⚠ Legacy dan costing berbeda — investing root cause.'}</p>
+          </>
         )}
       </Panel>
     </section>

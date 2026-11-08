@@ -1186,6 +1186,12 @@ CREATE TABLE "TransferFile" (
     "direction" TEXT NOT NULL,
     "fileName" TEXT NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "payload" JSONB,
+    "checksum" TEXT,
+    "rowIngested" INTEGER NOT NULL DEFAULT 0,
+    "rowRejected" INTEGER NOT NULL DEFAULT 0,
+    "processedBy" TEXT,
+    "processedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -5211,6 +5217,9 @@ CREATE INDEX "CashFlowCategory_companyId_branchId_isActive_idx" ON "CashFlowCate
 CREATE INDEX "TransferFile_companyId_branchId_status_idx" ON "TransferFile"("companyId", "branchId", "status");
 
 -- CreateIndex
+CREATE INDEX "TransferFile_companyId_direction_status_idx" ON "TransferFile"("companyId", "direction", "status");
+
+-- CreateIndex
 CREATE INDEX "Customer_companyId_name_id_idx" ON "Customer"("companyId", "name", "id");
 
 -- CreateIndex
@@ -6625,6 +6634,15 @@ ALTER TABLE "SalesOrderItem" ADD CONSTRAINT "SalesOrderItem_salesOrderId_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "SalesOrderPayment" ADD CONSTRAINT "SalesOrderPayment_salesOrderId_fkey" FOREIGN KEY ("salesOrderId") REFERENCES "SalesOrder"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ConsignmentItem" ADD CONSTRAINT "ConsignmentItem_consignmentOrderId_fkey" FOREIGN KEY ("consignmentOrderId") REFERENCES "ConsignmentOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ConsignmentItem" ADD CONSTRAINT "ConsignmentItem_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ConsignmentSettlement" ADD CONSTRAINT "ConsignmentSettlement_consignmentOrderId_fkey" FOREIGN KEY ("consignmentOrderId") REFERENCES "ConsignmentOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Customer" ADD CONSTRAINT "Customer_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE SET NULL ON UPDATE CASCADE;

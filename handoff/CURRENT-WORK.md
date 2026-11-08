@@ -1,3 +1,66 @@
+## 2026-11-08 — COA endpoint wired ke UI reporting + baseline PostgreSQL diregenerasi
+
+- `audit:full:repo` sebelumnya memblokir 2 endpoint reports yang tidak terjangkau UI:
+  `GET /reports/coa` dan `GET /reports/coa-per-warehouse/:warehouseId`.
+- Perbaikan: `apps/admin/app/modules/reporting-workspace.tsx` — tambah dua panel COA di mode
+  financial: (1) tabel Chart of Accounts dengan total debit/credit/selisih + badge balanced,
+  (2) COA per gudang dengan dropdown warehouse dari `/master-data/warehouses` (filter
+  `isActive !== false`), load on-demand saat gudang dipilih. Kedua endpoint kini terjangkau
+  UI, audit endpoint coverage kembali green: 25 flagged = 25 baseline agreed,
+  `audit:full:repo` EXIT 0.
+- Perbaikan audit: `style={{ marginBottom: 8 }}` yang melanggar aturan audit
+  "static inline presentation patch" diganti class `sectionBlock`.
+- Baseline PostgreSQL usang (18 baris baru: `TransferFile.payload` + 5 field +
+  index `TransferFile_companyId_direction_status_idx` + 3 FK consignment) —
+  diregenerasi dengan `npm run db:baseline:postgres`. Test
+  `postgres-production-baseline` kini PASS.
+- Verifikasi: `npm test` **2115/2115 PASS**, `validate:repo` PASS
+  (1475 files / 234 models), `lint -w @toko360/admin` PASS,
+  `audit:full:repo` PASS.
+- Commit/push belum dilakukan (standar proyek: tangan Rey).
+
+---
+## 2026-11-07 — Garis hijau penuh + audit sinkronisasi
+
+- `npm test`: **2115/2115 PASS**, exit 0 (semua 6 kegagalan sesi 2026-11-06 sudah diperbaiki).
+- `audit:full:repo` PASS: 1469 files / 675 API handlers / 635 UI controls.
+- `audit:admin:contextual` 94/94 PASS.
+- `audit:endpoint:coverage` 25/25 baseline agreed.
+- Perbaikan konkret:
+  1. `apps/api/prisma/seed.ts` — permission `commission.view` dan `inventory.manage`
+     didaftarkan ke `permissionCodes` dan matriks role (ADMIN, WAREHOUSE, FINANCE, MANAGER, AUDITOR);
+     `master_data.view` ditambah ke FINANCE/AUDITOR/MANAGER.
+  2. `apps/api/src/warehouse-locations/warehouse-locations.controller.ts` — rewrite:
+     tenant guard per query (branchId + companyId), `@Roles` pada write, stock count check
+     sebelum deactivate, import PrismaService dari project.
+  3. `apps/api/src/customer-ar-settlement/` — settle kini lewat `AccountingCoreService.postOperationalEvent`
+     (eventType CUSTOMER_RECEIPT, idempotency key stabil), bukan tulis langsung `OperationalFinanceTransaction`.
+  4. `apps/admin/app/modules/customer-ar-settlement.tsx` — UI update, wajib `operationKey`.
+  5. `apps/admin/app/modules/warehouse-locations.tsx` — `readOptional` untuk `/master-data/warehouses`.
+  6. `tests/p5-v48-root-ui-foundation.test.mjs` — hapus baris bug `assert.equal(context.undefined)`.
+  7. `tests/partial-features-check.test.mjs` + `tests/runtime-scenarios-check.test.mjs` —
+     switch ke temp-SQLite (pola `w3-opening-balance-staging-runtime.test.mjs`), tanpa bergantung
+     `DATABASE_URL` global.
+  8. `apps/api/src/cheque/` — dihapus (dead code, re-export ke `cheques/` yang sudah di `app.module`);
+     `config/f1-backend-ui-audit.json` regenerate.
+
+- Audit sinkronisasi (branch-sync, branch-continuity, offline-transactions, antar-cabang/tenant):
+  - `branch-sync.service.ts`: tenant scope per query (`requireTenantScope` + `requireOwnNode`),
+    idempotency via unique constraint `(nodeId, eventId)`, schemaVersion fail-closed,
+    `SyncCursor` + `SyncReceipt` + `SyncOutbox` + `SyncInbox` tercatat, dead-letter threshold 8,
+    `requeueDueSyncEvents()` di worker `tick()` untuk retry FAILED.
+  - `branch-continuity.service.ts`: semua operasi di-scope `companyId`; backup/restore
+    checksum metadata via `SyncNode`; tidak ada leak lintas-tenant.
+  - `branch-transfer.service.ts`: transfer antar-cabang wajib sama `companyId`
+    (validasi owner branch), `SyncOutbox` enqueue, `BranchTransferSync` state machine.
+  - `extensions.service.ts` (offline-transactions): `submitOfflineTransactionsScoped`
+    di-scope `companyId + branchId`, replay protection via `(deviceId, localId/sequence)`
+    + payload hash, transaction serializable.
+  - Tidak ditemukan bypass tenant isolation atau sinkronisasi lintas-tenant.
+
+- Commit/push belum dilakukan (standar proyek: tangan Rey).
+
+---
 ## 2026-10-28 (lanjutan) — Wiring UI + migration test coverage + gate verification
 
 - Wiring UI: `InventoryCostingView` (inventory-control/costing) dan `OpeningBalanceView` (finance/opening-balance) diimpor/dirender di `apps/admin/app/page.tsx`; view entries ditambahkan di `domain-workspaces.ts`; contextual map 88 -> 90; audit admin contextual PASS.

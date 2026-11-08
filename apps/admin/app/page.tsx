@@ -19,6 +19,10 @@ import CustomerGroupsView from './modules/customer-groups';
 import CustomerRegionsView from './modules/customer-regions';
 import CustomerDepositsView from './modules/customer-deposits';
 import SupplierDepositsView from './modules/supplier-deposits';
+import SupplierPricesView from './modules/supplier-prices';
+import WarehouseLocationsView from './modules/warehouse-locations';
+import CommissionReportView from './modules/commission-report';
+import CustomerARSettlementView from './modules/customer-ar-settlement';
 import ConsignmentsView from './modules/consignments';
 import TradeInsView from './modules/trade-ins';
 import InventoryCostingView from './modules/inventory-costing';
@@ -598,6 +602,10 @@ export default function AdminPage() {
               <div className="table"><div className="tr th"><span>Waktu / Referensi</span><span>Produk / Gudang</span><span>Movement / Saldo</span></div>{inventoryMovements.slice(0,30).map((movement) => <div className="tr" key={movement.id}><span><strong>{new Date(movement.createdAt).toLocaleString('id-ID')}</strong><small>{movement.referenceType ?? '-'}:{movement.referenceId ?? '-'}</small></span><span><strong>{movement.product.name}</strong><small>{movement.warehouse.name}</small></span><span><strong>{movement.type} · {movement.quantity > 0 ? '+' : ''}{movement.quantity}</strong><small>balance {movement.balanceAfter}</small></span></div>)}</div>
             </section>}
             {activeDomainView?.key === 'supplier-deposits' && <SupplierDepositsView token={token} />}
+            {activeDomainView?.key === 'supplier-prices' && <SupplierPricesView token={token} />}
+            {activeDomainView?.key === 'warehouse-locations' && <WarehouseLocationsView token={token} />}
+            {activeDomainView?.key === 'commission-report' && <CommissionReportView token={token} />}
+            {activeDomainView?.key === 'customer-ar-settlement' && <CustomerARSettlementView token={token} />}
           </>}
 
           {activeWorkspace.key === 'inventory-control' && <><OperationsView token={token} mode={(activeDomainView?.key ?? 'overview') as 'overview'|'traceability'|'transfers'|'stocktake'|'returns'} />{(!activeDomainView || activeDomainView.key === 'overview') && <section className="panel"><div className="panelTitle"><div><span className="eyebrow">INVENTORY LEDGER</span><h2>Canonical inventory movements</h2></div><span>{inventoryMovements.length} movement</span></div><div className="table"><div className="tr th"><span>Waktu / Referensi</span><span>Produk / Gudang</span><span>Movement / Saldo</span></div>{inventoryMovements.slice(0,50).map((movement) => <div className="tr" key={movement.id}><span><strong>{new Date(movement.createdAt).toLocaleString('id-ID')}</strong><small>{movement.referenceType ?? '-'}:{movement.referenceId ?? '-'}</small></span><span><strong>{movement.product.name}</strong><small>{movement.warehouse.name}</small></span><span><strong>{movement.type} · {movement.quantity > 0 ? '+' : ''}{movement.quantity}</strong><small>balance {movement.balanceAfter}</small></span></div>)}</div></section>} </>}

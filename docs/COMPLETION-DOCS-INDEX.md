@@ -37,12 +37,11 @@ rewrite them from source, so a hand correction is not needed and would be undone
 - `config/p5-full-ui-root-audit.json` + `docs/P5-FULL-UI-ROOT-AUDIT.md` — regenerate with
   `node scripts/audit-ui-domain-surface-depth.mjs` (part of `npm run audit:p5:visual`);
   it prints the route and control counts.
-- Contextual destinations: `config/admin-contextual-workflow-map.json` is 63/63 and
-  `npm run audit:admin:contextual` fails closed on that. `P1-…-ISOLATION.md` still
-  says 61 and `TOKO360-MASTER-PRODUCT-COMPLETION-WORKFLOW.md` says 62/62; both
-  predate the 63rd destination.
-- Prisma model count is 180 in all three schemas. Some per-domain documents still say
-  177 or 178 from earlier waves.
+- Contextual destinations: `config/admin-contextual-workflow-map.json` is 91/91 and
+  `npm run audit:admin:contextual` fails closed on that. Several older docs still say
+  61, 62/62, or 63/63 from earlier waves; those predate the subsequent destinations.
+- Prisma model count is 234 in all three schemas. Some per-domain documents still say
+  177, 178, or 180 from earlier waves.
 
 ## Evidence that a closure claim requires and that is not in this copy
 

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "TOKO360 Admin Contextual Workflow Map",
-  "expectedContextualViews": 90,
+  "expectedContextualViews": 94,
   "rows": [
     {
       "workspace": "master-data",
@@ -522,6 +522,13 @@
       "sourceFile": "apps/admin/app/page.tsx"
     },
     {
+      "workspace": "procurement",
+      "view": "supplier-prices",
+      "renderer": "SupplierPricesView:supplier-prices",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
       "workspace": "commerce",
       "view": "sales-orders",
       "renderer": "SalesOrdersView:sales-orders",
@@ -630,6 +637,27 @@
       "workspace": "finance",
       "view": "opening-balance",
       "renderer": "OpeningBalanceView",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "procurement",
+      "view": "warehouse-locations",
+      "renderer": "WarehouseLocationsView:warehouse-locations",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "people",
+      "view": "commission-report",
+      "renderer": "CommissionReportView:commission-report",
+      "status": "SOURCE_IMPLEMENTED",
+      "sourceFile": "apps/admin/app/page.tsx"
+    },
+    {
+      "workspace": "finance",
+      "view": "customer-ar-settlement",
+      "renderer": "CustomerARSettlementView:customer-ar-settlement",
       "status": "SOURCE_IMPLEMENTED",
       "sourceFile": "apps/admin/app/page.tsx"
     }

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { jsxOpeningTags } from './jsx-opening-tags.mjs';
+import { collectSiblingInconsistencies } from './lib/frontend-endpoint-coverage.mjs';
 
 const root = process.cwd();
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
@@ -154,8 +155,14 @@ if (!/NAV\.map\(/.test(employeeShell)) errors.push('employee-portal: complete mo
 
 if (visualMap.pos.views.length !== 4 || visualMap.storefront.views.length !== 5 || visualMap.employeePortal.views.length !== 7) errors.push('P5 surface matrix changed unexpectedly');
 
-const hiddenControllers = f1.controllerExposure.filter((item) => item.exposure !== 'EXPOSED_OR_PARTIAL');
-const hiddenNames = hiddenControllers.map((item) => item.controller);
+// Controller exposure is judged by accurate, per-route reachability (A-17 derived rule),
+// not by the coarser substring match in config/f1-backend-ui-audit.json. A controller is
+// "hidden" only when NONE of its routes is reachable from any UI app; an API-only surface
+// such as edge-sync stays NONE_REACHED by design.
+const coverage = collectSiblingInconsistencies(root);
+const hiddenNames = coverage.controllers
+  .filter((item) => item.uniform === 'NONE_REACHED')
+  .map((item) => item.file);
 if (hiddenNames.some((name) => !name.endsWith('/edge-sync.controller.ts'))) errors.push(`operator-useful controller still hidden from UI: ${hiddenNames.join(', ')}`);
 if (!hiddenNames.some((name) => name.endsWith('/edge-sync.controller.ts'))) errors.push('edge-sync API-only controller classification changed unexpectedly');
 report.controllerCoverage = { hiddenOrApiOnly: hiddenNames, intentionalApiOnly: ['apps/api/src/extensions/edge-sync.controller.ts'] };

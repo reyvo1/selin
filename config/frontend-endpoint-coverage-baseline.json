@@ -12,16 +12,16 @@
     "API_ONLY_BY_DESIGN": "Read-only audit/history surface consumed by reports or comparison flows; no operator mutation form is required, and the history is intentionally exposed as an API for programmatic consumers."
   },
   "summary": {
-    "total": 28,
+    "total": 25,
     "byClass": {
       "DEVICE_INGEST": 1,
       "NODE_PROTOCOL": 19,
       "PROVIDER_CALLBACK": 1,
       "SUPERSEDED": 1,
-      "UI_GAP": 5,
+      "UI_GAP": 2,
       "API_ONLY_BY_DESIGN": 1
     },
-    "entries": 28
+    "entries": 25
   },
   "entries": [
     {
@@ -169,28 +169,10 @@
       "reason": "Guarded by @Roles/@Permissions platform.configure and human-facing, but the printer management UI is not implemented yet (I06 SEBAGIAN); backend default-printer/print-job status endpoints exist without an admin screen, so this remains an open UI gap."
     },
     {
-      "id": "GET /supplier-prices/history",
-      "controller": "apps/api/src/supplier-prices/supplier-prices.controller.ts",
+      "id": "POST /loyalty/redeem/preview",
+      "controller": "apps/api/src/loyalty/loyalty.controller.ts",
       "class": "API_ONLY_BY_DESIGN",
-      "reason": "Supplier price history is a read-only audit trail consumed by procurement reporting and supplier price comparison flows; no operator mutation form is required for history reads, and the reachable list/create/update siblings cover the operator surface."
-    },
-    {
-      "id": "GET /inventory/costing/preview-issue",
-      "controller": "apps/api/src/inventory/costing.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Costing UI foundation ships policy, activation, valuation, layer explorer, reconciliation and rebuild surfaces; these read-only preview/valuation/parallel-run diagnostics remain unmounted and are tracked as open UI work."
-    },
-    {
-      "id": "GET /inventory/costing/valuation-layers",
-      "controller": "apps/api/src/inventory/costing.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Costing UI foundation ships policy, activation, valuation, layer explorer, reconciliation and rebuild surfaces; these read-only preview/valuation/parallel-run diagnostics remain unmounted and are tracked as open UI work."
-    },
-    {
-      "id": "GET /inventory/costing/parallel-run",
-      "controller": "apps/api/src/inventory/costing.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Costing UI foundation ships policy, activation, valuation, layer explorer, reconciliation and rebuild surfaces; these read-only preview/valuation/parallel-run diagnostics remain unmounted and are tracked as open UI work."
+      "reason": "Loyalty redemption preview is called internally by sales service during POS checkout flow, not directly from admin UI. The sales service handles point deduction and discount calculation atomically."
     }
   ]
 }

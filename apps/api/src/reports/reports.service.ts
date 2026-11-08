@@ -413,16 +413,20 @@ export class ReportsService {
     await this.assertRequestedScope(this.prisma, user, scope, requestedCompanyId, requestedBranchId, 'WorksheetReport');
     const { from, to } = await this.reportRange(scope, fromValue, toValue);
     const rows = await this.accountActivity(scope, from, to);
+    // H15: kelaskan akun untuk worksheet — temporary (REVENUE/EXPENSE) vs permanent.
+    // Kolom closing memindah saldo akun temporary ke Retained Earnings / Income Summary,
+    // sehingga adjusted trial balance = posted trial balance + closing entries.
+    const INCOME_SUMMARY_CODE = '9999'; // placeholder akun penutup (income summary)
+    const RETAINED_EARNINGS_CODE = '3100'; // laba ditahan
     const mapped = rows.map((row) => {
       const trialDebit = Number(row.debit);
       const trialCredit = Number(row.credit);
-      // Foundation: adjustment columns are reserved for explicit adjusting
-      // entries; until a dedicated adjustment ledger exists they remain zero so
-      // the adjusted trial balance equals the posted trial balance.
-      const adjustmentDebit = 0;
-      const adjustmentCredit = 0;
-      const adjustedDebit = trialDebit + adjustmentDebit;
-      const adjustedCredit = trialCredit + adjustmentCredit;
+      const isIncome = row.type === 'REVENUE';
+      const isExpense = row.type === 'EXPENSE';
+      // Saldo normal: REVENUE normal balance credit; EXPENSE normal balance debit.
+      const closingDebit = isIncome ? Number(row.balance) : 0; // revenue ditutup di debit
+      const closingCredit = isExpense ? Number(row.balance) : 0; // expense ditutup di kredit
+      const closingBalance = isIncome || isExpense ? new Prisma.Decimal(0) : row.balance;
       return {
         accountId: row.id,
         code: row.code,
@@ -430,10 +434,15 @@ export class ReportsService {
         type: row.type,
         trialDebit,
         trialCredit,
-        adjustmentDebit,
-        adjustmentCredit,
-        adjustedDebit,
-        adjustedCredit,
+        adjustmentDebit: 0,
+        adjustmentCredit: 0,
+        adjustedDebit: trialDebit,
+        adjustedCredit: trialCredit,
+        closingDebit,
+        closingCredit,
+        closingBalance: Number(closingBalance),
+        isIncome: isIncome,
+        isExpense: isExpense,
         normalBalance: Number(row.balance),
       };
     });
@@ -443,6 +452,13 @@ export class ReportsService {
     const totalAdjustmentCredit = new Prisma.Decimal(0);
     const totalAdjustedDebit = totalTrialDebit.add(totalAdjustmentDebit);
     const totalAdjustedCredit = totalTrialCredit.add(totalAdjustmentCredit);
+    // Total kolom closing: revenue (debit penutup) dan expense (kredit penutup)
+    const totalClosingDebit = mapped.reduce((sum, row) => sum.add(new Prisma.Decimal(row.closingDebit)), new Prisma.Decimal(0));
+    const totalClosingCredit = mapped.reduce((sum, row) => sum.add(new Prisma.Decimal(row.closingCredit)), new Prisma.Decimal(0));
+    // Net income dari closing entries = totalRevenue - totalExpense
+    const totalRevenue = rows.filter((r) => r.type === 'REVENUE').reduce((sum, r) => sum.add(r.balance), new Prisma.Decimal(0));
+    const totalExpense = rows.filter((r) => r.type === 'EXPENSE').reduce((sum, r) => sum.add(r.balance), new Prisma.Decimal(0));
+    const netIncome = totalRevenue.sub(totalExpense);
     return {
       from,
       to,
@@ -456,11 +472,24 @@ export class ReportsService {
         adjustmentCredit: Number(totalAdjustmentCredit),
         adjustedDebit: Number(totalAdjustedDebit),
         adjustedCredit: Number(totalAdjustedCredit),
+        closingDebit: Number(totalClosingDebit),
+        closingCredit: Number(totalClosingCredit),
       },
       totalDebit: Number(totalAdjustedDebit),
       totalCredit: Number(totalAdjustedCredit),
       difference: Number(totalAdjustedDebit.sub(totalAdjustedCredit)),
       balanced: totalAdjustedDebit.equals(totalAdjustedCredit),
+      closing: {
+        incomeSummaryAccountCode: INCOME_SUMMARY_CODE,
+        retainedEarningsAccountCode: RETAINED_EARNINGS_CODE,
+        totalRevenue: Number(totalRevenue),
+        totalExpense: Number(totalExpense),
+        netIncome: Number(netIncome),
+        // Bila period close diaktifkan, net income dipindah ke retained earnings.
+        // Kolom closing pada worksheet ini adalah pra-closing preview; posting sebenarnya
+        // dilakukan oleh year-end close (opening-balance.service runYearEndClose).
+        source: 'POSTED_JOURNAL',
+      },
       source: 'POSTED_JOURNAL',
     };
   }
@@ -502,6 +531,109 @@ export class ReportsService {
       totalLiabilitiesAndEquity: Number(totalLiabilitiesAndEquity),
       difference: Number(totalAssets.sub(totalLiabilitiesAndEquity)),
       balanced: totalAssets.equals(totalLiabilitiesAndEquity),
+      source: 'POSTED_JOURNAL',
+    };
+  }
+
+  /**
+   * H10: COA report — chart of accounts dengan saldo normal per akun.
+   * Bisa difilter per tipe (ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE) atau per warehouse.
+   */
+  async coaReport(user: AuthUser, asOfValue?: string, typeFilter?: string, warehouseId?: string) {
+    const scope = this.requireTenantScope(user);
+    const timeZone = await this.companyTimeZone(scope.companyId);
+    const asOf = parseBusinessDateBoundary(asOfValue, new Date(), timeZone, true);
+    const rows = await this.accountActivity(scope, undefined, asOf);
+
+    let filtered = rows;
+    if (typeFilter) {
+      const allowed = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'];
+      const filter = typeFilter.toUpperCase();
+      if (!allowed.includes(filter)) {
+        throw new BadRequestException(`Tipe COA tidak valid: ${typeFilter}. Gunakan salah satu: ${allowed.join(', ')}.`);
+      }
+      filtered = rows.filter((row) => row.type === filter);
+    }
+    // G13: filter per warehouse (akun dengan warehouseId diisi)
+    if (warehouseId) {
+      const warehouseAccounts = await this.prisma.account.findMany({
+        where: { branchId: scope.branchId, warehouseId },
+        select: { id: true },
+      });
+      const warehouseAccountIds = new Set(warehouseAccounts.map((a) => a.id));
+      filtered = filtered.filter((row) => warehouseAccountIds.has(row.id));
+    }
+
+    const totalDebit = filtered.reduce((sum, row) => sum.add(row.debit), new Prisma.Decimal(0));
+    const totalCredit = filtered.reduce((sum, row) => sum.add(row.credit), new Prisma.Decimal(0));
+
+    return {
+      asOf: asOf.toISOString(),
+      companyId: scope.companyId,
+      branchId: scope.branchId,
+      typeFilter: typeFilter?.toUpperCase() ?? null,
+      warehouseId: warehouseId ?? null,
+      accounts: filtered.map((row) => ({
+        code: row.code,
+        name: row.name,
+        type: row.type,
+        debit: Number(row.debit),
+        credit: Number(row.credit),
+        normalBalance: Number(row.balance),
+      })),
+      totals: {
+        debit: Number(totalDebit),
+        credit: Number(totalCredit),
+        difference: Number(totalDebit.sub(totalCredit)),
+        balanced: totalDebit.equals(totalCredit),
+      },
+      accountCount: filtered.length,
+      source: 'POSTED_JOURNAL',
+    };
+  }
+
+  /**
+   * G13: COA per warehouse — saldo akun yang di-scope ke warehouse tertentu.
+   * Hanya akun dengan warehouseId terisi yang dihitung.
+   */
+  async coaPerWarehouse(user: AuthUser, warehouseId: string, asOfValue?: string) {
+    const scope = this.requireTenantScope(user);
+    const timeZone = await this.companyTimeZone(scope.companyId);
+    const asOf = parseBusinessDateBoundary(asOfValue, new Date(), timeZone, true);
+    // Validasi warehouse milik branch ini
+    const warehouse = await this.prisma.warehouse.findFirst({
+      where: { id: warehouseId, branchId: scope.branchId, branch: { companyId: scope.companyId } },
+      select: { id: true, code: true, name: true },
+    });
+    if (!warehouse) {
+      throw new NotFoundException({ code: 'WAREHOUSE_NOT_FOUND', message: 'Gudang tidak ditemukan pada branch ini.' });
+    }
+
+    // Ambil akun yang di-scope ke warehouse ini
+    const warehouseAccounts = await this.prisma.account.findMany({
+      where: { branchId: scope.branchId, branch: { companyId: scope.companyId }, warehouseId },
+      include: { journalLines: true },
+    });
+    const grouped = warehouseAccounts.map((account) => {
+      const debit = account.journalLines.reduce((sum, line) => sum.add(line.debit), new Prisma.Decimal(0));
+      const credit = account.journalLines.reduce((sum, line) => sum.add(line.credit), new Prisma.Decimal(0));
+      return {
+        code: account.code,
+        name: account.name,
+        type: account.type,
+        debit: Number(debit),
+        credit: Number(credit),
+        balance: Number(accountNormalBalance(account.type, debit, credit)),
+      };
+    });
+
+    return {
+      warehouse: { id: warehouse.id, code: warehouse.code, name: warehouse.name },
+      asOf: asOf.toISOString(),
+      companyId: scope.companyId,
+      branchId: scope.branchId,
+      accounts: grouped,
+      accountCount: grouped.length,
       source: 'POSTED_JOURNAL',
     };
   }
@@ -718,14 +850,40 @@ export class ReportsService {
 
     const limit = parsePageLimit(limitValue);
     const cursor = decodeCursor<{ updatedAt: string; id: string }>(cursorValue);
+
+    // F13: nilai persediaan memakai cost layer bila costing engine aktif,
+    // fallback ke Product.costPrice untuk SKU yang belum punya cost state.
+    const costStates = await this.prisma.inventoryCostState.findMany({
+      where: {
+        companyId: scope.companyId,
+        branchId: scope.branchId,
+        method: 'MOVING_AVERAGE',
+        warehouseId: { in: warehouseIds },
+      },
+      select: { warehouseId: true, productId: true, value: true, quantity: true },
+    });
+    const costStateByKey = new Map<string, Prisma.Decimal>(
+      costStates.map((s) => [`${s.warehouseId}:${s.productId}`, new Prisma.Decimal(s.value)]),
+    );
+
     const valuationRows = await this.prisma.inventory.findMany({
       where: { warehouseId: { in: warehouseIds } },
-      select: { quantity: true, reserved: true, available: true, product: { select: { costPrice: true } } },
+      select: {
+        warehouseId: true,
+        quantity: true,
+        reserved: true,
+        available: true,
+        product: { select: { id: true, costPrice: true } },
+      },
     });
-    const inventoryValue = valuationRows.reduce(
-      (sum, row) => sum.add(new Prisma.Decimal(row.product.costPrice).mul(row.quantity)),
-      new Prisma.Decimal(0),
-    );
+
+    const inventoryValue = valuationRows.reduce((sum, row) => {
+      const costStateValue = costStateByKey.get(`${row.warehouseId}:${row.product.id}`);
+      // Cost layer tersedia: pakai value ledger. Tidak tersedia: fallback costPrice × qty.
+      const value = costStateValue ?? new Prisma.Decimal(row.product.costPrice).mul(row.quantity);
+      return sum.add(value);
+    }, new Prisma.Decimal(0));
+
     const rows = await this.prisma.inventory.findMany({
       where: {
         warehouseId: { in: warehouseIds },
@@ -739,6 +897,7 @@ export class ReportsService {
       take: limit + 1,
     });
     const page = toCursorPage(rows, limit, (item) => ({ updatedAt: item.updatedAt.toISOString(), id: item.id }));
+    const usingCostLayer = costStates.length > 0;
     return {
       ...page,
       companyId: scope.companyId,
@@ -749,12 +908,16 @@ export class ReportsService {
         reserved: valuationRows.reduce((sum, row) => sum + row.reserved, 0),
         available: valuationRows.reduce((sum, row) => sum + row.available, 0),
         inventoryValue: Number(inventoryValue),
-        source: 'LIVE_INVENTORY',
+        source: usingCostLayer ? 'COST_LAYER' : 'LIVE_INVENTORY',
+        costingMethod: usingCostLayer ? 'MOVING_AVERAGE' : 'LEGACY_COSTPRICE',
       },
-      items: page.items.map((item) => ({
-        ...item,
-        inventoryValue: new Prisma.Decimal(item.product.costPrice).mul(item.quantity),
-      })),
+      items: page.items.map((item) => {
+        const costStateValue = costStateByKey.get(`${item.warehouseId}:${item.product.id}`);
+        return {
+          ...item,
+          inventoryValue: costStateValue ?? new Prisma.Decimal(item.product.costPrice).mul(item.quantity),
+        };
+      }),
     };
   }
 
@@ -1188,6 +1351,12 @@ export class ReportsService {
       distinct: ['productId'],
     });
     const soldIds = sold.map((row) => row.productId);
+    // F13: nilai stuck inventory memakai cost layer bila tersedia, fallback costPrice × qty.
+    const costStates = await this.prisma.inventoryCostState.findMany({
+      where: { companyId: scope.companyId, branchId: scope.branchId, method: 'MOVING_AVERAGE', warehouseId: { in: warehouseIds } },
+      select: { warehouseId: true, productId: true, value: true },
+    });
+    const costStateByKey = new Map(costStates.map((s) => [`${s.warehouseId}:${s.productId}`, new Prisma.Decimal(s.value)]));
     const rows = await this.prisma.inventory.findMany({
       where: {
         warehouseId: { in: warehouseIds },
@@ -1205,14 +1374,18 @@ export class ReportsService {
       companyId: scope.companyId,
       branchId: scope.branchId,
       days,
-      items: rows.map((row) => ({
-        productId: row.productId,
-        sku: row.product.sku,
-        name: row.product.name,
-        warehouse: row.warehouse.name,
-        quantity: row.quantity,
-        tiedUpValue: new Prisma.Decimal(row.product.costPrice).mul(row.quantity),
-      })),
+      items: rows.map((row) => {
+        const costLayerValue = costStateByKey.get(`${row.warehouseId}:${row.productId}`);
+        return {
+          productId: row.productId,
+          sku: row.product.sku,
+          name: row.product.name,
+          warehouse: row.warehouse.name,
+          quantity: row.quantity,
+          tiedUpValue: costLayerValue ?? new Prisma.Decimal(row.product.costPrice).mul(row.quantity),
+          valuationSource: costLayerValue ? 'COST_LAYER' : 'LEGACY_COSTPRICE',
+        };
+      }),
     };
   }
 

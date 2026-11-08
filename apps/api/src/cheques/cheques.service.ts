@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccountingCoreService } from '../accounting-core/accounting-core.service';
 
 type ChequeScope = { companyId: string; branchId: string };
 
@@ -25,7 +26,10 @@ type ChequeTransitionDto = {
 
 @Injectable()
 export class ChequesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accounting: AccountingCoreService,
+  ) {}
 
   private scope(user: AuthUser): ChequeScope {
     if (!user.companyId || !user.branchId) {
@@ -188,6 +192,33 @@ export class ChequesService {
 
     const updated = await this.prisma.cheque.findUnique({ where: { id } });
     if (!updated) throw new NotFoundException('Cheque not found');
+
+    // D07: posting jurnal ke accounting core untuk transisi yang memengaruhi kas/bank.
+    const isAP = existing.direction === 'AP' || existing.direction === 'OUT';
+    const eventTypeByStatus: Record<string, string | null> = {
+      DEPOSITED: 'CHEQUE_DEPOSITED',
+      CLEARED: isAP ? 'CHEQUE_CLEARED_AP' : 'CHEQUE_CLEARED_AR',
+      BOUNCED: isAP ? 'CHEQUE_BOUNCED_AP' : 'CHEQUE_BOUNCED_AR',
+    };
+    const eventType = eventTypeByStatus[next];
+    const gross = new Prisma.Decimal(updated.amount);
+    const accountCodes = { settlement: '1010', receivable: '1101', payable: '2101' };
+
+    if (eventType) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.accounting.postOperationalEvent(tx, {
+          companyId: scope.companyId,
+          branchId: scope.branchId,
+          eventType,
+          sourceType: 'Cheque',
+          sourceId: id,
+          idempotencyKey: `cheque-${next.toLowerCase()}-${id}`,
+          amounts: { gross },
+          accountCodes,
+          context: { chequeNumber: existing.number, direction: existing.direction },
+        });
+      });
+    }
 
     await this.prisma.auditLog.create({
       data: {

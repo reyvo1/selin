@@ -65,6 +65,31 @@ import { ReportsService } from './reports.service';
     return this.reports.balanceSheet(user, asOf, companyId, branchId);
   }
 
+  /**
+   * H10: COA report — saldo normal per akun, bisa difilter per tipe / warehouse.
+   */
+  @Get('coa')
+  coaReport(
+    @CurrentUser() user: AuthUser,
+    @Query('asOf') asOf?: string,
+    @Query('type') type?: string,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    return this.reports.coaReport(user, asOf, type, warehouseId);
+  }
+
+  /**
+   * G13: COA per warehouse — saldo akun yang di-scope ke warehouse tertentu.
+   */
+  @Get('coa-per-warehouse/:warehouseId')
+  coaPerWarehouse(
+    @CurrentUser() user: AuthUser,
+    @Param('warehouseId') warehouseId: string,
+    @Query('asOf') asOf?: string,
+  ) {
+    return this.reports.coaPerWarehouse(user, warehouseId, asOf);
+  }
+
   @Get('general-ledger')
   generalLedger(
     @CurrentUser() user: AuthUser,

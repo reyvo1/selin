@@ -113,7 +113,7 @@ The following **never** close a capability by themselves:
 ## Exit criteria
 
 - 14/14 primary workspaces valid.
-- 63/63 contextual destinations mapped to semantically correct content or intentionally removed/merged with documented rationale.
+- 91/91 contextual destinations mapped to semantically correct content or intentionally removed/merged with documented rationale.
 - 0 visible contextual menu items that merely change selection while leaving unrelated content unchanged.
 - Human IA acceptance PASS before moving to P2.
 

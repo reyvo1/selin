@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-14T09:28:22.787Z",
+  "generatedAt": "2026-11-07T14:08:28.246Z",
   "source": {
     "prismaSchema": "apps/api/prisma/schema.prisma",
-    "controllerCount": 46,
-    "routeCount": 532,
-    "prismaModelCount": 202,
+    "controllerCount": 71,
+    "routeCount": 683,
+    "prismaModelCount": 234,
     "uiApps": [
       "admin",
       "pos",
@@ -39,7 +39,7 @@
         "ProductBarcode",
         "ProductPrice"
       ],
-      "backendRouteCount": 22,
+      "backendRouteCount": 23,
       "backendRoutes": [
         "GET /master-data/references",
         "POST /master-data/references",
@@ -62,6 +62,7 @@
         "GET /products/:id",
         "POST /products",
         "PATCH /products/:id",
+        "POST /products/:id/image",
         "GET /products/:id/price-history"
       ],
       "uiApps": [
@@ -96,7 +97,7 @@
         "StockTransfer",
         "StockOpname"
       ],
-      "backendRouteCount": 24,
+      "backendRouteCount": 38,
       "backendRoutes": [
         "GET /advanced-inventory/stock-transfers",
         "GET /advanced-inventory/transit-balances",
@@ -118,6 +119,20 @@
         "POST /inventory-batches",
         "GET /inventory-serials",
         "POST /inventory-serials",
+        "GET /inventory/costing/policies",
+        "POST /inventory/costing/policies",
+        "POST /inventory/costing/policies/:id/activate",
+        "GET /inventory/costing/valuation",
+        "GET /inventory/costing/preview-issue",
+        "GET /inventory/costing/valuation-layers",
+        "GET /inventory/costing/parallel-run",
+        "GET /inventory/costing/layers",
+        "GET /inventory/costing/reconciliation",
+        "POST /inventory/costing/rebuild",
+        "GET /inventory/costing/rebuild-runs",
+        "GET /inventory/costing/rebuild-runs/:id",
+        "POST /inventory/costing/rebuild-runs/:id/approve",
+        "POST /inventory/costing/rebuild-runs/:id/resume",
         "GET /inventory/cross-branch-stock/:productId",
         "GET /inventory",
         "GET /inventory/movements",
@@ -236,7 +251,7 @@
         "DailyFinanceSummary",
         "DailyInventorySummary"
       ],
-      "backendRouteCount": 29,
+      "backendRouteCount": 33,
       "backendRoutes": [
         "GET /reports/daily-digest/config",
         "POST /reports/daily-digest/config",
@@ -247,7 +262,10 @@
         "GET /reports/analytics",
         "GET /reports/profit-loss",
         "GET /reports/trial-balance",
+        "GET /reports/worksheet",
         "GET /reports/balance-sheet",
+        "GET /reports/coa",
+        "GET /reports/coa-per-warehouse/:warehouseId",
         "GET /reports/general-ledger",
         "GET /reports/tax-summary",
         "GET /reports/financial-integrity",
@@ -266,6 +284,7 @@
         "PATCH /reports/schedules/:id",
         "GET /reports/peak-hours",
         "GET /reports/dead-stock",
+        "GET /reports/deposits",
         "GET /reports/customer-rfm"
       ],
       "uiApps": [
@@ -341,7 +360,7 @@
         "EventOutbox",
         "ReportJob"
       ],
-      "backendRouteCount": 33,
+      "backendRouteCount": 37,
       "backendRoutes": [
         "GET /platform/automation-jobs",
         "GET /platform/automation-jobs/:id",
@@ -356,7 +375,10 @@
         "GET /reports/analytics",
         "GET /reports/profit-loss",
         "GET /reports/trial-balance",
+        "GET /reports/worksheet",
         "GET /reports/balance-sheet",
+        "GET /reports/coa",
+        "GET /reports/coa-per-warehouse/:warehouseId",
         "GET /reports/general-ledger",
         "GET /reports/tax-summary",
         "GET /reports/financial-integrity",
@@ -375,10 +397,14 @@
         "PATCH /reports/schedules/:id",
         "GET /reports/peak-hours",
         "GET /reports/dead-stock",
+        "GET /reports/deposits",
         "GET /reports/customer-rfm"
       ],
       "uiApps": [
-        "admin"
+        "admin",
+        "pos",
+        "storefront",
+        "employee-portal"
       ],
       "gap": "Automation worker tersedia, tetapi scheduler/report schedule first-class dan operator execution history/rule management belum lengkap."
     },
@@ -476,7 +502,7 @@
         "ProductBarcode",
         "ProductPrice"
       ],
-      "backendRouteCount": 38,
+      "backendRouteCount": 43,
       "backendRoutes": [
         "GET /goods-receipts",
         "POST /goods-receipts",
@@ -496,6 +522,7 @@
         "GET /purchase-orders",
         "GET /purchase-orders/:id",
         "POST /purchase-orders",
+        "POST /purchase-orders/:id/cancel",
         "GET /purchase-requests",
         "GET /purchase-requests/:id",
         "POST /purchase-requests",
@@ -515,7 +542,11 @@
         "POST /sales/quote",
         "GET /sales/offline/config",
         "POST /sales/offline/replay",
-        "POST /sales"
+        "POST /sales",
+        "GET /sales-orders",
+        "GET /sales-orders/:id",
+        "POST /sales-orders",
+        "POST /sales-orders/:id/settle"
       ],
       "uiApps": [
         "admin",
@@ -555,7 +586,10 @@
       "controller": "apps/api/src/assets/assets.controller.ts",
       "routeCount": 15,
       "uiApps": [
-        "admin"
+        "admin",
+        "pos",
+        "storefront",
+        "employee-portal"
       ],
       "exposure": "EXPOSED_OR_PARTIAL"
     },
@@ -588,7 +622,7 @@
     },
     {
       "controller": "apps/api/src/branch-continuity/branch-continuity.controller.ts",
-      "routeCount": 15,
+      "routeCount": 21,
       "uiApps": [
         "admin"
       ],
@@ -605,6 +639,78 @@
     {
       "controller": "apps/api/src/branch-sync/branch-sync.controller.ts",
       "routeCount": 20,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/cash-flow-categories/cash-flow-categories.controller.ts",
+      "routeCount": 3,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/cheques/cheques.controller.ts",
+      "routeCount": 5,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/commissions/commission-report.controller.ts",
+      "routeCount": 2,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/commissions/commissions.controller.ts",
+      "routeCount": 5,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/consignments/consignments.controller.ts",
+      "routeCount": 7,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/customer-ar-settlement/customer-ar-settlement.controller.ts",
+      "routeCount": 2,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/customer-deposits/customer-deposits.controller.ts",
+      "routeCount": 6,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/customer-groups/customer-groups.controller.ts",
+      "routeCount": 3,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/customer-regions/customer-regions.controller.ts",
+      "routeCount": 3,
       "uiApps": [
         "admin"
       ],
@@ -659,6 +765,22 @@
       "exposure": "EXPOSED_OR_PARTIAL"
     },
     {
+      "controller": "apps/api/src/general/general-settings.controller.ts",
+      "routeCount": 4,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/general-settings/general-settings.controller.ts",
+      "routeCount": 4,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
       "controller": "apps/api/src/goods-receipts/goods-receipts.controller.ts",
       "routeCount": 4,
       "uiApps": [
@@ -668,7 +790,15 @@
     },
     {
       "controller": "apps/api/src/hr/hr.controller.ts",
-      "routeCount": 15,
+      "routeCount": 17,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/inventory/costing.controller.ts",
+      "routeCount": 14,
       "uiApps": [
         "admin"
       ],
@@ -700,8 +830,17 @@
       "exposure": "EXPOSED_OR_PARTIAL"
     },
     {
+      "controller": "apps/api/src/loyalty/loyalty.controller.ts",
+      "routeCount": 3,
+      "uiApps": [
+        "admin",
+        "pos"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
       "controller": "apps/api/src/manufacturing/manufacturing.controller.ts",
-      "routeCount": 8,
+      "routeCount": 13,
       "uiApps": [
         "admin"
       ],
@@ -709,7 +848,15 @@
     },
     {
       "controller": "apps/api/src/master-data/master-data.controller.ts",
-      "routeCount": 30,
+      "routeCount": 36,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/migration/migration.controller.ts",
+      "routeCount": 5,
       "uiApps": [
         "admin"
       ],
@@ -721,6 +868,22 @@
       "uiApps": [
         "admin",
         "pos"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/number-sequences/number-sequences.controller.ts",
+      "routeCount": 3,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/opening-balance/opening-balance.controller.ts",
+      "routeCount": 16,
+      "uiApps": [
+        "admin"
       ],
       "exposure": "EXPOSED_OR_PARTIAL"
     },
@@ -738,7 +901,8 @@
       "uiApps": [
         "admin",
         "pos",
-        "storefront"
+        "storefront",
+        "employee-portal"
       ],
       "exposure": "EXPOSED_OR_PARTIAL"
     },
@@ -760,7 +924,7 @@
     },
     {
       "controller": "apps/api/src/platform/platform.controller.ts",
-      "routeCount": 42,
+      "routeCount": 45,
       "uiApps": [
         "admin",
         "pos",
@@ -770,12 +934,29 @@
       "exposure": "EXPOSED_OR_PARTIAL"
     },
     {
+      "controller": "apps/api/src/printers/print-jobs.controller.ts",
+      "routeCount": 5,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/printers/printers.controller.ts",
+      "routeCount": 5,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
       "controller": "apps/api/src/products/products.controller.ts",
-      "routeCount": 7,
+      "routeCount": 8,
       "uiApps": [
         "admin",
         "pos",
-        "storefront"
+        "storefront",
+        "employee-portal"
       ],
       "exposure": "EXPOSED_OR_PARTIAL"
     },
@@ -789,7 +970,7 @@
     },
     {
       "controller": "apps/api/src/purchase-orders/purchase-orders.controller.ts",
-      "routeCount": 3,
+      "routeCount": 4,
       "uiApps": [
         "admin"
       ],
@@ -821,7 +1002,7 @@
     },
     {
       "controller": "apps/api/src/reports/reports.controller.ts",
-      "routeCount": 24,
+      "routeCount": 28,
       "uiApps": [
         "admin"
       ],
@@ -870,6 +1051,22 @@
       "exposure": "EXPOSED_OR_PARTIAL"
     },
     {
+      "controller": "apps/api/src/sales-orders/sales-orders.controller.ts",
+      "routeCount": 4,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/settings/general-settings.controller.ts",
+      "routeCount": 4,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
       "controller": "apps/api/src/staff-memos/staff-memos.controller.ts",
       "routeCount": 3,
       "uiApps": [
@@ -897,7 +1094,39 @@
       "exposure": "EXPOSED_OR_PARTIAL"
     },
     {
+      "controller": "apps/api/src/supplier-deposits/supplier-deposits.controller.ts",
+      "routeCount": 5,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/supplier-prices/supplier-prices.controller.ts",
+      "routeCount": 4,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
       "controller": "apps/api/src/suppliers/suppliers.controller.ts",
+      "routeCount": 4,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/trade-ins/trade-ins.controller.ts",
+      "routeCount": 3,
+      "uiApps": [
+        "admin"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/transfer-files/transfer-files.controller.ts",
       "routeCount": 4,
       "uiApps": [
         "admin"
@@ -907,6 +1136,17 @@
     {
       "controller": "apps/api/src/users/users.controller.ts",
       "routeCount": 8,
+      "uiApps": [
+        "admin",
+        "pos",
+        "storefront",
+        "employee-portal"
+      ],
+      "exposure": "EXPOSED_OR_PARTIAL"
+    },
+    {
+      "controller": "apps/api/src/warehouse-locations/warehouse-locations.controller.ts",
+      "routeCount": 4,
       "uiApps": [
         "admin"
       ],

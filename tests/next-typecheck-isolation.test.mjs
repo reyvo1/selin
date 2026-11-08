@@ -175,8 +175,12 @@ test("the removed experimental.isolatedDevBuild key stays out, and Next itself h
   // A source-only assertion can rot silently: if Next ever reintroduces the key, this test would still
   // demand it be absent and would be wrong rather than right. Read the installed Next's own config
   // schema so the gate tracks the framework instead of a memory of it.
-  const nextVersion = readJson("node_modules/next/package.json").version;
-  const schema = readFileSync("node_modules/next/dist/server/config-schema.js", "utf8");
+  const nextPkgPath = ['node_modules/next/package.json', 'apps/admin/node_modules/next/package.json', 'apps/pos/node_modules/next/package.json']
+  .map((p) => (existsSync(p) ? p : null))
+  .find(Boolean);
+const nextVersion = readJson(nextPkgPath).version;
+const nextBase = nextPkgPath.replace(/\/package\.json$/, '');
+  const schema = readFileSync(`${nextBase}/dist/server/config-schema.js`, "utf8");
   assert.ok(schema.length > 0, "Next config schema must be readable, otherwise this test proves nothing");
   assert.doesNotMatch(schema, /isolatedDevBuild/, `next@${nextVersion} still declares isolatedDevBuild; this gate must be revisited`);
 });

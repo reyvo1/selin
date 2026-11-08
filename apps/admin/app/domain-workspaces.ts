@@ -36,6 +36,8 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'receipts', moduleCodes: ['goods-receipts'], permissionPrefixes: ['goods_receipt','inventory'], label: 'Penerimaan', title: 'Goods receipt', description: 'Inbound receiving, inspection, batch/serial, confirmation, stock, dan journal posting.', Icon:PackageCheck },
     { key: 'supplier', moduleCodes: ['suppliers'], permissionPrefixes: ['supplier','purchase'], label: 'Supplier', title: 'Supplier master & settlement context', description: 'Supplier operasional yang menjadi sumber purchase dan payable.', Icon:Users },
     { key: 'supplier-deposits', moduleCodes: ['suppliers'], permissionPrefixes: ['supplier'], label: 'Supplier Deposit', title: 'Deposit supplier', description: 'Deposit supplier, saldo, dan penerapan deposit.', Icon:Users },
+    { key: 'supplier-prices', moduleCodes: ['suppliers'], permissionPrefixes: ['supplier'], label: 'Harga Supplier', title: 'Harga supplier & riwayat', description: 'Daftar harga supplier per produk, buat harga baru, dan lihat riwayat perubahan harga.', Icon:BadgeDollarSign },
+    { key: 'warehouse-locations', moduleCodes: ['inventory'], permissionPrefixes: ['inventory'], label: 'Lokasi Gudang', title: 'Lokasi rak/bin gudang', description: 'Kelola lokasi penyimpanan per gudang (rak, bin, section).', Icon:Boxes },
   ]},
   { workspaceKey: 'commerce', views:[
     { key: 'orders', label: 'Order', title: 'Sales & storefront orders', description: 'Order website, status transaksi, dan pembayaran.', Icon:ShoppingBag },
@@ -76,6 +78,7 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'receivables', moduleCodes: ['finance-operations','accounting'], permissionPrefixes: ['finance','accounting'], label: 'Piutang / AR', title: 'Accounts receivable', description: 'COD/invoice receivable, refund receivable, dan collection.', Icon:BadgeDollarSign },
     { key: 'banking', moduleCodes: ['bank-reconciliation','finance-operations'], permissionPrefixes: ['finance','accounting'], label: 'Kas & Bank', title: 'Cash, bank & reconciliation', description: 'Kas/bank, statement import, matching, dan reconciliation.', Icon:Banknote },
     { key: 'opening-balance', moduleCodes: ['accounting','accounting-core'], permissionPrefixes: ['accounting','finance'], label: 'Saldo Awal', title: 'Saldo awal & tutup tahun', description: 'Batch saldo awal, posting, reversal, settlement, cutover, dan year-end.', Icon:Landmark },
+    { key: 'customer-ar-settlement', moduleCodes: ['finance-operations'], permissionPrefixes: ['finance'], label: 'Pelunasan AR', title: 'Piutang pelanggan & pelunasan', description: 'Aging piutang, pelunasan invoice, dan reconciliation AR.', Icon:Banknote },
   ]},
   { workspaceKey: 'reports', views:[
     { key: 'financial', label: 'Keuangan', title: 'Financial reports', description: 'P&L, balance sheet, cash flow, trial balance, general ledger, dan tax summary.', Icon:FileBarChart },
@@ -88,6 +91,7 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'attendance', moduleCodes: ['attendance'], permissionPrefixes: ['attendance','hr'], label: 'Absensi', title: 'Attendance operations', description: 'Attendance evidence, location policy, approval, dan history.', Icon:ClipboardCheck },
     { key: 'payroll', moduleCodes: ['payroll'], permissionPrefixes: ['payroll','hr'], label: 'Payroll', title: 'Payroll runs', description: 'Preparation, calculation, approval, posting, settlement, dan payslip.', Icon:CreditCard },
     { key: 'compliance', moduleCodes: ['tax-payroll','payroll'], permissionPrefixes: ['payroll','hr'], label: 'Compliance', title: 'Payroll compliance', description: 'Tax profile, BPJS, adjustment/recovery, dan audit lineage.', Icon:ShieldCheck },
+    { key: 'commission-report', moduleCodes: ['commissions'], permissionPrefixes: ['commission'], label: 'Laporan Komisi', title: 'Laporan komisi salesperson', description: 'Rekap penjualan dan komisi per salesperson berdasarkan periode.', Icon:FileBarChart },
   ]},
   { workspaceKey: 'assets-fleet', views:[
     { key: 'assets', label: 'Aset', title: 'Fixed assets', description: 'Asset category, acquisition, book value, depreciation, dan disposal.', Icon:Building2 },

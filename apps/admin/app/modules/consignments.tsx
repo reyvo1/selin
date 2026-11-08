@@ -143,13 +143,80 @@ export default function ConsignmentsView({ token }: { token: string }) {
     try {
       await req(token, `/consignments/${id}/settle`, {
         method: 'POST',
-        body: JSON.stringify({ amount: Number(amount) }),
+        body: JSON.stringify({ amount: Number(amount), operationKey: `settle-${id}-${Date.now()}` }),
       });
       setSettleAmounts((prev) => ({ ...prev, [id]: '' }));
       await loadConsignments();
       setMsg('Consignment settled.');
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Gagal settle consignment');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** J05: advance state machine konsinyasi (DRAFT → SHIPPED → PARTIALLY_SOLD → SETTLED / RETURNED). */
+  async function advanceConsignment(id: string, targetStatus: 'SHIPPED' | 'PARTIALLY_SOLD' | 'SETTLED' | 'RETURNED') {
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      await req(token, `/consignments/${id}/advance`, {
+        method: 'POST',
+        body: JSON.stringify({ status: targetStatus }),
+      });
+      await loadConsignments();
+      setMsg(`Consignment di-advance ke ${targetStatus}.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal advance consignment');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** J04: return items ke supplier. */
+  async function returnConsignmentItems(id: string) {
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      // Return all remaining items (simple case: full return)
+      const order = await req<{ items: Array<{ productId: string; quantity: number }> }>(token, `/consignments/${id}`);
+      if (!order.items?.length) {
+        setMsg('Tidak ada item untuk di-retur.');
+        setBusy(false);
+        return;
+      }
+      await req(token, `/consignments/${id}/return`, {
+        method: 'POST',
+        body: JSON.stringify({ items: order.items.map((i) => ({ productId: i.productId, quantity: i.quantity, reason: 'full return' })) }),
+      });
+      await loadConsignments();
+      setMsg('Consignment di-retur ke supplier.');
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal retur consignment');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** J06: billing preview. */
+  const [billing, setBilling] = useState<{ totalGross: string; outstanding: string; alreadySettled: string; lines: Array<{ sku: string; name: string; quantity: number; unitPrice: number; grossRevenue: string }> } | null>(null);
+  const [billingFor, setBillingFor] = useState<string | null>(null);
+
+  async function loadBilling(id: string) {
+    if (!canManage) return;
+    setBusy(true);
+    setMsg('');
+    try {
+      const data = await req<{ totalGross: string; outstanding: string; alreadySettled: string; lines: Array<{ sku: string; name: string; quantity: number; unitPrice: number; grossRevenue: string }> }>(
+        token,
+        `/consignments/${id}/billing`,
+      );
+      setBilling(data);
+      setBillingFor(id);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal memuat billing');
     } finally {
       setBusy(false);
     }
@@ -183,20 +250,73 @@ export default function ConsignmentsView({ token }: { token: string }) {
               />
             ) : null,
             canManage && c.status !== 'SETTLED' ? (
-              <button
-                key={`${c.id}-settle`}
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => void settleConsignment(c.id)}
-              >
-                Settle
-              </button>
+              <div key={`${c.id}-actions`} className="rowActions">
+                <button type="button" className="secondary" disabled={busy} onClick={() => void settleConsignment(c.id)}>
+                  Settle
+                </button>
+                <button type="button" className="secondary" disabled={busy} onClick={() => void loadBilling(c.id)}>
+                  Billing
+                </button>
+                {c.status === 'DRAFT' && (
+                  <button type="button" className="secondary" disabled={busy} onClick={() => void advanceConsignment(c.id, 'SHIPPED')}>
+                    Kirim
+                  </button>
+                )}
+                {c.status === 'SHIPPED' && (
+                  <button type="button" className="secondary" disabled={busy} onClick={() => void advanceConsignment(c.id, 'PARTIALLY_SOLD')}>
+                    Terjual
+                  </button>
+                )}
+                {c.status === 'PARTIALLY_SOLD' && (
+                  <button type="button" className="secondary" disabled={busy} onClick={() => void advanceConsignment(c.id, 'SETTLED')}>
+                    Final
+                  </button>
+                )}
+                {(c.status === 'SHIPPED' || c.status === 'PARTIALLY_SOLD') && (
+                  <button type="button" className="secondary danger" disabled={busy} onClick={() => void returnConsignmentItems(c.id)}>
+                    Retur
+                  </button>
+                )}
+              </div>
             ) : null,
           ])}
           empty="Belum ada consignment"
         />
       </Panel>
+
+      {billing && billingFor && (
+        <Panel
+          eyebrow="BILLING CONSIGNMENT"
+          title={`Tagihan konsinyasi #${billingFor}`}
+          badge={`Outstanding: ${money(billing.outstanding)}`}
+        >
+          <div className="metricGrid">
+            <div>
+              <span className="label">Total kotor</span>
+              <span className="value">{money(billing.totalGross)}</span>
+            </div>
+            <div>
+              <span className="label">Sudah dibayar</span>
+              <span className="value">{money(billing.alreadySettled)}</span>
+            </div>
+            <div>
+              <span className="label">Outstanding</span>
+              <span className="value">{money(billing.outstanding)}</span>
+            </div>
+          </div>
+          <Table
+            head={['SKU', 'Nama', 'Qty', 'Harga', 'Subtotal']}
+            rows={billing.lines.map((line) => [
+              line.sku,
+              line.name,
+              line.quantity,
+              money(line.unitPrice),
+              money(line.grossRevenue),
+            ])}
+            empty="Belum ada item."
+          />
+        </Panel>
+      )}
 
       {canManage && (
         <Panel eyebrow="BUAT CONSIGNMENT" title="Form Create Consignment">

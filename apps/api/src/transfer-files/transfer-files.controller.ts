@@ -24,4 +24,33 @@ export class TransferFilesController {
   create(@Body() dto: { direction: string; fileName: string; status?: string }, @CurrentUser() user: AuthUser) {
     return this.transferFiles.create(user, dto);
   }
+
+  /**
+   * F10: Import transaksi cabang dari payload JSON.
+   * Idempoten via checksum; tidak memodifikasi stok/jurnal.
+   */
+  @Post('import')
+  @Roles('SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER')
+  @Permissions('manufacturing.manage')
+  import(
+    @Body()
+    dto: {
+      direction: 'INBOUND' | 'OUTBOUND';
+      fileName: string;
+      payload: { branchId: string; transactions: Array<{ type: string; refId: string; amount: number; timestamp: string }> };
+    },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.transferFiles.import(user, dto);
+  }
+
+  /**
+   * F09: Export transaksi cabang ke payload JSON untuk branch tujuan atau server pusat.
+   */
+  @Post('export')
+  @Roles('SUPER_ADMIN', 'OWNER', 'ADMIN')
+  @Permissions('manufacturing.manage')
+  export(@Body() dto: { direction: 'INBOUND' | 'OUTBOUND'; limit?: number }, @CurrentUser() user: AuthUser) {
+    return this.transferFiles.export(user, dto);
+  }
 }

@@ -27,6 +27,8 @@ type PeakHours = { days: number; peakHour: number; buckets: Array<{ hour: number
 type DeadStock = { days: number; items: Array<{ productId: string; sku: string; name: string; warehouse: string; quantity: number; tiedUpValue: string | number }> };
 type CustomerRfm = { days: number; items: Array<{ customerId: string; name: string; phone?: string | null; recencyDays: number; frequency: number; monetary: number; segment: string }> };
 type DepositReport = { customers: Array<{ id: string; partyName: string; amount: number; balance: number; status: string; appliedAmount: number; createdAt: string }>; suppliers: Array<{ id: string; partyName: string; amount: number; balance: number; status: string; appliedAmount: number; createdAt: string }>; summary: { customers: { count: number; totalAmount: number; totalBalance: number }; suppliers: { count: number; totalAmount: number; totalBalance: number }; totalBalance: number } };
+type CoaReport = { asOf: string; companyId: string; branchId: string; typeFilter: string | null; warehouseId: string | null; accounts: Array<{ code: string; name: string; type: string; debit: number; credit: number; normalBalance: number; amount: number }>; totals: { debit: number; credit: number; difference: number; balanced: boolean }; accountCount: number; source: string };
+type CoaPerWarehouse = { warehouse: { id: string; code: string; name: string }; asOf: string; companyId: string; branchId: string; accounts: Array<{ code: string; name: string; type: string; debit: number; credit: number; balance: number }>; accountCount: number; source: string };
 type CursorResponse<T> = T[] | { items?: T[] };
 
 function pct(value: number | null) {
@@ -63,6 +65,10 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
   const [deadStock, setDeadStock] = useState<DeadStock | null>(null);
   const [customerRfm, setCustomerRfm] = useState<CustomerRfm | null>(null);
   const [depositReport, setDepositReport] = useState<DepositReport | null>(null);
+  const [coa, setCoa] = useState<CoaReport | null>(null);
+  const [coaWarehouse, setCoaWarehouse] = useState<CoaPerWarehouse | null>(null);
+  const [coaWarehouses, setCoaWarehouses] = useState<Array<{ id: string; code: string; name: string }>>([]);
+  const [coaWarehouseId, setCoaWarehouseId] = useState('');
   const [reportType, setReportType] = useState<string>('PROFIT_LOSS');
   const [format, setFormat] = useState('XLSX');
   const [loading, setLoading] = useState(false);
@@ -118,6 +124,11 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
         loadSection('period-comparison', () => api<Comparison>(`/reports/period-comparison?${range}${scope}`), setComparison),
         loadSection('financial-integrity', () => api<Integrity>(`/reports/financial-integrity?asOf=${encodeURIComponent(to)}${scope}`), setIntegrity),
         loadSection('deposit-report', () => api<DepositReport>(`/reports/deposits?${range}${scope}`), setDepositReport),
+        loadSection('coa', () => api<CoaReport>(`/reports/coa?asOf=${encodeURIComponent(to)}${scope}`), setCoa),
+        loadSection('coa-warehouses', () => api<CursorResponse<{ id: string; code: string; name: string; isActive?: boolean }>>('/master-data/warehouses').then((page) => {
+          const list = (Array.isArray(page) ? page : page.items ?? []).filter((row) => row.isActive !== false);
+          setCoaWarehouses(list);
+        }), () => {}),
       );
     }
 
@@ -163,6 +174,13 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
     try {
       setGeneralLedger(await api<GeneralLedger>(`/reports/general-ledger?${query.toString()}`));
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Gagal membuka General Ledger.'); }
+  }
+
+  async function loadCoaPerWarehouse() {
+    if (!coaWarehouseId) { setCoaWarehouse(null); return; }
+    try {
+      setCoaWarehouse(await api<CoaPerWarehouse>(`/reports/coa-per-warehouse/${encodeURIComponent(coaWarehouseId)}?asOf=${encodeURIComponent(to)}`));
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Gagal membuka COA per warehouse.'); }
   }
 
   async function createExport(event: React.FormEvent) {
@@ -225,6 +243,24 @@ export default function ReportingWorkspace({ token, mode = 'financial' }: { toke
           ['Ekuitas + laba berjalan', rupiah(balanceSheet?.totalEquity ?? 0)],
           ['Selisih', rupiah(balanceSheet?.difference ?? 0)],
         ]} />
+      </Panel>
+    </section>
+
+    <section className="grid2">
+      <Panel eyebrow="COA" title="Chart of Accounts" badge={coa?.totals.balanced ? 'BALANCED' : 'REVIEW'}>
+        <Table head={['Akun','Tipe','Debit','Credit','Saldo Normal']} rows={(coa?.accounts ?? []).slice(0, 40).map((row) => [`${row.code} · ${row.name}`, row.type ?? '-', rupiah(row.debit ?? 0), rupiah(row.credit ?? 0), rupiah(row.normalBalance ?? 0)])} empty="Belum ada aktivitas jurnal." />
+        <p className="sectionHelp">Total: <strong>{rupiah(coa?.totals.debit ?? 0)}</strong> debit / <strong>{rupiah(coa?.totals.credit ?? 0)}</strong> credit · selisih {rupiah(coa?.totals.difference ?? 0)} · {coa?.accountCount ?? 0} akun.</p>
+      </Panel>
+      <Panel eyebrow="COA PER WAREHOUSE" title="COA per Gudang" badge={coaWarehouse ? `${coaWarehouse.accountCount} akun` : 'Pilih gudang'}>
+        <div className="responsiveFormGrid sectionBlock">
+          <label>Gudang
+            <select value={coaWarehouseId} onChange={(event) => { setCoaWarehouseId(event.target.value); void loadCoaPerWarehouse(); }}>
+              <option value="">— pilih gudang —</option>
+              {coaWarehouses.map((row) => <option key={row.id} value={row.id}>{row.code} · {row.name}</option>)}
+            </select>
+          </label>
+        </div>
+        <Table head={['Akun','Tipe','Debit','Credit','Saldo']} rows={(coaWarehouse?.accounts ?? []).slice(0, 40).map((row) => [`${row.code} · ${row.name}`, row.type ?? '-', rupiah(row.debit ?? 0), rupiah(row.credit ?? 0), rupiah(row.balance ?? 0)])} empty="Pilih gudang untuk melihat akun yang di-scope ke gudang." />
       </Panel>
     </section>
 
