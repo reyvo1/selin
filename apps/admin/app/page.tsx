@@ -658,7 +658,7 @@ export default function AdminPage() {
             {activeDomainView?.key === 'numbering' && <NumberSequencesView token={token} />}
             {activeDomainView?.key === 'printers' && <PrintersView token={token} />}
             {activeDomainView?.key === 'info-program' && <InfoProgramView token={token} />}
-            {(['panduan','help','guide','bantuan'] as const).includes(activeDomainView?.key as never) && <PanduanView token={token} />}
+            {activeDomainView?.key === 'panduan' && <PanduanView token={token} />}
           </>}
 
         </>}

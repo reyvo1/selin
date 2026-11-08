@@ -6,16 +6,16 @@
     "apiRoutes": 683,
     "prismaModels": 234,
     "adminPrimaryWorkspaces": 15,
-    "adminContextualViews": 94,
+    "adminContextualViews": 91,
     "posViews": 4,
     "storefrontViews": 5,
     "employeeViews": 7,
-    "interactiveControls": 645
+    "interactiveControls": 633
   },
   "presentation": {
     "admin": {
-      "fileCount": 77,
-      "lineCount": 16231,
+      "fileCount": 71,
+      "lineCount": 15902,
       "requiredSemanticClassCount": 34,
       "missingSemanticClasses": []
     },
@@ -40,7 +40,7 @@
   },
   "controls": {
     "admin": {
-      "buttons": 514,
+      "buttons": 502,
       "links": 4,
       "inertButtons": 0,
       "implicitSubmitButtons": 32,
@@ -147,8 +147,8 @@
         "label": "Pengaturan & Akses"
       }
     ],
-    "contextualViewCount": 94,
-    "expectedContextualViewCount": 94,
+    "contextualViewCount": 91,
+    "expectedContextualViewCount": 91,
     "contextualViews": {
       "master-data": [
         "catalog",
@@ -261,9 +261,6 @@
         "printers",
         "info-program",
         "panduan",
-        "help",
-        "guide",
-        "bantuan",
         "numbering"
       ],
       "manufacturing": [

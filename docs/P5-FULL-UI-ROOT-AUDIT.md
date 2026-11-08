@@ -3,15 +3,15 @@
 ## Scope
 
 - API: **71 controllers / 683 handlers / 234 Prisma models**.
-- Admin: **15 primary workspaces / 94 contextual views**.
+- Admin: **15 primary workspaces / 91 contextual views**.
 - POS: **4 views**; Storefront: **5 views**; Employee Portal: **7 views**.
-- Static interaction inventory: **645 controls**.
+- Static interaction inventory: **633 controls**.
 
 ## Presentation authority
 
 | Surface | Files | Lines | Required semantic classes | Missing |
 |---|---:|---:|---:|---:|
-| admin | 77 | 16231 | 34 | 0 |
+| admin | 71 | 15902 | 34 | 0 |
 | pos | 11 | 2232 | 5 | 0 |
 | storefront | 8 | 1129 | 30 | 0 |
 | employee-portal | 11 | 1096 | 21 | 0 |
@@ -20,14 +20,14 @@
 
 | Surface | Buttons | Links | Inert buttons | Inert links |
 |---|---:|---:|---:|---:|
-| admin | 514 | 4 | 0 | 0 |
+| admin | 502 | 4 | 0 | 0 |
 | pos | 59 | 1 | 0 | 0 |
 | storefront | 45 | 1 | 0 | 0 |
 | employee-portal | 20 | 1 | 0 | 0 |
 
 ## Admin domain/subdomain authority
 
-All **94/94** contextual destinations are source-mapped. No canonical Admin contextual domain is unmapped.
+All **91/91** contextual destinations are source-mapped. No canonical Admin contextual domain is unmapped.
 
 - **Dashboard** `/dashboard`: overview/root only
 - **Penjualan & Order** `/commerce`: `orders`, `fulfillment`, `returns`, `channels`, `sales-orders`, `consignments`, `trade-ins`
@@ -43,7 +43,7 @@ All **94/94** contextual destinations are source-mapped. No canonical Admin cont
 - **Forecast & Otomasi** `/intelligence`: `ai`, `forecast`, `automation`, `schedules`
 - **Integrasi & Notifikasi** `/integrations`: `providers`, `notifications`, `connections`, `devices`, `loyalty`, `ppob`
 - **Tenant & Organisasi** `/organization`: `organization`, `locations`, `references`
-- **Pengaturan & Akses** `/settings`: `features`, `users`, `platform`, `custom-fields`, `approvals`, `webhooks`, `ui-config`, `audit-ops`, `security`, `api-keys`, `data-governance`, `branch-sync`, `mobile-ops`, `setup`, `printers`, `info-program`, `panduan`, `help`, `guide`, `bantuan`, `numbering`
+- **Pengaturan & Akses** `/settings`: `features`, `users`, `platform`, `custom-fields`, `approvals`, `webhooks`, `ui-config`, `audit-ops`, `security`, `api-keys`, `data-governance`, `branch-sync`, `mobile-ops`, `setup`, `printers`, `info-program`, `panduan`, `numbering`
 
 ## Capability exposure truth
 

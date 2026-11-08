@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "TOKO360 Admin Contextual Workflow Map",
-  "expectedContextualViews": 94,
+  "expectedContextualViews": 91,
   "rows": [
     {
       "workspace": "master-data",
@@ -594,27 +594,6 @@
     {
       "workspace": "settings",
       "view": "panduan",
-      "renderer": "PanduanView",
-      "status": "SOURCE_IMPLEMENTED",
-      "sourceFile": "apps/admin/app/page.tsx"
-    },
-    {
-      "workspace": "settings",
-      "view": "help",
-      "renderer": "PanduanView",
-      "status": "SOURCE_IMPLEMENTED",
-      "sourceFile": "apps/admin/app/page.tsx"
-    },
-    {
-      "workspace": "settings",
-      "view": "guide",
-      "renderer": "PanduanView",
-      "status": "SOURCE_IMPLEMENTED",
-      "sourceFile": "apps/admin/app/page.tsx"
-    },
-    {
-      "workspace": "settings",
-      "view": "bantuan",
       "renderer": "PanduanView",
       "status": "SOURCE_IMPLEMENTED",
       "sourceFile": "apps/admin/app/page.tsx"

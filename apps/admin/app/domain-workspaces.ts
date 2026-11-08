@@ -135,9 +135,6 @@ export const ADMIN_DOMAIN_WORKSPACES: AdminDomainWorkspace[] = [
     { key: 'data-governance', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR'], permissionPrefixes: ['report','audit'], label: 'Data Governance', title: 'Retention, archive & daily summaries', description: 'Retention policy, archive execution/history, checksum/artifact, dan explicit Admin-owned daily summary materialization.', Icon:Archive },
     { key: 'info-program', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR'], permissionPrefixes: ['platform','audit'], label: 'Info Program', title: 'Informasi program', description: 'Versi aplikasi, build, identitas deployment, dan tautan changelog.', Icon:Settings2 },
     { key: 'panduan', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Panduan', title: 'Panduan penggunaan', description: 'Panduan operasional in-app dan bantuan penggunaan Toko360.', Icon:Settings2 },
-    { key: 'help', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Bantuan', title: 'Bantuan dan panduan', description: 'Pusat bantuan in-app untuk operator Toko360.', Icon:Settings2 },
-    { key: 'guide', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Guide', title: 'In-app guide', description: 'In-app guide and help for Toko360 operators.', Icon:Settings2 },
-    { key: 'bantuan', roles: ['SUPER_ADMIN','OWNER','ADMIN','AUDITOR','MANAGER','FINANCE','HR','PAYROLL'], permissionPrefixes: ['platform','audit'], label: 'Bantuan', title: 'Pusat bantuan', description: 'Pusat bantuan dan panduan penggunaan aplikasi.', Icon:Settings2 },
   ]},
 ];
 
