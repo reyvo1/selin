@@ -12,16 +12,14 @@
     "API_ONLY_BY_DESIGN": "Read-only audit/history surface consumed by reports or comparison flows; no operator mutation form is required, and the history is intentionally exposed as an API for programmatic consumers."
   },
   "summary": {
-    "total": 25,
+    "total": 22,
     "byClass": {
       "DEVICE_INGEST": 1,
       "NODE_PROTOCOL": 19,
       "PROVIDER_CALLBACK": 1,
-      "SUPERSEDED": 1,
-      "UI_GAP": 2,
-      "API_ONLY_BY_DESIGN": 1
+      "SUPERSEDED": 1
     },
-    "entries": 25
+    "entries": 22
   },
   "entries": [
     {
@@ -155,24 +153,6 @@
       "controller": "apps/api/src/platform/platform.controller.ts",
       "class": "SUPERSEDED",
       "reason": "No caller anywhere in the repository, and the Admin runtime does not need it: apps/admin/app/domain-workspaces.ts derives the module set from GET /platform/manifest through enabledModuleCodes(manifest) instead. Recorded as superseded rather than as a missing screen, because the data it would return is already on screen."
-    },
-    {
-      "id": "GET /printers/default",
-      "controller": "apps/api/src/printers/printers.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Guarded by @Roles/@Permissions platform.configure and human-facing, but the printer management UI is not implemented yet (I06 SEBAGIAN); backend default-printer/print-job status endpoints exist without an admin screen, so this remains an open UI gap."
-    },
-    {
-      "id": "POST /print-jobs/:id/status",
-      "controller": "apps/api/src/printers/print-jobs.controller.ts",
-      "class": "UI_GAP",
-      "reason": "Guarded by @Roles/@Permissions platform.configure and human-facing, but the printer management UI is not implemented yet (I06 SEBAGIAN); backend default-printer/print-job status endpoints exist without an admin screen, so this remains an open UI gap."
-    },
-    {
-      "id": "POST /loyalty/redeem/preview",
-      "controller": "apps/api/src/loyalty/loyalty.controller.ts",
-      "class": "API_ONLY_BY_DESIGN",
-      "reason": "Loyalty redemption preview is called internally by sales service during POS checkout flow, not directly from admin UI. The sales service handles point deduction and discount calculation atomically."
     }
   ]
 }

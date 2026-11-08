@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-07T14:08:28.246Z",
+  "generatedAt": "2026-11-08T06:27:30.515Z",
   "source": {
     "prismaSchema": "apps/api/prisma/schema.prisma",
     "controllerCount": 71,

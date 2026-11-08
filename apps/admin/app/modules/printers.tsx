@@ -43,23 +43,28 @@ async function req<T>(token: string, path: string, init?: RequestInit): Promise<
   return d as T;
 }
 
+type DefaultPrinter = { id: string; name: string; station?: string | null; type: string; branchId?: string | null };
+
 export default function PrintersView({ token }: { token: string }) {
   const { canAll } = usePermissions(token);
   const canManage = canAll('platform.configure');
   const [printers, setPrinters] = useState<Printer[]>([]);
   const [jobs, setJobs] = useState<PrintJob[]>([]);
+  const [defaultPrinter, setDefaultPrinter] = useState<DefaultPrinter | null>(null);
   const [form, setForm] = useState({ name: '', station: '', type: 'rawbt', connection: 'rawbt', paperWidth: 58, branchId: '', isDefault: false, isActive: true });
   const [jobForm, setJobForm] = useState({ printerId: '', documentType: 'RECEIPT', referenceId: '' });
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const [p, j] = await Promise.all([
+    const [p, j, d] = await Promise.all([
       req<Printer[]>(token, '/printers'),
       req<PrintJob[]>(token, '/print-jobs'),
+      req<DefaultPrinter>(token, '/printers/default').catch(() => null),
     ]);
     setPrinters(p);
     setJobs(j);
+    setDefaultPrinter(d);
   }
 
   useEffect(() => {
@@ -133,10 +138,25 @@ export default function PrintersView({ token }: { token: string }) {
     }
   }
 
+  async function setJobStatus(id: string, status: string) {
+    setBusy(true);
+    setMsg('');
+    try {
+      await req(token, `/print-jobs/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) });
+      await load();
+      setMsg(`Print job ditandai ${status}.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Gagal mengubah status print job');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="stack">
       <Panel eyebrow="PRINTER" title="Konfigurasi Printer & Print Job" badge={`${printers.length} printer`}>
         <p className="sectionHelp">Konfigurasi printer/station POS (thermal USB/Bluetooth, RawBT, browser) dan antrean print job dengan status dan retry.</p>
+        <p className="sectionHelp"><strong>Printer default aktif:</strong> {defaultPrinter ? `${defaultPrinter.name}${defaultPrinter.station ? ` · ${defaultPrinter.station}` : ''} (${defaultPrinter.type})` : 'belum ada'}</p>
         <form className="formStack" onSubmit={savePrinter}>
           <div className="formGrid">
             <label>Nama Printer<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Printer Kasir 1" /></label>
@@ -195,7 +215,13 @@ export default function PrintersView({ token }: { token: string }) {
             row.status,
             row.attempts,
             row.error ?? '-',
-            canManage && row.status === 'failed' ? <button type="button" className="secondary" onClick={() => retryJob(row.id)} disabled={busy}>Retry</button> : null,
+            canManage ? (
+              <span className="actionRow" style={{ gap: 6 }}>
+                {row.status === 'failed' && <button type="button" className="secondary" onClick={() => retryJob(row.id)} disabled={busy}>Retry</button>}
+                {row.status === 'queued' && <button type="button" className="secondary" onClick={() => setJobStatus(row.id, 'completed')} disabled={busy}>Tandai selesai</button>}
+                {row.status === 'queued' && <button type="button" className="secondary" onClick={() => setJobStatus(row.id, 'failed')} disabled={busy}>Tandai gagal</button>}
+              </span>
+            ) : null,
           ])}
           empty="Belum ada print job"
         />

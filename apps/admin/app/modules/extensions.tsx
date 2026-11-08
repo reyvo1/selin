@@ -12,6 +12,7 @@ type LoyaltyProgram = { id: string; name: string; isActive?: boolean; pointsPerA
 type LoyaltyCustomer = { id: string; name: string; phone?: string | null };
 type LoyaltyAccount = { program: { id: string; earnRate?: number | string; redemptionRate?: number | string; minimumRedeem?: number } | null; points: number };
 type LoyaltyTier = { tier: string; discountPct: number };
+type LoyaltyRedeemPreview = { availablePoints: number; requestedPoints: number; discount: string; programId: string };
 type DigestPreview = { text: string; summary: { revenue: number; grossProfit: number; transactions: number; pendingOrders: number; lowStockCount: number } };
 type Device = { id: string; code: string; name: string; platform?: string; appVersion?: string | null; lastSeenAt?: string | null; isActive?: boolean };
 type NotificationTemplate = { id: string; code: string; channel: string; subject?: string | null; body: string; variables?: string[] | null; isActive?: boolean };
@@ -66,6 +67,7 @@ export default function ExtensionsView({ token, mode = 'extensions', commerceSec
   const [loyaltyAccount, setLoyaltyAccount] = useState<LoyaltyAccount | null>(null);
   const [loyaltyTier, setLoyaltyTier] = useState<LoyaltyTier | null>(null);
   const [loyaltyForm, setLoyaltyForm] = useState({ programId: '', customerId: '', type: 'ADJUSTMENT', points: 0, notes: '' });
+  const [loyaltyRedeemPreview, setLoyaltyRedeemPreview] = useState<LoyaltyRedeemPreview | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
@@ -320,6 +322,21 @@ export default function ExtensionsView({ token, mode = 'extensions', commerceSec
     finally { setBusy(false); }
   }
 
+  async function previewLoyaltyRedeem() {
+    setBusy(true); setMessage('');
+    try {
+      if (!loyaltyForm.customerId) throw new Error('Pelanggan wajib dipilih.');
+      const points = Math.trunc(Number(loyaltyForm.points) || 0);
+      const preview = await writeJson<LoyaltyRedeemPreview>(`${API}/loyalty/redeem/preview`, token, 'POST', { customerId: loyaltyForm.customerId, points });
+      setLoyaltyRedeemPreview(preview);
+      setMessage(`Penukaran ${points} poin → diskon ${preview.discount}.`);
+    } catch (error) {
+      setLoyaltyRedeemPreview(null);
+      setMessage(error instanceof Error ? error.message : 'Preview penukaran gagal.');
+    }
+    finally { setBusy(false); }
+  }
+
   async function previewDigest() {
     setBusy(true); setMessage('');
     try { setDigestPreview(await readJson<DigestPreview>(`${API}/reports/daily-digest/preview`, token)); }
@@ -464,7 +481,11 @@ export default function ExtensionsView({ token, mode = 'extensions', commerceSec
               <label>Tipe<select value={loyaltyForm.type} onChange={(event) => setLoyaltyForm({ ...loyaltyForm, type: event.target.value })}>{['EARN','REDEEM','ADJUSTMENT','EXPIRE','REFUND'].map((type) => <option key={type}>{type}</option>)}</select></label>
               <label>Poin<input type="number" step="1" value={loyaltyForm.points} onChange={(event) => setLoyaltyForm({ ...loyaltyForm, points: Math.trunc(Number(event.target.value) || 0) })} /></label>
               <label>Catatan<input value={loyaltyForm.notes} onChange={(event) => setLoyaltyForm({ ...loyaltyForm, notes: event.target.value })} /></label>
-              <div className="rowActions">{canAll('loyalty.manage') && <button type="button" disabled={busy || !loyaltyForm.customerId || !loyaltyForm.programId} onClick={() => void postLoyaltyTransaction()}>Simpan transaksi poin</button>}</div>
+              <div className="rowActions">
+                {canAll('loyalty.manage') && <button type="button" disabled={busy || !loyaltyForm.customerId || !loyaltyForm.programId} onClick={() => void postLoyaltyTransaction()}>Simpan transaksi poin</button>}
+                {canAll('loyalty.manage') && <button type="button" className="secondary" disabled={busy || !loyaltyForm.customerId} onClick={() => void previewLoyaltyRedeem()}>Preview penukaran</button>}
+              </div>
+              {loyaltyRedeemPreview && <div className="catalogStat"><small>Preview penukaran</small><strong>{loyaltyRedeemPreview.requestedPoints} poin → diskon {loyaltyRedeemPreview.discount}</strong><span>Tersedia {loyaltyRedeemPreview.availablePoints} poin</span></div>}
             </div>
           </Panel>}
           {showDevices && <Panel eyebrow="DEVICE REGISTRATION" title="Daftarkan node toko" badge="signed sync">

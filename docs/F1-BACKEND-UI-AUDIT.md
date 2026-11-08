@@ -1,6 +1,6 @@
 # F1 — Backend Capability vs UI Exposure Audit
 
-Generated: 2026-11-07T14:08:28.246Z
+Generated: 2026-11-08T06:27:30.515Z
 
 ## Repository scan
 
