@@ -56,7 +56,7 @@ test('all 12 critical UAT scenarios map to concrete automated regression files',
 });
 
 test('GitHub full-system workflow runs exact-artifact PostgreSQL/browser/staging simulation on push', () => {
-  assert.match(workflow, /on:[\s\S]*push:[\s\S]*branches: \[main, develop\]/);
+  assert.match(workflow, /on:[\s\S]*push:[\s\S]*branches: \[main, develop, feature\/\*\*\]/);
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
   assert.match(workflow, /postgres:16-alpine/);
   assert.match(workflow, /postgresql-client-16/);
