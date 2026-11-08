@@ -2,7 +2,7 @@ name: Toko360 Full System Simulation
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, feature/**]
   workflow_dispatch:
   workflow_call:
 
